@@ -1,12 +1,14 @@
 <template>
-  <view class="screen" :class="themeClass()"><view class="page-wrap">
+  <view class="home-shell" :class="themeClass()"><view class="home-panel" :class="{ active: tabIndex === 0 }" :style="panelStyle(0)"><view class="screen" :class="themeClass()"><view class="page-wrap">
     <view class="topbar"><view class="brand"><text class="brand-mark">纸</text><text>纸间</text></view><view class="top-actions"><text class="top-note">专注于你正在写的故事</text><view class="round-action" @tap="openCreate">＋</view></view></view>
     <view class="hero"><view class="hero-copy"><view class="hero-kicker">简洁优雅的写作空间</view><view class="page-title">叙事始于此刻。</view><view class="subtle">整理章节，沉浸写作，让每本书都有自己的模样。</view><view class="hero-button" @tap="openCreate">＋　新建书籍</view></view><view class="hero-decoration"><view class="arc arc-a"></view><view class="arc arc-b"></view><text>写</text></view></view>
     <view class="section-head"><view><view class="section-title">我的书架 <text class="book-count">{{ books.length }}</text></view><view class="subtle">长按或点击更多可管理书籍</view></view><view class="sort-note">最近编辑</view></view>
     <view v-if="!books.length" class="empty card">书架还没有书。点击“新建书籍”，写下第一章。</view>
     <view class="book-grid"><view v-for="(book, index) in books" :key="book.id" class="book-card card" :class="{ 'new-book': freshId === book.id, removing: removingId === book.id }" @tap="openBook(book.id)" @longpress="openActions(book)"><view class="book-art" :class="'cover-' + index % 4"><image v-if="book.cover" :src="book.cover" mode="aspectFill" class="cover-image" /><view v-else class="cover-letter">{{ book.title.slice(0, 1) }}</view><view class="book-spine"></view></view><view class="book-info"><view class="book-title-row"><view class="book-title">{{ book.title }}</view><view class="more-button" @tap.stop="openActions(book)">···</view></view><view class="book-author">{{ book.author || '未设置作者' }}</view><view class="book-description">{{ book.description || '打开这本书，继续写下去。' }}</view><view class="book-meta"><text>{{ book.chapters.length }} 章 · {{ articleCount(book) }} 篇</text><text>{{ formatDate(book.updatedAt) }}</text></view></view></view></view>
-  </view>
-  <AppNav active="library" />
+  </view></view></view>
+  <view class="home-panel" :class="{ active: tabIndex === 1 }" :style="panelStyle(1)"><StatisticsPanel /></view>
+  <view class="home-panel" :class="{ active: tabIndex === 2 }" :style="panelStyle(2)"><SettingsPanel :embedded="true" /></view>
+  <AppNav />
   <ActionMenu :visible="!!actionBook && !showDelete" :title="actionBook?.title" :items="[{ label: '编辑书籍信息' }, { label: '删除书籍', danger: true }]" @close="actionBook = null" @select="onAction" />
   <AppDialog :visible="showEdit" :title="editingId ? '编辑书籍' : '新建书籍'" :confirm-text="editingId ? '保存' : '创建书籍'" @cancel="showEdit = false" @confirm="saveBook"><view class="edit-layout"><view class="cover-picker" @tap="chooseCover"><image v-if="draft.cover" :src="draft.cover" mode="aspectFill" /><view v-else class="cover-placeholder">＋<text>选择封面</text></view></view><view class="edit-fields"><input v-model="draft.title" class="field" maxlength="80" placeholder="书名（必填）" /><input v-model="draft.author" class="field" maxlength="80" placeholder="作者（可选）" /><textarea v-model="draft.description" class="description-field" maxlength="240" placeholder="简介（可选）" /></view></view></AppDialog>
   <AppDialog :visible="showDelete" title="删除书籍" :message="`确定删除《${actionBook?.title || ''}》及其中所有章节和正文？此操作无法撤销。`" confirm-text="删除" :destructive="true" @cancel="cancelDelete" @confirm="confirmDelete" />
@@ -15,17 +17,21 @@
 
 <script setup>
 import { computed, reactive, ref } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onLoad } from '@dcloudio/uni-app'
 import { useLibrary, addBook, updateBook, deleteBook } from '../../src/store/library'
-import { primaryNavigation } from '../../src/store/navigation'
+import { PRIMARY_TABS, primaryNavigation } from '../../src/store/navigation'
 import { themeClass } from '../../src/store/preferences'
 import { chooseBookCover } from '../../src/services/covers'
 import AppNav from '../../components/AppNav.vue'
 import ActionMenu from '../../components/ActionMenu.vue'
 import AppDialog from '../../components/AppDialog.vue'
+import StatisticsPanel from '../../components/StatisticsPanel.vue'
+import SettingsPanel from '../settings/index.vue'
 
 const store = useLibrary()
-onShow(() => { primaryNavigation.active = 'library' })
+onLoad(options => { if (PRIMARY_TABS.includes(options?.tab)) primaryNavigation.active = options.tab })
+const tabIndex = computed(() => Math.max(0, PRIMARY_TABS.indexOf(primaryNavigation.active)))
+const panelStyle = index => ({ '--panel-shift': `${(index - tabIndex.value) * 100}%`, zIndex: index === tabIndex.value ? 2 : 1, pointerEvents: index === tabIndex.value ? 'auto' : 'none' })
 const books = computed(() => store.books)
 const showEdit = ref(false), showDelete = ref(false), editingId = ref(''), actionBook = ref(null)
 const freshId = ref(''), removingId = ref('')

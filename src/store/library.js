@@ -1,4 +1,5 @@
 import { reactive } from 'vue'
+import { recordWordDelta } from './statistics.js'
 
 const KEY = 'paperwriter.library.v1'
 const state = reactive({ books: [] })
@@ -12,7 +13,7 @@ export function initStore() {
   initialized = true
   try {
     const raw = uni.getStorageSync(KEY)
-    const saved = typeof raw === 'string' ? JSON.parse(raw) : raw
+    const saved = typeof raw === 'string' ? (raw ? JSON.parse(raw) : null) : raw
     if (saved && Array.isArray(saved.books)) state.books = saved.books
   } catch (error) { console.warn('读取书库失败', error) }
 }
@@ -27,6 +28,7 @@ export function getChapter(bookId, chapterId) { return getBook(bookId)?.chapters
 export function getArticle(bookId, chapterId, articleId) { return getChapter(bookId, chapterId)?.articles.find(article => article.id === articleId) }
 
 export function addBook(title) {
+  initStore()
   const book = { id: uid(), title: title.trim(), author: '', description: '', cover: '', createdAt: now(), updatedAt: now(), chapters: [] }
   state.books.unshift(book); persist(); return book
 }
@@ -38,28 +40,67 @@ export function updateBook(id, patch) {
   book.updatedAt = now(); persist()
 }
 export function renameBook(id, title) { updateBook(id, { title }) }
-export function deleteBook(id) { state.books = state.books.filter(book => book.id !== id); persist() }
+export function deleteBook(id) {
+  const book = getBook(id)
+  if (!book) return
+  const removed = book.chapters.flatMap(chapter => chapter.articles.map(article => ({ id: article.id, title: article.title, words: wordCount(article) })))
+  state.books = state.books.filter(item => item.id !== id); persist()
+  removed.forEach(article => recordWordDelta(book.id, book.title, article.id, article.title, -article.words))
+}
 export function addChapter(bookId, title) {
   const book = getBook(bookId); if (!book) return null
   const chapter = { id: uid(), title: title.trim(), articles: [] }
   book.chapters.push(chapter); book.updatedAt = now(); persist(); return chapter
 }
 export function renameChapter(bookId, id, title) { const ch = getChapter(bookId, id); if (ch) { ch.title = title.trim(); persist() } }
-export function deleteChapter(bookId, id) { const book = getBook(bookId); if (book) { book.chapters = book.chapters.filter(ch => ch.id !== id); persist() } }
+export function deleteChapter(bookId, id) {
+  const book = getBook(bookId), chapter = getChapter(bookId, id)
+  if (!book || !chapter) return
+  const removed = chapter.articles.map(article => ({ id: article.id, title: article.title, words: wordCount(article) }))
+  book.chapters = book.chapters.filter(item => item.id !== id)
+  if (book.lastEdited?.chapterId === id) book.lastEdited = null
+  persist()
+  removed.forEach(article => recordWordDelta(book.id, book.title, article.id, article.title, -article.words))
+}
 export function addArticle(bookId, chapterId, title = '') {
   const chapter = getChapter(bookId, chapterId); if (!chapter) return null
   const article = { id: uid(), title: title.trim(), paragraphs: [''], updatedAt: now() }
-  chapter.articles.push(article); persist(); return article
+  chapter.articles.push(article)
+  const book = getBook(bookId)
+  if (book) book.lastEdited = { chapterId, articleId: article.id, cursor: 0, updatedAt: article.updatedAt }
+  persist(); return article
 }
 export function saveArticle(bookId, chapterId, articleId, patch) {
   const article = getArticle(bookId, chapterId, articleId); if (!article) return
+  const previousWords = wordCount(article)
   if (typeof patch.title === 'string') article.title = patch.title
   if (Array.isArray(patch.paragraphs)) article.paragraphs = patch.paragraphs.map(String)
   article.updatedAt = now(); const book = getBook(bookId); if (book) book.updatedAt = article.updatedAt
+  if (book) {
+    book.lastEdited = { chapterId, articleId, cursor: Math.max(0, Number(patch.cursor) || 0), updatedAt: article.updatedAt }
+  }
   persist()
+  if (book) recordWordDelta(book.id, book.title, article.id, article.title, wordCount(article) - previousWords)
 }
 export function deleteArticle(bookId, chapterId, articleId) {
-  const chapter = getChapter(bookId, chapterId)
-  if (chapter) { chapter.articles = chapter.articles.filter(item => item.id !== articleId); persist() }
+  const chapter = getChapter(bookId, chapterId), book = getBook(bookId)
+  if (chapter && book) {
+    const article = chapter.articles.find(item => item.id === articleId)
+    const removed = article && { id: article.id, title: article.title, words: wordCount(article) }
+    chapter.articles = chapter.articles.filter(item => item.id !== articleId)
+    if (book.lastEdited?.articleId === articleId) book.lastEdited = null
+    persist()
+    if (removed) recordWordDelta(book.id, book.title, removed.id, removed.title, -removed.words)
+  }
 }
 export function wordCount(article) { return (article?.paragraphs || []).join('').replace(/\s/g, '').length }
+
+export function getLastEditedArticle(book) {
+  if (!book) return null
+  const chapter = book.chapters.find(item => item.id === book.lastEdited?.chapterId)
+  const article = chapter?.articles.find(item => item.id === book.lastEdited?.articleId)
+  if (article) return { chapterId: chapter.id, articleId: article.id, cursor: book.lastEdited.cursor || 0, title: article.title || '无题正文' }
+  const candidates = book.chapters.flatMap(group => group.articles.map(item => ({ chapterId: group.id, articleId: item.id, cursor: 0, title: item.title || '无题正文', updatedAt: item.updatedAt || '' })))
+  candidates.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  return candidates[0] || null
+}

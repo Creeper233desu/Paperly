@@ -33,6 +33,10 @@ button::after { border: 0; }
 .field { background: var(--surface-alt); color: var(--text); border: 1px solid transparent; border-radius: 12px; height: 46px; width: 100%; padding: 0 14px; font-size: 14px; outline: none; margin: 8px 0; }
 .field:focus { border-color: var(--accent); }
 .empty { color: var(--muted); font-size: 14px; line-height: 1.65; text-align: center; padding: 55px 25px; }
+.home-shell { position: relative; width: 100%; height: 100vh; overflow: hidden; background: var(--bg); }
+.home-panel { position: absolute; inset: 0; }
+.home-panel .screen { height: 100vh; min-height: 0; overflow-y: auto; transform: translate3d(var(--panel-shift), 0, 0); transition: transform .38s cubic-bezier(.22,.82,.22,1); }
+@media (prefers-reduced-motion: reduce) { .home-panel .screen { transition: none; } }
 @media (min-width: 700px) { .screen { padding: calc(var(--status-bar-height) + 26px) 36px 115px; } }
 @media (prefers-reduced-motion: reduce) { .screen { transition: none; } }
 </style>

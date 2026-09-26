@@ -12,16 +12,17 @@ HBuilderX 使用内置 Vue 3 / uni-app 编译器。单元测试可运行 `npm in
 
 ## 功能与结构
 
-- `pages/library`：书架、封面图片、书名、作者、简介及书籍管理。
-- `pages/book`：可折叠的章节与正文目录、文本筛选和 PDF 导出。
-- `pages/editor`：连续文本编辑、实时字数统计、全书篇章侧栏、段落聚焦、标点补全、撤销重做、查找替换、沉浸模式。
+- `pages/library`：书架、统计、设置共用的主页面；三个内容面板平行滑动，底部导航固定。
+- `components/StatisticsPanel.vue`：近半年每日净字数热力图、每日书籍与篇章来源。
+- `pages/book`：可折叠的章节与正文目录、接续上次写作、文本筛选和 PDF 导出。
+- `pages/editor`：连续文本编辑、实时字数统计、全书篇章侧栏、段落聚焦、标点补全、撤销重做、查找替换、沉浸模式和光标过渡效果。
 - `pages/settings`：浅色/深色/跟随系统、内置与导入字体、字号和编辑偏好。
-- `components`：底部导航、应用内操作菜单、确认对话框。
-- `src/store`：书库和设置的本地 JSON 持久化、主导航状态。
+- `components`：底部导航、连续正文输入、应用内操作菜单、确认对话框。
+- `src/store`：书库、设置、每日统计的本地 JSON 持久化与主导航状态。
 - `src/services`：Android PDF、封面持久化、字体导入与加载。
 - `src/utils/text.js`：可单独测试的编辑与替换逻辑。
 
-书库的存储键为 `paperwriter.library.v1`，层级为 `books[] → chapters[] → articles[] → paragraphs[]`。旧书缺少作者和封面字段时仍可正常读取。设置存于 `paperwriter.preferences.v1`。所有数据均保存在本机应用存储，无服务端和加密；卸载应用会清除本地书库。
+书库的存储键为 `paperwriter.library.v1`，层级为 `books[] → chapters[] → articles[] → paragraphs[]`。每本书的 `lastEdited` 保存最近写作的篇章与光标位置。旧书缺少作者、封面或写作位置字段时仍可正常读取。设置存于 `paperwriter.preferences.v1`，统计存于 `paperwriter.statistics.v1`。每日统计按本地日期保存正文净字数变化，删除正文、章节或书籍也计入负数，并保留当日书籍和篇章来源；安装本版本前的历史写作不会补算。所有数据均保存在本机应用存储，无服务端和加密；卸载应用会清除本地书库与统计。
 
 ## 字体
 

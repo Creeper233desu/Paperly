@@ -3,7 +3,7 @@
     <view class="editor-header"><view class="header-left"><text class="header-back" @tap="leave">‹</text><view class="outline-trigger" @tap="showOutline = !showOutline">☰</view><view class="header-titles"><text>{{ book?.title || '纸间' }}</text><text>{{ chapter?.title || '正文' }}</text></view></view><view class="header-right"><text class="save-label">{{ saveState }}</text><view class="header-tool" :class="{ on: prefs.focus }" @tap="toggleFocus">聚焦</view><view class="header-tool" @tap="showSearch = !showSearch">查找</view><view class="header-tool more" @tap="openSettings">Aa</view></view></view>
     <view v-if="showOutline" class="outline-backdrop" @tap="showOutline = false"></view>
     <view v-if="article" class="editor-layout"><view class="outline-rail" :class="{ open: showOutline }"><view class="rail-top"><view class="rail-caption">篇章目录</view><text @tap="showOutline = false">×</text></view><view class="outline-scroll"><view v-for="(group, groupIndex) in book?.chapters || []" :key="group.id" class="outline-group"><view class="outline-chapter" :class="{ current: group.id === ids.chapter }" @tap="toggleChapter(group.id)"><text class="outline-caret">{{ collapsedChapters[group.id] ? '›' : '⌄' }}</text><text>{{ groupIndex + 1 }}. {{ group.title }}</text><text class="outline-count">{{ group.articles.length }}</text></view><view v-if="!collapsedChapters[group.id]" class="outline-articles"><view v-for="item in group.articles" :key="item.id" class="outline-item" :class="{ current: item.id === ids.article }" @tap="item.id !== ids.article ? openSibling(group.id, item.id) : showOutline = false">{{ item.title || '无题正文' }}</view></view></view></view><view class="rail-bottom">{{ book?.chapters.length || 0 }} 章 · {{ bookArticleCount }} 篇</view></view>
-      <view class="writing-column"><view class="writing-meta"><text>{{ chapter?.title }}</text><text>{{ wordTotal }} 字 · {{ paragraphCount }} 段</text></view><input class="article-name" :value="title" placeholder="篇名（可选）" maxlength="100" @input="onTitle" @blur="saveNow" /><view class="writing-rule"></view><view class="document-wrap" :class="{ 'focus-document': prefs.focus }" :style="{ fontFamily: fontFamilyFor(prefs.font), fontSize: prefs.fontSize + 'px' }"><view v-if="prefs.focus && body" class="focus-mirror"><text v-for="(part, index) in paragraphs" :key="index" :class="{ dimmed: index !== activeParagraph }">{{ part }}{{ index < paragraphs.length - 1 ? '\n' : '' }}</text></view><textarea id="document-input" class="document-input" :value="body" placeholder="从这里开始写…" :auto-height="true" :maxlength="-1" :focus="editorFocus" :selection-start="selectionStart" :selection-end="selectionEnd" :style="{ fontFamily: fontFamilyFor(prefs.font), fontSize: prefs.fontSize + 'px' }" @focus="onDocumentFocus" @blur="saveNow" @input="onDocumentInput" /></view><view class="writing-hint">回车换段</view></view>
+      <view class="writing-column"><view class="writing-meta"><text>{{ chapter?.title }}</text><text>{{ wordTotal }} 字 · {{ paragraphCount }} 段</text></view><input class="article-name" :value="title" placeholder="篇名（可选）" maxlength="100" @input="onTitle" @blur="saveNow" /><view class="writing-rule"></view><view class="document-wrap" :class="{ 'focus-document': prefs.focus }" :style="{ fontFamily: fontFamilyFor(prefs.font), fontSize: prefs.fontSize + 'px' }"><view v-if="prefs.focus && body" class="focus-mirror"><text v-for="(part, index) in paragraphs" :key="index" :class="{ dimmed: index !== activeParagraph }">{{ part }}{{ index < paragraphs.length - 1 ? '\n' : '' }}</text></view><DocumentInput :value="body" :font-family="fontFamilyFor(prefs.font)" :font-size="prefs.fontSize" :focus="editorFocus" :focus-mode="prefs.focus" :selection-start="selectionStart" :selection-end="selectionEnd" @focus="onDocumentFocus" @blur="saveNow" @input="onDocumentInput" @cursor="onVisualCursor" /></view><view class="writing-hint">回车换段</view></view>
       <view class="info-rail"><view class="rail-caption">写作状态</view><view class="info-stat"><text class="info-number">{{ wordTotal }}</text><text>当前字数</text></view><view class="info-stat"><text class="info-number">{{ paragraphCount }}</text><text>段落</text></view><view class="info-note">文字会自动保存。目录中可随时切换篇章。</view></view>
     </view>
     <view class="editor-dock"><view class="dock-count">{{ wordTotal }} 字</view><view class="dock-divider"></view><view class="dock-group"><view class="dock-icon" @tap="undo">↶</view><view class="dock-icon" @tap="redo">↷</view></view><view class="dock-divider"></view><view class="dock-group symbols"><view class="dock-icon" @tap="insertSymbol('（','）')">（）</view><view class="dock-icon" @tap="insertSymbol('“','”')">“”</view><view class="dock-icon" @tap="insertSymbol('《','》')">《》</view></view><view class="dock-divider"></view><view class="dock-group"><view class="dock-icon" @tap="showSearch = !showSearch">⌕</view><view class="dock-icon" :class="{ active: prefs.focus }" @tap="toggleFocus">◎</view><view class="dock-icon" @tap="appendParagraph">↵</view></view><view class="dock-divider"></view><view class="dock-group"><view class="dock-icon" @tap="immersive = !immersive">{{ immersive ? '▣' : '□' }}</view></view></view>
@@ -13,10 +13,11 @@
 
 <script setup>
 import { computed, nextTick, reactive, ref, watch } from 'vue'
-import { onLoad, onShow, onUnload } from '@dcloudio/uni-app'
+import { onLoad, onReady, onShow, onUnload } from '@dcloudio/uni-app'
 import { getBook, getArticle, getChapter, saveArticle } from '../../src/store/library'
 import { loadPreferences, themeClass, updatePreferences } from '../../src/store/preferences'
 import { fontFamilyFor, loadSelectedFont } from '../../src/services/fonts'
+import DocumentInput from '../../components/DocumentInput.vue'
 import { documentFromParagraphs, editDocument, findMatches, paragraphOffset, paragraphsFromDocument, replaceAt, replaceAll } from '../../src/utils/text'
 
 const ids = ref({ book: '', chapter: '', article: '' })
@@ -25,18 +26,21 @@ const showSearch = ref(false), showOutline = ref(false), searchQuery = ref(''), 
 const collapsedChapters = reactive({})
 const prefs = loadPreferences()
 let timer = null, historyTimer = null, history = [], historyIndex = -1
+let resumeCursor = null
 function initialize(options) {
   ids.value = { book: options.bookId, chapter: options.chapterId, article: options.articleId }
   const item = getArticle(options.bookId, options.chapterId, options.articleId)
   if (item) {
     title.value = item.title
     body.value = documentFromParagraphs(item.paragraphs)
-    lastCursor.value = 0
+    resumeCursor = options.cursor == null ? null : Math.max(0, Number(options.cursor) || 0)
+    lastCursor.value = resumeCursor ?? 0
     history = [snapshot()]
     historyIndex = 0
   }
 }
 onLoad(options => { initialize(options) })
+onReady(() => { if (resumeCursor !== null) focusAt(Math.min(resumeCursor, body.value.length)) })
 onShow(() => { loadSelectedFont().catch(() => {}) })
 onUnload(() => { clearTimeout(historyTimer); clearTimeout(timer); saveNow() })
 const article = computed(() => getArticle(ids.value.book, ids.value.chapter, ids.value.article))
@@ -68,9 +72,10 @@ function restoreHistory(index) {
 function undo() { clearTimeout(historyTimer); commitHistory(); if (historyIndex > 0) { historyIndex -= 1; restoreHistory(historyIndex) } }
 function redo() { clearTimeout(historyTimer); if (historyIndex < history.length - 1) { historyIndex += 1; restoreHistory(historyIndex) } }
 function scheduleSave() { saveState.value = '保存中…'; clearTimeout(timer); timer = setTimeout(saveNow, 350) }
-function saveNow() { clearTimeout(timer); if (!ids.value.article) return; try { saveArticle(ids.value.book, ids.value.chapter, ids.value.article, { title: title.value, paragraphs: paragraphs.value }); saveState.value = '已保存' } catch (_) { saveState.value = '保存失败'; uni.showToast({ title: '保存失败，请检查存储空间', icon: 'none' }) } }
+function saveNow() { clearTimeout(timer); if (!ids.value.article) return; try { saveArticle(ids.value.book, ids.value.chapter, ids.value.article, { title: title.value, paragraphs: paragraphs.value, cursor: lastCursor.value }); saveState.value = '已保存' } catch (_) { saveState.value = '保存失败'; uni.showToast({ title: '保存失败，请检查存储空间', icon: 'none' }) } }
 function onTitle(e) { title.value = e.detail.value; scheduleHistory(); scheduleSave() }
-function onDocumentFocus(e) { editorFocus.value = true; if (Number.isFinite(e?.detail?.cursor) && e.detail.cursor >= 0) lastCursor.value = e.detail.cursor }
+function onDocumentFocus(e) { editorFocus.value = true; if (selectionStart.value < 0 && Number.isFinite(e?.detail?.cursor) && e.detail.cursor >= 0) lastCursor.value = e.detail.cursor }
+function onVisualCursor(cursor) { if (Number.isFinite(cursor) && cursor >= 0) lastCursor.value = cursor }
 function focusAt(cursor, end = cursor) {
   const at = Math.max(0, Math.min(cursor, body.value.length))
   editorFocus.value = false
