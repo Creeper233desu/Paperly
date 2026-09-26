@@ -18,7 +18,7 @@ import { getBook, getArticle, getChapter, saveArticle } from '../../src/store/li
 import { loadPreferences, themeClass, updatePreferences } from '../../src/store/preferences'
 import { fontFamilyFor, loadSelectedFont } from '../../src/services/fonts'
 import DocumentInput from '../../components/DocumentInput.vue'
-import { documentFromParagraphs, editDocument, findMatches, paragraphOffset, paragraphsFromDocument, replaceAt, replaceAll } from '../../src/utils/text'
+import { documentFromParagraphs, editDocument, findMatches, paragraphOffset, paragraphsFromDocument, PARAGRAPH_INDENT, replaceAt, replaceAll } from '../../src/utils/text'
 
 const ids = ref({ book: '', chapter: '', article: '' })
 const title = ref(''), body = ref(''), editorFocus = ref(false), selectionStart = ref(-1), selectionEnd = ref(-1), lastCursor = ref(0)
@@ -100,8 +100,8 @@ function insertSymbol(open, close) {
 }
 function appendParagraph() {
   const cursor = Math.min(lastCursor.value, body.value.length)
-  body.value = body.value.slice(0, cursor) + '\n' + body.value.slice(cursor)
-  focusAt(cursor + 1); scheduleHistory(); scheduleSave()
+  body.value = body.value.slice(0, cursor) + '\n' + PARAGRAPH_INDENT + body.value.slice(cursor)
+  focusAt(cursor + 1 + PARAGRAPH_INDENT.length); scheduleHistory(); scheduleSave()
 }
 function leave() { clearTimeout(historyTimer); saveNow(); uni.navigateBack() }
 function toggleChapter(id) { collapsedChapters[id] = !collapsedChapters[id] }

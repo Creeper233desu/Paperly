@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { documentFromParagraphs, editDocument, editParagraph, findMatches, paragraphOffset, paragraphsFromDocument, replaceAt, replaceAll } from '../src/utils/text.js'
+import { documentFromParagraphs, editDocument, editParagraph, findMatches, paragraphOffset, paragraphsFromDocument, PARAGRAPH_INDENT, replaceAt, replaceAll } from '../src/utils/text.js'
 
 test('continuous document lets backspace merge paragraphs', () => {
   const before = documentFromParagraphs(['第一段', '第二段'])
@@ -14,6 +14,14 @@ test('continuous document lets backspace merge paragraphs', () => {
 test('auto pair inserts a matching closing mark at the caret', () => {
   assert.deepEqual(editParagraph('你好', '你（好', 2), { paragraphs: ['你（）好'], cursor: 2, split: false })
   assert.deepEqual(editParagraph('你好', '你（好', 2, false).paragraphs, ['你（好'])
+})
+
+test('enter adds a two-character paragraph indent without preventing paragraph merge', () => {
+  const split = editDocument('第一段第二段', '第一段\n第二段', 4, false)
+  assert.deepEqual(split, { text: `第一段\n${PARAGRAPH_INDENT}第二段`, cursor: 6 })
+  assert.deepEqual(editDocument('第一段第二段', '第一段\n第二段', -1), split)
+  assert.deepEqual(paragraphsFromDocument(split.text), ['第一段', `${PARAGRAPH_INDENT}第二段`])
+  assert.deepEqual(editDocument(split.text, '第一段第二段', 3), { text: '第一段第二段', cursor: 3 })
 })
 
 test('paste with newlines becomes separate paragraphs', () => {

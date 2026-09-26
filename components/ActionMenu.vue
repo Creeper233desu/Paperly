@@ -3,7 +3,7 @@
     <view class="menu-panel" @tap.stop>
       <view class="menu-grabber"></view>
       <view class="menu-heading"><view v-if="title" class="menu-title">{{ title }}</view><view class="menu-close" @tap="$emit('close')">×</view></view>
-      <view v-for="(item, index) in items" :key="index" class="menu-row" :class="{ danger: item.danger }" @tap="$emit('select', index)"><text>{{ item.label }}</text><text class="menu-arrow">↗</text></view>
+      <view v-for="(item, index) in items" :key="index" class="menu-row" :class="{ danger: item.danger }" @tap="$emit('select', index)"><text>{{ item.label }}</text><view class="menu-arrow"></view></view>
     </view>
   </view>
 </template>
@@ -23,7 +23,7 @@ defineEmits(['select', 'close'])
 .menu-row { min-height: 62px; padding: 0 15px; display: flex; align-items: center; justify-content: space-between; font-size: 15px; color: var(--text); border-radius: 14px; transition: background .15s ease, transform .15s ease; }
 .menu-row:active { background: var(--surface-alt); }
 .menu-row.danger { color: var(--danger); }
-.menu-arrow { color: var(--muted); font-size: 18px; }
+.menu-arrow { width: 8px; height: 8px; margin-right: 5px; border-top: 2px solid var(--muted); border-right: 2px solid var(--muted); transform: rotate(45deg); }
 @keyframes fade { from { opacity: 0; } }
 @keyframes rise { from { opacity: 0; transform: translateY(24px); } }
 @media (min-width: 900px) { .menu-backdrop { align-items: center; }.menu-panel { animation-name: pop; }.menu-grabber { display: none; } @keyframes pop { from { opacity: 0; transform: scale(.96) translateY(10px); } } }
