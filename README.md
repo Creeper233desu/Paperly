@@ -16,7 +16,7 @@ HBuilderX 使用内置 Vue 3 / uni-app 编译器。单元测试可运行 `npm in
 - `components/StatisticsPanel.vue`：近半年每日净字数热力图、每日书籍与篇章来源。
 - `pages/book`：可折叠的章节与正文目录、接续上次写作、文本筛选和 PDF 导出。
 - `pages/editor`：连续文本编辑、回车后自然段首行缩进、实时字数统计、全书篇章侧栏、段落聚焦、标点补全、撤销重做、查找替换、沉浸模式和光标过渡效果。
-- `pages/settings`：浅色/深色/跟随系统、内置与导入字体、字号和编辑偏好。
+- `pages/settings`：外观、字体和编辑体验分为三个入口，具体选项在居中弹窗中设置；已导入字体显示独立预览。
 - `components`：底部导航、连续正文输入、应用内操作菜单、确认对话框。
 - `src/store`：书库、设置、每日统计的本地 JSON 持久化与主导航状态。
 - `src/services`：Android PDF、封面持久化、字体导入与加载。
@@ -28,7 +28,7 @@ HBuilderX 使用内置 Vue 3 / uni-app 编译器。单元测试可运行 `npm in
 
 随应用内置 **思源宋体 Noto Serif SC** 和 **霞鹜文楷 Lite**，在离线环境下也可切换。字体及许可分别位于 `static/fonts/`，均按 SIL Open Font License 1.1 随附许可文本。两款字体总计约 39 MB，会增加 APK 体积。
 
-Android 上可从系统文件选择器导入 TTF/OTF。应用将字体复制到 `_doc/fonts/` 并记录路径；重启后仍可选用。中文字体文件可能较大，单个导入文件限制 25 MB。该功能使用 Android Native.js 和 `uni.loadFontFace`，需要在真机或模拟器中检查字体加载。
+Android 上可从系统文件选择器导入 TTF/OTF。应用通过 Android 文件通道将字体复制到 `_doc/fonts/`，核对复制后的文件大小，再加载并记录路径；重启后仍可选用。字体设置弹窗会按实际字体显示每款自定义字体的中文预览。单个导入文件限制 25 MB。该功能依赖 Android Native.js 和 `uni.loadFontFace`，仍需在云打包后的 APK 上检查不同设备的文件选择器与字体渲染。
 
 ## PDF
 

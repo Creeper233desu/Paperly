@@ -2,8 +2,8 @@
     "name" : "纸间Paperly",
     "appid" : "__UNI__15A9A0B",
     "description" : "安静的本地写作空间",
-    "versionName" : "1.2.1",
-    "versionCode" : "121",
+    "versionName" : "1.3.0",
+    "versionCode" : "130",
     "transformPx" : false,
     "vueVersion" : "3",
     "app-plus" : {

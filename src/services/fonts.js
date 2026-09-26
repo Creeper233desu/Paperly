@@ -1,7 +1,8 @@
-import { preferences, loadPreferences, updatePreferences, fontFamilies } from '../store/preferences'
+import { preferences, loadPreferences, updatePreferences, fontFamilies } from '../store/preferences.js'
 
 const REQUEST_CODE = 28461
 const MAX_BYTES = 25 * 1024 * 1024
+const COPY_CHUNK = 1024 * 1024
 const bundled = {
   noto: { family: 'PaperNotoSerif', file: 'NotoSerifSC.ttf' },
   wenkai: { family: 'PaperWenKai', file: 'LXGWWenKaiLite-Regular.ttf' }
@@ -24,7 +25,7 @@ export function loadCustomFont(font) {
   const absolute = plus.io.convertLocalFileSystemURL(font.path)
   if (!absolute) return Promise.reject(new Error('字体文件已丢失'))
   const family = `PaperFont${font.id}`
-  const sources = [`url("file://${absolute}")`, `url("${absolute}")`]
+  const sources = [`url("${absolute.startsWith('file://') ? absolute : `file://${absolute}`}")`, `url("${absolute}")`, `url("${font.path}")`]
   return new Promise((resolve, reject) => {
     const attempt = index => uni.loadFontFace({
       family,
@@ -67,56 +68,64 @@ export function loadSelectedFont() {
 }
 
 function readDisplayName(resolver, uri) {
-  const cursor = plus.android.invoke(resolver, 'query', uri, null, null, null, null)
-  if (!cursor) throw new Error('无法读取字体文件信息')
+  let cursor
+  try { cursor = plus.android.invoke(resolver, 'query', uri, null, null, null, null) }
+  catch (_) { return '' }
+  if (!cursor) return ''
   try {
-    if (!plus.android.invoke(cursor, 'moveToFirst')) throw new Error('无法读取字体文件信息')
+    if (!plus.android.invoke(cursor, 'moveToFirst')) return ''
     const column = plus.android.invoke(cursor, 'getColumnIndex', '_display_name')
-    return column >= 0 ? String(plus.android.invoke(cursor, 'getString', column)) : '我的字体.ttf'
+    return column >= 0 ? String(plus.android.invoke(cursor, 'getString', column) || '') : ''
   } finally { plus.android.invoke(cursor, 'close') }
 }
 
 async function copyFontFromUri(activity, uri) {
   const File = plus.android.importClass('java.io.File')
   const FileOutputStream = plus.android.importClass('java.io.FileOutputStream')
-  const Byte = plus.android.importClass('java.lang.Byte')
-  const ArrayClass = plus.android.importClass('java.lang.reflect.Array')
+  const Channels = plus.android.importClass('java.nio.channels.Channels')
   const resolver = activity.getContentResolver()
-  const name = readDisplayName(resolver, uri)
-  const extension = name.toLocaleLowerCase().match(/\.(ttf|otf)$/)?.[1]
+  const displayName = readDisplayName(resolver, uri)
+  let mime = ''
+  try { mime = String(plus.android.invoke(resolver, 'getType', uri) || '').toLowerCase() } catch (_) { /* rely on file name */ }
+  const extension = displayName.toLowerCase().match(/\.(ttf|otf)$/)?.[1] || (mime.includes('opentype') || mime.includes('font-otf') ? 'otf' : mime.includes('truetype') || mime.includes('font-ttf') ? 'ttf' : '')
   if (!extension) throw new Error('请选择 TTF 或 OTF 字体文件')
+  const name = displayName || `我的字体.${extension}`
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
   const base = plus.io.convertLocalFileSystemURL('_doc/')
-  const directory = `${base.replace(/\/$/, '')}/fonts`
-  new File(directory).mkdirs()
+  if (!base) throw new Error('无法访问应用字体目录')
+  const directory = new File(base, 'fonts')
+  if (!plus.android.invoke(directory, 'exists') && !plus.android.invoke(directory, 'mkdirs')) throw new Error('无法创建应用字体目录')
   const path = `_doc/fonts/${id}.${extension}`
-  const absolute = `${directory}/${id}.${extension}`
+  const target = new File(directory, `${id}.${extension}`)
   const input = plus.android.invoke(resolver, 'openInputStream', uri)
   if (!input) throw new Error('无法读取所选字体')
-  let output
-  const buffer = plus.android.invoke(ArrayClass, 'newInstance', Byte.TYPE, 16384)
+  let output, inputChannel, outputChannel
   let total = 0
-  let failure = null
   try {
-    output = new FileOutputStream(absolute)
-    while (true) {
-      const count = plus.android.invoke(input, 'read', buffer)
-      if (count === -1) break
-      if (!Number.isFinite(count) || count < 0) throw new Error('读取字体失败')
+    output = new FileOutputStream(target)
+    inputChannel = plus.android.invoke(Channels, 'newChannel', input)
+    outputChannel = plus.android.invoke(output, 'getChannel')
+    if (!inputChannel || !outputChannel) throw new Error('无法建立字体复制通道')
+    while (total <= MAX_BYTES) {
+      const count = Number(plus.android.invoke(outputChannel, 'transferFrom', inputChannel, total, Math.min(COPY_CHUNK, MAX_BYTES + 1 - total)))
+      if (!Number.isFinite(count) || count < 0) throw new Error('复制字体时读取失败')
+      if (count === 0) break
       total += count
       if (total > MAX_BYTES) throw new Error('字体文件超过 25 MB，请选择较小的字体')
-      plus.android.invoke(output, 'write', buffer, 0, count)
-      if (total % (256 * 1024) < 16384) await new Promise(resolve => setTimeout(resolve, 0))
+      await new Promise(resolve => setTimeout(resolve, 0))
     }
     plus.android.invoke(output, 'flush')
   } catch (error) {
-    failure = error
+    plus.android.invoke(target, 'delete')
+    throw error
   } finally {
-    plus.android.invoke(input, 'close')
+    if (inputChannel) plus.android.invoke(inputChannel, 'close')
+    else plus.android.invoke(input, 'close')
+    if (outputChannel) plus.android.invoke(outputChannel, 'close')
     if (output) plus.android.invoke(output, 'close')
   }
-  if (failure) { new File(absolute).delete(); throw failure }
-  if (!total) { new File(absolute).delete(); throw new Error('字体文件为空') }
+  const size = plus.android.invoke(target, 'length')
+  if (!total || size !== total) { plus.android.invoke(target, 'delete'); throw new Error(total ? '字体复制不完整，请重试' : '字体文件为空') }
   return { id, name: name.replace(/\.(ttf|otf)$/i, ''), path }
 }
 
@@ -141,6 +150,7 @@ export function pickAndroidFont() {
       done()
       if (resultCode !== -1 || !data) { reject(new Error('已取消选择')); return }
       const uri = plus.android.invoke(data, 'getData')
+      if (!uri) { reject(new Error('无法获取所选字体文件')); return }
       setTimeout(() => copyFontFromUri(activity, uri).then(resolve, reject), 0)
     }
     try { activity.startActivityForResult(intent, REQUEST_CODE) }
