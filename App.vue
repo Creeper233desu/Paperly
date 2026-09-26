@@ -1,0 +1,38 @@
+<script>
+import { initStore } from './src/store/library'
+import { applyTheme } from './src/store/preferences'
+
+export default {
+  onLaunch() {
+    initStore()
+    applyTheme()
+    if (typeof uni.onThemeChange === 'function') uni.onThemeChange(applyTheme)
+  },
+  onShow() {
+    applyTheme()
+  }
+}
+</script>
+
+<style>
+page { background: #f5f6f8; color: #242936; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+view, text, input, textarea, button, image { box-sizing: border-box; }
+button::after { border: 0; }
+.theme-light { --bg: #f5f6f8; --surface: #fff; --surface-alt: #edf0f4; --text: #242936; --muted: #828a99; --line: #e3e7ed; --accent: #536787; --accent-soft: #e9edf5; --danger: #bf6269; --shadow: rgba(32, 41, 57, .09); }
+.theme-dark { --bg: #111318; --surface: #1c2028; --surface-alt: #282d37; --text: #edf0f4; --muted: #929aa9; --line: #343945; --accent: #b6c6e1; --accent-soft: #30394b; --danger: #e38c92; --shadow: rgba(0, 0, 0, .28); }
+.screen { min-height: 100vh; background: var(--bg); color: var(--text); padding: calc(var(--status-bar-height) + 12px) 22px 110px; transition: background .28s ease, color .28s ease; }
+.page-wrap { width: 100%; max-width: 1220px; margin: 0 auto; }
+.topbar { min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 15px; }
+.back, .top-action { color: var(--accent); font-size: 14px; padding: 12px 0; }
+.page-title { font-size: clamp(31px, 4vw, 46px); font-weight: 730; letter-spacing: -.04em; line-height: 1.18; margin: 26px 0 9px; }
+.subtle { color: var(--muted); font-size: 14px; line-height: 1.6; }
+.section-title { font-size: 18px; font-weight: 700; margin: 34px 0 17px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; box-shadow: 0 10px 35px var(--shadow); }
+.primary-button { background: var(--accent); color: #fff; border-radius: 14px; font-size: 14px; font-weight: 650; padding: 13px 20px; }
+.ghost-button { background: var(--accent-soft); color: var(--accent); border-radius: 14px; font-size: 14px; padding: 12px 18px; }
+.field { background: var(--surface-alt); color: var(--text); border: 1px solid transparent; border-radius: 12px; height: 46px; width: 100%; padding: 0 14px; font-size: 14px; outline: none; margin: 8px 0; }
+.field:focus { border-color: var(--accent); }
+.empty { color: var(--muted); font-size: 14px; line-height: 1.65; text-align: center; padding: 55px 25px; }
+@media (min-width: 700px) { .screen { padding: calc(var(--status-bar-height) + 26px) 36px 115px; } }
+@media (prefers-reduced-motion: reduce) { .screen { transition: none; } }
+</style>

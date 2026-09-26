@@ -1,0 +1,9 @@
+{
+  "pages": [
+    { "path": "pages/library/index", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/book/index", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/editor/index", "style": { "navigationStyle": "custom", "disableScroll": false } },
+    { "path": "pages/settings/index", "style": { "navigationStyle": "custom" } }
+  ],
+  "globalStyle": { "navigationBarTitleText": "纸间", "backgroundColor": "@bgColor", "navigationBarTextStyle": "@navTextColor" }
+}
