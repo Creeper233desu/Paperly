@@ -1,5 +1,26 @@
 export const PAIRS = { '(': ')', '（': '）', '[': ']', '【': '】', '{': '}', '“': '”', '‘': '’', '《': '》' }
 
+export function documentFromParagraphs(paragraphs) {
+  return (paragraphs?.length ? paragraphs : ['']).join('\n')
+}
+
+export function paragraphsFromDocument(document) {
+  return String(document).replace(/\r\n?/g, '\n').split('\n')
+}
+
+export function editDocument(previous, value, cursor, autoPair = true) {
+  const normalized = String(value).replace(/\r\n?/g, '\n')
+  const at = Math.max(0, Math.min(Number.isFinite(cursor) && cursor >= 0 ? cursor : normalized.length, normalized.length))
+  if (!autoPair || normalized.length !== previous.length + 1) return { text: normalized, cursor: at }
+  const inserted = normalized[at - 1]
+  if (!PAIRS[inserted] || previous !== normalized.slice(0, at - 1) + normalized.slice(at)) return { text: normalized, cursor: at }
+  return { text: normalized.slice(0, at) + PAIRS[inserted] + normalized.slice(at), cursor: at }
+}
+
+export function paragraphOffset(paragraphs, paragraphIndex, position = 0) {
+  return paragraphs.slice(0, paragraphIndex).reduce((sum, paragraph) => sum + paragraph.length + 1, 0) + position
+}
+
 export function editParagraph(previous, value, cursor, autoPair = true) {
   const at = Math.max(0, Number.isFinite(cursor) ? cursor : value.length)
   if (value.includes('\n')) {

@@ -4,7 +4,7 @@
     <view class="hero"><view class="hero-copy"><view class="hero-kicker">你的私人写作空间</view><view class="page-title">故事，始于此刻。</view><view class="subtle">整理章节，沉浸写作，让每本书都有自己的模样。</view><view class="hero-button" @tap="openCreate">＋　新建书籍</view></view><view class="hero-decoration"><view class="arc arc-a"></view><view class="arc arc-b"></view><text>写</text></view></view>
     <view class="section-head"><view><view class="section-title">我的书架 <text class="book-count">{{ books.length }}</text></view><view class="subtle">长按或点击更多可管理书籍</view></view><view class="sort-note">最近编辑</view></view>
     <view v-if="!books.length" class="empty card">书架还没有书。点击“新建书籍”，写下第一章。</view>
-    <view class="book-grid"><view v-for="(book, index) in books" :key="book.id" class="book-card card" @tap="openBook(book.id)" @longpress="openActions(book)"><view class="book-art" :class="'cover-' + index % 4"><image v-if="book.cover" :src="book.cover" mode="aspectFill" class="cover-image" /><view v-else class="cover-letter">{{ book.title.slice(0, 1) }}</view><view class="book-spine"></view></view><view class="book-info"><view class="book-title-row"><view class="book-title">{{ book.title }}</view><view class="more-button" @tap.stop="openActions(book)">···</view></view><view class="book-author">{{ book.author || '未设置作者' }}</view><view class="book-description">{{ book.description || '打开这本书，继续写下去。' }}</view><view class="book-meta"><text>{{ book.chapters.length }} 章 · {{ articleCount(book) }} 篇</text><text>{{ formatDate(book.updatedAt) }}</text></view></view></view></view>
+    <view class="book-grid"><view v-for="(book, index) in books" :key="book.id" class="book-card card" :class="{ 'new-book': freshId === book.id, removing: removingId === book.id }" @tap="openBook(book.id)" @longpress="openActions(book)"><view class="book-art" :class="'cover-' + index % 4"><image v-if="book.cover" :src="book.cover" mode="aspectFill" class="cover-image" /><view v-else class="cover-letter">{{ book.title.slice(0, 1) }}</view><view class="book-spine"></view></view><view class="book-info"><view class="book-title-row"><view class="book-title">{{ book.title }}</view><view class="more-button" @tap.stop="openActions(book)">···</view></view><view class="book-author">{{ book.author || '未设置作者' }}</view><view class="book-description">{{ book.description || '打开这本书，继续写下去。' }}</view><view class="book-meta"><text>{{ book.chapters.length }} 章 · {{ articleCount(book) }} 篇</text><text>{{ formatDate(book.updatedAt) }}</text></view></view></view></view>
   </view>
   <AppNav active="library" />
   <ActionMenu :visible="!!actionBook && !showDelete" :title="actionBook?.title" :items="[{ label: '编辑书籍信息' }, { label: '删除书籍', danger: true }]" @close="actionBook = null" @select="onAction" />
@@ -15,7 +15,9 @@
 
 <script setup>
 import { computed, reactive, ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import { useLibrary, addBook, updateBook, deleteBook } from '../../src/store/library'
+import { primaryNavigation } from '../../src/store/navigation'
 import { themeClass } from '../../src/store/preferences'
 import { chooseBookCover } from '../../src/services/covers'
 import AppNav from '../../components/AppNav.vue'
@@ -23,12 +25,14 @@ import ActionMenu from '../../components/ActionMenu.vue'
 import AppDialog from '../../components/AppDialog.vue'
 
 const store = useLibrary()
+onShow(() => { primaryNavigation.active = 'library' })
 const books = computed(() => store.books)
 const showEdit = ref(false), showDelete = ref(false), editingId = ref(''), actionBook = ref(null)
+const freshId = ref(''), removingId = ref('')
 const draft = reactive({ title: '', author: '', description: '', cover: '' })
 const articleCount = book => book.chapters.reduce((count, chapter) => count + chapter.articles.length, 0)
 const formatDate = date => date ? new Date(date).toLocaleDateString('zh-CN') : '今天'
-function openBook(id) { if (!actionBook.value) uni.navigateTo({ url: `/pages/book/index?id=${id}` }) }
+function openBook(id) { if (!actionBook.value && !removingId.value) uni.navigateTo({ url: `/pages/book/index?id=${id}` }) }
 function openCreate() { editingId.value = ''; Object.assign(draft, { title: '', author: '', description: '', cover: '' }); showEdit.value = true }
 function openActions(book) { actionBook.value = book }
 function onAction(index) {
@@ -39,10 +43,16 @@ async function chooseCover() { try { draft.cover = await chooseBookCover() } cat
 function saveBook() {
   if (!draft.title.trim()) return uni.showToast({ title: '请填写书名', icon: 'none' })
   if (editingId.value) updateBook(editingId.value, draft)
-  else { const book = addBook(draft.title); updateBook(book.id, draft) }
+  else { const book = addBook(draft.title); updateBook(book.id, draft); freshId.value = book.id; setTimeout(() => { if (freshId.value === book.id) freshId.value = '' }, 900) }
   showEdit.value = false
 }
-function confirmDelete() { if (actionBook.value) deleteBook(actionBook.value.id); showDelete.value = false; actionBook.value = null }
+function confirmDelete() {
+  const id = actionBook.value?.id
+  showDelete.value = false; actionBook.value = null
+  if (!id) return
+  removingId.value = id
+  setTimeout(() => { deleteBook(id); removingId.value = '' }, 280)
+}
 function cancelDelete() { showDelete.value = false; actionBook.value = null }
 </script>
 
@@ -59,4 +69,11 @@ function cancelDelete() { showDelete.value = false; actionBook.value = null }
 @media (max-width: 620px) { .book-grid { grid-template-columns: 1fr; }.hero { padding: 30px; }.hero-decoration { display: none; } }
 @media (max-width: 440px) { .top-note { display: none; }.book-card { padding: 15px; gap: 15px; min-height: 180px; }.book-art { flex-basis: 95px; height: 147px; }.book-title { font-size: 18px; }.hero { min-height: 220px; } }
 @media (prefers-reduced-motion: reduce) { .hero, .book-card { animation: none; transition: none; } }
+.book-card.new-book { animation: book-arrive .65s cubic-bezier(.2,.8,.2,1) both; }
+.book-card.removing { pointer-events: none; animation: book-leave .28s ease-in both; }
+.hero-button, .round-action, .cover-picker { transition: transform .22s ease, box-shadow .22s ease; }
+.hero-button:active, .round-action:active, .cover-picker:active { transform: scale(.94); }
+@keyframes book-arrive { 0% { opacity: 0; transform: translateY(22px) scale(.9); box-shadow: 0 0 0 0 var(--accent-soft); } 58% { opacity: 1; transform: translateY(-3px) scale(1.018); box-shadow: 0 0 0 12px var(--accent-soft); } 100% { transform: none; } }
+@keyframes book-leave { to { opacity: 0; transform: translateY(-14px) scale(.93); filter: blur(3px); } }
+@media (prefers-reduced-motion: reduce) { .book-card.new-book, .book-card.removing { animation: none; }.hero-button, .round-action, .cover-picker { transition: none; } }
 </style>

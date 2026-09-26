@@ -12,7 +12,12 @@
         "usingComponents" : true,
         "nvueCompiler" : "uni-app",
         "renderer" : "auto",
-        "screenOrientation" : ["portrait-primary", "portrait-secondary", "landscape-primary", "landscape-secondary"],
+        "screenOrientation" : [
+            "portrait-primary",
+            "portrait-secondary",
+            "landscape-primary",
+            "landscape-secondary"
+        ],
         "splashscreen" : {
             "alwaysShowBeforeRender" : true,
             "waiting" : true,
@@ -64,4 +69,3 @@
         "title" : "纸间"
     }
 }
-

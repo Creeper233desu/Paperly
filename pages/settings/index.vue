@@ -14,11 +14,12 @@
 
 <script setup>
 import { computed, ref } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import { loadPreferences, updatePreferences, themeClass } from '../../src/store/preferences'
 import { fontFamilyFor, fontLabel, loadBundledFont, loadSelectedFont, loadCustomFont, importFont, removeFont } from '../../src/services/fonts'
 import AppNav from '../../components/AppNav.vue'
 import AppDialog from '../../components/AppDialog.vue'
+import { navigatePrimary, primaryNavigation } from '../../src/store/navigation'
 
 const prefs = loadPreferences()
 const themes = [{ id: 'system', label: '跟随系统' }, { id: 'light', label: '浅色' }, { id: 'dark', label: '深色' }]
@@ -28,7 +29,8 @@ const fontChoices = computed(() => [
 ])
 const errorMessage = ref(''), removeId = ref('')
 onLoad(() => { loadSelectedFont().catch(() => {}); loadBundledFont('noto').then(() => loadBundledFont('wenkai')).catch(() => {}) })
-function goLibrary() { uni.reLaunch({ url: '/pages/library/index' }) }
+onShow(() => { primaryNavigation.active = 'settings' })
+function goLibrary() { navigatePrimary('library') }
 function setTheme(theme) { updatePreferences({ theme }) }
 function setOption(key, value) { updatePreferences({ [key]: value }) }
 function changeSize(delta) { updatePreferences({ fontSize: Math.min(30, Math.max(14, prefs.fontSize + delta)) }) }

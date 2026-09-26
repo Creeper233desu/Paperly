@@ -3,9 +3,9 @@
     <view class="topbar"><text class="back" @tap="back">‹　返回书架</text><text class="top-action" @tap="openBookMenu">更多操作　···</text></view>
     <view v-if="book" class="book-layout"><view class="book-sidebar"><view class="large-cover"><image v-if="book.cover" :src="book.cover" mode="aspectFill" /><view v-else class="large-letter">{{ book.title.slice(0, 1) }}</view><view class="large-spine"></view></view><view class="sidebar-label">当前书籍</view><view class="sidebar-title">{{ book.title }}</view><view class="sidebar-author">{{ book.author || '未设置作者' }}</view><view v-if="book.description" class="sidebar-description">{{ book.description }}</view><view class="sidebar-stats"><view><text class="stat-number">{{ book.chapters.length }}</text><text>章节</text></view><view><text class="stat-number">{{ totalArticles }}</text><text>正文</text></view><view><text class="stat-number">{{ totalWords }}</text><text>字数</text></view></view><view class="sidebar-export" @tap="showExport = true">导出 PDF　↗</view></view>
       <view class="book-content"><view class="content-heading"><view><view class="eyebrow">写作目录</view><view class="page-title">章节与正文</view><view class="subtle">继续写下一个片段，或从已有的正文开始。</view></view><view class="new-chapter" @tap="openCreateChapter">＋ 新建章节</view></view><view class="search-box"><text>⌕</text><input v-model="query" placeholder="搜索章节、篇名或正文" confirm-type="search" /></view>
-      <view v-if="!book.chapters.length" class="empty card">先创建一个章节，再写第一篇正文。</view><view v-for="(chapter, ci) in visibleChapters" :key="chapter.id" class="chapter-card card"><view class="chapter-heading"><view class="chapter-num">{{ String(ci + 1).padStart(2, '0') }}</view><view class="chapter-name">{{ chapter.title }}</view><view class="chapter-action" @tap="openChapterMenu(chapter)">···</view></view><view v-for="article in filteredArticles(chapter)" :key="article.id" class="article-row" @tap="openArticle(chapter.id, article.id)" @longpress="openArticleMenu(chapter, article)"><view class="article-icon">✎</view><view class="article-main"><view class="article-title">{{ article.title || '无题正文' }}</view><view class="article-preview">{{ preview(article) }}</view></view><view class="article-tail"><text>{{ wordCount(article) }} 字</text><text class="article-more" @tap.stop="openArticleMenu(chapter, article)">···</text></view></view><view class="add-article" @tap="startArticle(chapter.id)">＋ 添加正文</view></view><view v-if="query && !visibleChapters.length" class="empty">没有找到匹配内容</view></view>
+      <view v-if="!book.chapters.length" class="empty card">先创建一个章节，再写第一篇正文。</view><view v-for="(chapter, ci) in visibleChapters" :key="chapter.id" class="chapter-card card"><view class="chapter-heading" @tap="toggleChapter(chapter.id)"><view class="chapter-num">{{ String(ci + 1).padStart(2, '0') }}</view><view class="chapter-name">{{ chapter.title }} <text class="chapter-article-count">{{ chapter.articles.length }} 篇</text></view><view class="chapter-caret" :class="{ folded: collapsed[chapter.id] && !query }">⌄</view><view class="chapter-action" @tap.stop="openChapterMenu(chapter)">···</view></view><view v-if="query || !collapsed[chapter.id]" class="chapter-children"><view v-for="article in filteredArticles(chapter)" :key="article.id" class="article-row" @tap="openArticle(chapter.id, article.id)" @longpress="openArticleMenu(chapter, article)"><view class="article-icon">✎</view><view class="article-main"><view class="article-title">{{ article.title || '无题正文' }}</view><view class="article-preview">{{ preview(article) }}</view></view><view class="article-tail"><text>{{ wordCount(article) }} 字</text><text class="article-more" @tap.stop="openArticleMenu(chapter, article)">···</text></view></view><view class="add-article" @tap="startArticle(chapter.id)">＋ 添加正文</view></view></view><view v-if="query && !visibleChapters.length" class="empty">没有找到匹配内容</view></view>
     </view>
-  </view><AppNav active="" />
+  </view><AppNav active="library" />
   <ActionMenu :visible="!!menuType && !dialogType" :title="menuTitle" :items="menuItems" @close="menuType = ''" @select="onMenuSelect" />
   <AppDialog :visible="dialogType === 'chapter'" :title="chapterDraftId ? '重命名章节' : '新建章节'" :confirm-text="chapterDraftId ? '保存' : '创建章节'" @cancel="dialogType = ''" @confirm="saveChapter"><input v-model="chapterDraftTitle" class="field" maxlength="80" placeholder="章节名（必填）" /></AppDialog>
   <AppDialog :visible="dialogType === 'book'" title="编辑书籍信息" confirm-text="保存" @cancel="dialogType = ''" @confirm="saveBookInfo"><view class="book-edit"><view class="cover-edit" @tap="selectCover"><image v-if="bookDraft.cover" :src="bookDraft.cover" mode="aspectFill" /><view v-else class="cover-edit-placeholder">＋<text>选择封面</text></view></view><view class="book-fields"><input v-model="bookDraft.title" class="field" maxlength="80" placeholder="书名" /><input v-model="bookDraft.author" class="field" maxlength="80" placeholder="作者" /><textarea v-model="bookDraft.description" class="description-input" maxlength="240" placeholder="简介" /></view></view></AppDialog>
@@ -28,6 +28,7 @@ import ActionMenu from '../../components/ActionMenu.vue'
 import AppDialog from '../../components/AppDialog.vue'
 
 const bookId = ref(''), query = ref(''), menuType = ref(''), dialogType = ref(''), showExport = ref(false), withToc = ref(true), exportResult = ref(null)
+const collapsed = reactive({})
 const selectedChapter = ref(null), selectedArticle = ref(null), chapterDraftId = ref(''), chapterDraftTitle = ref('')
 const bookDraft = reactive({ title: '', author: '', description: '', cover: '' })
 onLoad(options => { bookId.value = options.id || '' })
@@ -43,6 +44,7 @@ const menuItems = computed(() => menuType.value === 'book' ? [{ label: '编辑�
 function back() { uni.navigateBack() }
 function openBookMenu() { if (book.value) menuType.value = 'book' }
 function openChapterMenu(chapter) { selectedChapter.value = chapter; menuType.value = 'chapter' }
+function toggleChapter(id) { collapsed[id] = !collapsed[id] }
 function openArticleMenu(chapter, article) { selectedChapter.value = chapter; selectedArticle.value = article; menuType.value = 'article' }
 function onMenuSelect(index) {
   const type = menuType.value; menuType.value = ''
@@ -78,4 +80,18 @@ function openExport() {
 .book-edit { display: flex; gap: 17px; }.cover-edit { flex: 0 0 104px; height: 146px; border-radius: 8px; background: var(--surface-alt); overflow: hidden; }.cover-edit image { width: 100%; height: 100%; }.cover-edit-placeholder { height: 100%; display: flex; align-items: center; justify-content: center; flex-direction: column; color: var(--accent); font-size: 25px; }.cover-edit-placeholder text { font-size: 11px; }.book-fields { flex: 1; min-width: 0; }.description-input { width: 100%; height: 72px; background: var(--surface-alt); color: var(--text); border-radius: 12px; padding: 12px; font-size: 13px; }.export-row { display: flex; align-items: center; justify-content: space-between; font-size: 14px; padding: 12px 0; }.export-row text { display: block; color: var(--muted); font-size: 12px; margin-top: 6px; }.custom-check { width: 23px; height: 23px; border: 1px solid var(--line); border-radius: 7px; text-align: center; line-height: 22px; color: #fff; }.custom-check.checked { background: var(--accent); border-color: var(--accent); }
 @media (max-width: 700px) { .book-layout { display: block; }.book-sidebar { display: grid; grid-template-columns: 92px 1fr; column-gap: 20px; padding: 18px; margin-bottom: 27px; }.large-cover { grid-row: span 5; width: 92px; height: 132px; margin: 0; }.large-letter { font-size: 47px; }.sidebar-label { align-self: end; }.sidebar-title { margin-top: 5px; }.sidebar-description, .sidebar-stats, .sidebar-export { display: none; } }
 @media (max-width: 520px) { .content-heading { align-items: start; }.new-chapter { margin-top: 6px; }.content-heading .page-title { font-size: 29px; }.article-tail text:first-child { display: none; } }
+.chapter-card { overflow: hidden; transition: box-shadow .2s ease, transform .2s ease; }
+.chapter-heading { cursor: pointer; }
+.chapter-article-count { color: var(--muted); font-size: 11px; font-weight: 450; margin-left: 8px; }
+.chapter-caret { width: 24px; color: var(--muted); font-size: 21px; text-align: center; transition: transform .24s ease; }
+.chapter-caret.folded { transform: rotate(-90deg); }
+.chapter-children { position: relative; margin: 2px 0 0 16px; padding-left: 24px; border-left: 1px solid var(--line); animation: reveal-children .23s ease both; }
+.chapter-children::before { content: ''; position: absolute; top: -16px; left: -3px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+.article-row { position: relative; }
+.article-row::before { content: ''; position: absolute; left: -24px; top: 50%; width: 13px; height: 1px; background: var(--line); }
+.article-icon { background: transparent; color: var(--accent); font-size: 17px; }
+.article-row:active { transform: translateX(3px); }
+.add-article { padding-left: 43px; }
+@keyframes reveal-children { from { opacity: .3; transform: translateY(-7px); } }
+@media (prefers-reduced-motion: reduce) { .chapter-caret, .chapter-children, .chapter-card { transition: none; animation: none; } }
 </style>

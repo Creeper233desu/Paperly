@@ -13,11 +13,11 @@ HBuilderX 使用内置 Vue 3 / uni-app 编译器。单元测试可运行 `npm in
 ## 功能与结构
 
 - `pages/library`：书架、封面图片、书名、作者、简介及书籍管理。
-- `pages/book`：章节、正文管理、文本筛选和 PDF 导出。
-- `pages/editor`：平板居中写作、段落聚焦、标点补全、撤销重做、查找替换、沉浸模式。
+- `pages/book`：可折叠的章节与正文目录、文本筛选和 PDF 导出。
+- `pages/editor`：连续文本编辑、实时字数统计、全书篇章侧栏、段落聚焦、标点补全、撤销重做、查找替换、沉浸模式。
 - `pages/settings`：浅色/深色/跟随系统、内置与导入字体、字号和编辑偏好。
 - `components`：底部导航、应用内操作菜单、确认对话框。
-- `src/store`：书库和设置的本地 JSON 持久化。
+- `src/store`：书库和设置的本地 JSON 持久化、主导航状态。
 - `src/services`：Android PDF、封面持久化、字体导入与加载。
 - `src/utils/text.js`：可单独测试的编辑与替换逻辑。
 
