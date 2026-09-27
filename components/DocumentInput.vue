@@ -1,5 +1,5 @@
 <template>
-  <view class="document-input-host" :prop="value" :change:prop="editorRender.onValueChange" :focus-prop="focusMode" :change:focus-prop="editorRender.onFocusMode" :cursor-prop="cursorPayload" :change:cursor-prop="editorRender.onRequest" :active-prop="renderReady" :change:active-prop="editorRender.onActiveChange" :visual-prop="visualPayload" :change:visual-prop="editorRender.onVisualSettings" :style="{ '--cursor-color': cursorTrailColor }">
+  <view class="document-input-host" :prop="value" :change:prop="editorRender.onValueChange" :focus-prop="focusPayload" :change:focus-prop="editorRender.onFocusMode" :cursor-prop="cursorPayload" :change:cursor-prop="editorRender.onRequest" :active-prop="renderReady" :change:active-prop="editorRender.onActiveChange" :visual-prop="visualPayload" :change:visual-prop="editorRender.onVisualSettings" :style="{ '--cursor-color': cursorTrailColor }">
     <view v-show="renderReady" class="document-input" contenteditable="true" :style="{ fontFamily, fontSize: fontSize + 'px' }"><view v-for="(paragraph, index) in initialParagraphs" :key="index" class="paragraph">{{ paragraph }}<br v-if="!paragraph" /></view></view>
     <textarea v-if="!renderReady" class="document-fallback" :value="value" :maxlength="-1" :auto-height="true" :focus="fallbackFocus" :selection-start="selectionStart" :selection-end="selectionEnd" :style="{ fontFamily, fontSize: fontSize + 'px' }" placeholder="从这里开始写…" @input="onFallbackInput" @focus="onFallbackFocus" @blur="onFallbackBlur" @tap="reportFallbackCursor" @longpress="onFallbackLongPress" />
     <view v-show="renderReady && animatedCursor" class="cursor-glow"></view>
@@ -24,6 +24,7 @@ export default {
   data() { return { initialParagraphs: this.value.replace(/\r\n?/g, '\n').split('\n'), renderReady: false, fallbackFocus: false, selectionStart: -1, selectionEnd: -1, menu: { open: false, left: 0, top: 0, start: 0, end: 0 }, menuRequest: null, menuSeq: 0 } },
   computed: {
     cursorPayload() { return JSON.stringify(this.menuRequest || this.cursorRequest) },
+    focusPayload() { return JSON.stringify({ enabled: this.focusMode, ready: this.renderReady }) },
     visualPayload() { return JSON.stringify({ enabled: this.animatedCursor, color: this.cursorTrailColor, length: this.cursorTrailLength }) }
   },
   watch: {
@@ -110,17 +111,21 @@ export default {
       this.editor.setAttribute('spellcheck', 'false')
       this.editor.setAttribute('role', 'textbox')
       this.editor.setAttribute('aria-multiline', 'true')
-      this.editor.addEventListener('beforeinput', event => this.beforeInput(event))
+      this.editor.addEventListener('beforeinput', event => { this.editingUntil = Date.now() + 160; this.navigationPending = false; this.beforeInput(event) })
       this.editor.addEventListener('paste', event => this.pasteText(event))
       this.editor.addEventListener('input', () => this.reportInput())
-      this.editor.addEventListener('compositionstart', () => { this.composing = true; this.hideCaret() })
-      this.editor.addEventListener('compositionend', () => { this.composing = false; this.reportInput() })
+      this.editor.addEventListener('compositionstart', () => { this.composing = true; this.navigationPending = false; this.hideCaret() })
+      this.editor.addEventListener('compositionend', () => { this.composing = false; this.editingUntil = Date.now() + 160; this.reportInput() })
       this.editor.addEventListener('focus', () => { this.$ownerInstance.callMethod('onFocus'); this.reportCursor() })
       this.editor.addEventListener('blur', () => { this.hideCaret(); this.$ownerInstance.callMethod('onBlur') })
+      this.editor.addEventListener('keydown', event => { this.navigationPending = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key); if (this.navigationPending) this.editingUntil = 0 })
+      this.editor.addEventListener('mousedown', () => { this.navigationPending = true; this.editingUntil = 0 })
       this.editor.addEventListener('contextmenu', event => { event.preventDefault(); this.openMenu(event.clientX, event.clientY) })
       this.editor.addEventListener('touchstart', event => {
         const touch = event.touches[0]
         if (!touch) return
+        this.navigationPending = true
+        this.editingUntil = 0
         this.touchPoint = { x: touch.clientX, y: touch.clientY }
         clearTimeout(this.longPressTimer)
         this.longPressTimer = setTimeout(() => this.openMenu(this.touchPoint.x, this.touchPoint.y), 480)
@@ -130,9 +135,10 @@ export default {
         if (touch && this.touchPoint && Math.hypot(touch.clientX - this.touchPoint.x, touch.clientY - this.touchPoint.y) > 12) clearTimeout(this.longPressTimer)
       }, { passive: true })
       for (const name of ['touchend', 'touchcancel']) this.editor.addEventListener(name, () => clearTimeout(this.longPressTimer))
-      for (const name of ['keyup', 'click', 'touchend']) this.editor.addEventListener(name, () => this.reportCursor())
+      this.editor.addEventListener('keyup', event => { this.reportCursor(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key)); setTimeout(() => { this.navigationPending = false }, 120) })
+      for (const name of ['click', 'touchend']) this.editor.addEventListener(name, () => { this.reportCursor(true); setTimeout(() => { this.navigationPending = false }, 120) })
       if (window.__paperEditorSelectionListener) document.removeEventListener('selectionchange', window.__paperEditorSelectionListener)
-      window.__paperEditorSelectionListener = () => { if (document.activeElement === this.editor) this.reportCursor() }
+      window.__paperEditorSelectionListener = () => { if (document.activeElement === this.editor) this.reportCursor(!!this.navigationPending && Date.now() > (this.editingUntil || 0)) }
       document.addEventListener('selectionchange', window.__paperEditorSelectionListener)
       if (this.pendingFocusMode !== undefined) this.onFocusMode(this.pendingFocusMode)
       if (this.pendingVisual !== undefined) this.onVisualSettings(this.pendingVisual)
@@ -178,13 +184,14 @@ export default {
     },
     onFocusMode(enabled) {
       this.pendingFocusMode = enabled
-      this.focusMode = !!enabled
+      if (typeof enabled === 'string') { try { enabled = JSON.parse(enabled) } catch (_) { /* older boolean payload */ } }
+      this.focusMode = typeof enabled === 'object' ? !!enabled?.enabled : !!enabled
       this.updateFocus()
     },
     onActiveChange(active) {
       this.active = !!active
       if (this.active && this.pendingRequest) this.onRequest(this.pendingRequest)
-      if (this.active) requestAnimationFrame(() => this.scheduleCaret())
+      if (this.active) requestAnimationFrame(() => { this.updateFocus(); this.scheduleCaret() })
       else this.hideCaret()
     },
     onVisualSettings(payload) {
@@ -203,6 +210,7 @@ export default {
         try { request = JSON.parse(request) } catch (_) { return }
       }
       this.pendingRequest = request
+      if (Number.isFinite(request?.start)) { this.lastFocusOffset = request.start; this.updateFocus() }
       if (!this.editor || !this.active || !request || !request.seq || request.seq === this.appliedSeq) return
       this.appliedSeq = request.seq
       this.$nextTick(() => {
@@ -238,6 +246,7 @@ export default {
       const selection = window.getSelection()
       selection.removeAllRanges()
       selection.addRange(range)
+      this.lastFocusOffset = start
       this.updateFocus()
       this.scheduleCaret()
     },
@@ -261,6 +270,8 @@ export default {
     },
     reportInput() {
       if (this.composing) return
+      this.editingUntil = Date.now() + 160
+      this.navigationPending = false
       if (!this.blocks().length) { this.renderValue(''); this.setSelection(0, 0) }
       const value = this.readValue()
       const cursor = this.getOffsets()?.start ?? value.length
@@ -330,22 +341,25 @@ export default {
       }
       this.setSelection(this.offsetForPoint(node, start), this.offsetForPoint(node, end))
     },
-    reportCursor() {
+    reportCursor(animate = false) {
       const offsets = this.getOffsets()
       if (!offsets) return
+      this.lastFocusOffset = offsets.start
       this.$ownerInstance.callMethod('onCursor', offsets.start)
       this.updateFocus()
-      this.scheduleCaret()
+      this.scheduleCaret(animate)
     },
     updateFocus() {
       if (!this.editor) return
       const offsets = this.getOffsets()
-      const active = offsets ? this.readValue().slice(0, offsets.start).split('\n').length - 1 : -1
+      const offset = offsets?.start ?? this.lastFocusOffset ?? this.pendingRequest?.start ?? 0
+      if (offsets) this.lastFocusOffset = offset
+      const active = this.readValue().slice(0, Math.max(0, offset)).split('\n').length - 1
       this.blocks().forEach((block, index) => block.classList.toggle('dimmed', this.focusMode && active >= 0 && index !== active))
     },
-    scheduleCaret() {
+    scheduleCaret(animate = false) {
       if (this.frame) cancelAnimationFrame(this.frame)
-      this.frame = requestAnimationFrame(() => { this.frame = 0; this.positionCaret() })
+      this.frame = requestAnimationFrame(() => { this.frame = 0; this.positionCaret(animate) })
     },
     hideCaret() {
       if (this.glow) this.glow.style.opacity = '0'
@@ -353,7 +367,7 @@ export default {
       if (this.editor) this.editor.style.caretColor = ''
       this.previousPoint = null
     },
-    positionCaret() {
+    positionCaret(animate = false) {
       if (!this.editor || !this.glow || !this.active || this.animatedCursor === false || this.composing || document.activeElement !== this.editor) { this.hideCaret(); return }
       if (window.getComputedStyle(this.glow).display === 'none') { this.hideCaret(); return }
       const selection = window.getSelection()
@@ -378,15 +392,16 @@ export default {
       const size = parseFloat(window.getComputedStyle(this.editor).fontSize) || 18
       const x = point.left - host.left + (empty ? size * 2 : 0)
       const y = point.top - host.top + 2
-      if (!this.previousPoint) this.glow.style.transition = 'none'
-      else this.glow.style.transition = ''
+      const moving = animate && !!this.previousPoint
+      this.glow.style.transition = moving ? '' : 'none'
       this.glow.style.height = Math.max(17, size * 1.42) + 'px'
       this.glow.style.transform = `translate3d(${x}px, ${y}px, 0)`
       this.glow.style.opacity = '1'
-      if (!this.previousPoint) requestAnimationFrame(() => { if (this.glow) this.glow.style.transition = '' })
+      if (!moving) { clearTimeout(this.caretTransitionTimer); this.caretTransitionTimer = setTimeout(() => { if (this.glow) this.glow.style.transition = '' }, 24) }
       const previous = this.previousPoint
       this.previousPoint = { x, y }
-      if (this.trail && previous && this.trailLength > 0) {
+      if (!moving && this.trail) this.trail.style.opacity = '0'
+      if (this.trail && moving && previous && this.trailLength > 0) {
         const dx = x - previous.x, dy = y - previous.y, distance = Math.hypot(dx, dy)
         if (distance > 2) {
           const length = this.trailLength
@@ -415,8 +430,8 @@ export default {
 .document-fallback::placeholder { color: var(--muted); -webkit-text-fill-color: var(--muted); }
 .document-input :deep(.paragraph) { min-height: 1.85em; text-indent: 2em; transition: opacity .22s ease; }
 .document-input :deep(.paragraph.dimmed) { opacity: .23; }
-.cursor-glow { position: absolute; z-index: 3; top: 0; left: 0; width: 2px; height: 27px; border-radius: 2px; background: var(--cursor-color); box-shadow: 0 0 10px var(--cursor-color); opacity: 0; pointer-events: none; transition: transform .2s cubic-bezier(.22,.7,.25,1), opacity .12s ease; }
-.cursor-trail { position:absolute; z-index:2; width:0; height:3px; border-radius:5px; opacity:0; pointer-events:none; transform-origin: right center; transition:opacity .22s ease; filter:blur(1px); }
+.cursor-glow { position: absolute; z-index: 3; top: 0; left: 0; width: 3px; height: 27px; border-radius: 2px; background: var(--cursor-color); box-shadow: 0 0 10px var(--cursor-color); opacity: 0; pointer-events: none; transition: transform .2s cubic-bezier(.22,.7,.25,1), opacity .12s ease; }
+.cursor-trail { position:absolute; z-index:2; width:0; height:3px; border-radius:5px; opacity:0; pointer-events:none; transform-origin: right center; transition:opacity .22s ease; box-shadow:0 0 6px var(--cursor-color); }
 .selection-menu-shade { position:fixed; z-index:35; inset:0; background:transparent; }
 .selection-menu { position:fixed; z-index:36; width:min(292px, calc(100vw - 24px)); height:48px; padding:4px; display:flex; align-items:center; border:1px solid var(--line); border-radius:15px; background:var(--surface); color:var(--text); box-shadow:0 16px 42px var(--shadow); animation:selection-menu-in .18s cubic-bezier(.2,.78,.25,1) both; }
 .selection-menu.closing { animation:selection-menu-out .15s ease both; }

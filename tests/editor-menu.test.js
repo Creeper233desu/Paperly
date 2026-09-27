@@ -54,10 +54,41 @@ test('editor activation schedules the animated caret after a new page mount', ()
   const editor = {
     pendingRequest: { seq: 2 },
     onRequest: () => { selectionRequests++ },
+    updateFocus: () => {},
     scheduleCaret: () => { caretSchedules++ },
     hideCaret: () => {}
   }
   options.methods.onActiveChange.call(editor, true)
   assert.equal(selectionRequests, 1)
   assert.equal(caretSchedules, 1)
+})
+
+test('saved focus mode highlights the remembered paragraph when the editor reopens', () => {
+  const ownerOptions = optionsFor(0)
+  assert.notEqual(ownerOptions.computed.focusPayload.call({ focusMode: true, renderReady: false }), ownerOptions.computed.focusPayload.call({ focusMode: true, renderReady: true }))
+  const options = optionsFor(1)
+  const dimmed = []
+  const editor = {
+    editor: {}, pendingRequest: { start: 2 },
+    getOffsets: () => null,
+    readValue: () => '甲\n乙\n丙',
+    blocks: () => [0, 1, 2].map(index => ({ classList: { toggle: (_, value) => { dimmed[index] = value } } }))
+  }
+  editor.updateFocus = options.methods.updateFocus.bind(editor)
+  options.methods.onFocusMode.call(editor, '{"enabled":true,"ready":true}')
+  assert.deepEqual(dimmed, [true, false, true])
+})
+
+test('typing suppresses cursor motion while deliberate navigation enables it', () => {
+  const options = optionsFor(1)
+  const animations = []
+  const editor = {
+    getOffsets: () => ({ start: 2, end: 2 }),
+    $ownerInstance: { callMethod: () => {} },
+    updateFocus: () => {},
+    scheduleCaret: animate => animations.push(animate)
+  }
+  options.methods.reportCursor.call(editor)
+  options.methods.reportCursor.call(editor, true)
+  assert.deepEqual(animations, [false, true])
 })
