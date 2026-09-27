@@ -2,7 +2,7 @@
   <view class="settings-root" :class="themeClass()">
     <view class="screen" :class="themeClass()"><view class="page-wrap">
       <view class="topbar">
-        <view class="brand"><image class="brand-mark" src="/static/icons/80x80.png" mode="aspectFill" /><text>纸间</text></view>
+        <view class="brand"><image class="brand-mark" src="/static/brand/app-icon.png" mode="aspectFill" /><text>纸间</text></view>
         <text class="top-action" @tap="goLibrary">回到书架</text>
       </view>
       <view class="settings-heading"><view class="eyebrow">偏好设置</view><view class="page-title">让写作更舒适</view></view>
