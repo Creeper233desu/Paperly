@@ -1,8 +1,10 @@
 <template>
-  <view class="document-input-host" :prop="value" :change:prop="editorRender.onValueChange" :focus-prop="focusMode" :change:focus-prop="editorRender.onFocusMode" :cursor-prop="cursorPayload" :change:cursor-prop="editorRender.onRequest" :active-prop="renderReady" :change:active-prop="editorRender.onActiveChange">
+  <view class="document-input-host" :prop="value" :change:prop="editorRender.onValueChange" :focus-prop="focusMode" :change:focus-prop="editorRender.onFocusMode" :cursor-prop="cursorPayload" :change:cursor-prop="editorRender.onRequest" :active-prop="renderReady" :change:active-prop="editorRender.onActiveChange" :visual-prop="visualPayload" :change:visual-prop="editorRender.onVisualSettings" :style="{ '--cursor-color': cursorTrailColor }">
     <view v-show="renderReady" class="document-input" contenteditable="true" :style="{ fontFamily, fontSize: fontSize + 'px' }"><view v-for="(paragraph, index) in initialParagraphs" :key="index" class="paragraph">{{ paragraph }}<br v-if="!paragraph" /></view></view>
-    <textarea v-if="!renderReady" class="document-fallback" :value="value" :maxlength="-1" :auto-height="true" :focus="fallbackFocus" :selection-start="selectionStart" :selection-end="selectionEnd" :style="{ fontFamily, fontSize: fontSize + 'px' }" placeholder="从这里开始写…" @input="onFallbackInput" @focus="onFallbackFocus" @blur="onFallbackBlur" @tap="reportFallbackCursor" />
-    <view v-show="renderReady" class="cursor-glow"></view>
+    <textarea v-if="!renderReady" class="document-fallback" :value="value" :maxlength="-1" :auto-height="true" :focus="fallbackFocus" :selection-start="selectionStart" :selection-end="selectionEnd" :style="{ fontFamily, fontSize: fontSize + 'px' }" placeholder="从这里开始写…" @input="onFallbackInput" @focus="onFallbackFocus" @blur="onFallbackBlur" @tap="reportFallbackCursor" @longpress="onFallbackLongPress" />
+    <view v-show="renderReady && animatedCursor" class="cursor-glow"></view>
+    <view v-show="renderReady && animatedCursor" class="cursor-trail"></view>
+    <view v-if="menu.open" class="selection-menu-shade" @tap="closeMenu"><view class="selection-menu" :class="{ closing: menu.closing }" :style="{ left: menu.left + 'px', top: menu.top + 'px' }" @tap.stop><view class="selection-action" @tap="runMenuAction('copy')">复制</view><view class="selection-action" @tap="runMenuAction('paste')">粘贴</view><view class="selection-action" @tap="runMenuAction('cut')">剪切</view><view class="selection-action" @tap="runMenuAction('all')">全选</view></view></view>
   </view>
 </template>
 
@@ -13,14 +15,21 @@ export default {
     fontFamily: { type: String, default: '' },
     fontSize: { type: Number, default: 18 },
     focusMode: Boolean,
+    animatedCursor: { type: Boolean, default: true },
+    cursorTrailColor: { type: String, default: '#819bcb' },
+    cursorTrailLength: { type: Number, default: 32 },
     cursorRequest: { type: Object, default: () => ({ seq: 0, start: 0, end: 0 }) }
   },
   emits: ['input', 'focus', 'blur', 'cursor'],
-  data() { return { initialParagraphs: this.value.replace(/\r\n?/g, '\n').split('\n'), renderReady: false, fallbackFocus: false, selectionStart: -1, selectionEnd: -1 } },
-  computed: { cursorPayload() { return JSON.stringify(this.cursorRequest) } },
+  data() { return { initialParagraphs: this.value.replace(/\r\n?/g, '\n').split('\n'), renderReady: false, fallbackFocus: false, selectionStart: -1, selectionEnd: -1, menu: { open: false, left: 0, top: 0, start: 0, end: 0 }, menuRequest: null, menuSeq: 0 } },
+  computed: {
+    cursorPayload() { return JSON.stringify(this.menuRequest || this.cursorRequest) },
+    visualPayload() { return JSON.stringify({ enabled: this.animatedCursor, color: this.cursorTrailColor, length: this.cursorTrailLength }) }
+  },
   watch: {
     value(next) { if (!this.renderReady) this.initialParagraphs = next.replace(/\r\n?/g, '\n').split('\n') },
     cursorRequest(request) {
+      this.menuRequest = null
       if (this.renderReady || !request?.seq) return
       this.fallbackFocus = false
       this.selectionStart = -1; this.selectionEnd = -1
@@ -36,6 +45,45 @@ export default {
     onFallbackInput(event) { this.$emit('input', event); if (Number.isFinite(event.detail?.cursor)) this.$emit('cursor', event.detail.cursor) },
     onFallbackFocus(event) { this.fallbackFocus = true; this.$emit('focus', event); this.reportFallbackCursor() },
     onFallbackBlur(event) { this.fallbackFocus = false; if (Number.isFinite(event.detail?.cursor)) this.$emit('cursor', event.detail.cursor); this.$emit('blur', event); if (this.pendingReady) this.renderReady = true },
+    onFallbackLongPress(event) {
+      const touch = event.touches?.[0] || event.changedTouches?.[0]
+      const x = touch?.clientX ?? 150, y = touch?.clientY ?? 100
+      if (typeof uni.getSelectedTextRange !== 'function') return
+      uni.getSelectedTextRange({ success: result => this.onMenuOpen({ x, y, start: result.start || 0, end: result.end || result.start || 0 }) })
+    },
+    onMenuOpen(selection) {
+      const info = uni.getSystemInfoSync()
+      const width = info.windowWidth || 360
+      const height = info.windowHeight || 720
+      const menuWidth = Math.min(292, width - 24)
+      const start = Math.max(0, Math.min(this.value.length, selection.start))
+      const end = Math.max(start, Math.min(this.value.length, selection.end))
+      clearTimeout(this.menuTimer)
+      this.menu = { open: true, closing: false, start, end, left: Math.max(12, Math.min(selection.x - menuWidth / 2, width - menuWidth - 12)), top: Math.max(12, Math.min(selection.y > 70 ? selection.y - 68 : selection.y + 20, height - 72)) }
+    },
+    closeMenu() { if (!this.menu.open || this.menu.closing) return; this.menu.closing = true; this.menuTimer = setTimeout(() => { this.menu.open = false; this.menu.closing = false }, 150) },
+    requestMenuSelection(start, end, value = this.value) {
+      this.menuSeq = Math.max(this.menuSeq, this.cursorRequest.seq) + 1
+      this.menuRequest = { seq: this.menuSeq, start, end, value }
+      if (!this.renderReady) { this.fallbackFocus = false; this.selectionStart = -1; this.selectionEnd = -1; this.$nextTick(() => { this.selectionStart = start; this.selectionEnd = end; this.fallbackFocus = true }) }
+    },
+    replaceMenuSelection(inserted, start = this.menu.start, end = this.menu.end) {
+      inserted = String(inserted).replace(/\r\n?/g, '\n')
+      const value = this.value.slice(0, start) + inserted + this.value.slice(end)
+      const cursor = start + inserted.length
+      this.$emit('input', { detail: { value, cursor, source: 'menu' } })
+      this.$emit('cursor', cursor)
+      this.requestMenuSelection(cursor, cursor, value)
+    },
+    runMenuAction(action) {
+      const { start, end } = this.menu
+      const selected = this.value.slice(start, end)
+      this.closeMenu()
+      if (action === 'all') { this.requestMenuSelection(0, this.value.length); return }
+      if (action === 'paste') { uni.getClipboardData({ success: result => this.replaceMenuSelection(result.data || '', start, end), fail: () => uni.showToast({ title: '无法读取剪贴板', icon: 'none' }) }); return }
+      if (!selected) return
+      uni.setClipboardData({ data: selected, showToast: false, success: () => { if (action === 'cut') this.replaceMenuSelection('', start, end) }, fail: () => uni.showToast({ title: '无法写入剪贴板', icon: 'none' }) })
+    },
     reportFallbackCursor() {
       setTimeout(() => {
         if (!this.fallbackFocus || typeof uni.getSelectedTextRange !== 'function') return
@@ -54,6 +102,7 @@ export default {
       this.host = host
       this.editor = host?.querySelector('.document-input')
       this.glow = host?.querySelector('.cursor-glow')
+      this.trail = host?.querySelector('.cursor-trail')
       if (!this.editor) return
       this.editor.setAttribute('contenteditable', 'true')
       this.editor.contentEditable = 'true'
@@ -68,9 +117,25 @@ export default {
       this.editor.addEventListener('compositionend', () => { this.composing = false; this.reportInput() })
       this.editor.addEventListener('focus', () => { this.$ownerInstance.callMethod('onFocus'); this.reportCursor() })
       this.editor.addEventListener('blur', () => { this.hideCaret(); this.$ownerInstance.callMethod('onBlur') })
+      this.editor.addEventListener('contextmenu', event => { event.preventDefault(); this.openMenu(event.clientX, event.clientY) })
+      this.editor.addEventListener('touchstart', event => {
+        const touch = event.touches[0]
+        if (!touch) return
+        this.touchPoint = { x: touch.clientX, y: touch.clientY }
+        clearTimeout(this.longPressTimer)
+        this.longPressTimer = setTimeout(() => this.openMenu(this.touchPoint.x, this.touchPoint.y), 480)
+      }, { passive: true })
+      this.editor.addEventListener('touchmove', event => {
+        const touch = event.touches[0]
+        if (touch && this.touchPoint && Math.hypot(touch.clientX - this.touchPoint.x, touch.clientY - this.touchPoint.y) > 12) clearTimeout(this.longPressTimer)
+      }, { passive: true })
+      for (const name of ['touchend', 'touchcancel']) this.editor.addEventListener(name, () => clearTimeout(this.longPressTimer))
       for (const name of ['keyup', 'click', 'touchend']) this.editor.addEventListener(name, () => this.reportCursor())
-      document.addEventListener('selectionchange', () => { if (document.activeElement === this.editor) this.reportCursor() })
+      if (window.__paperEditorSelectionListener) document.removeEventListener('selectionchange', window.__paperEditorSelectionListener)
+      window.__paperEditorSelectionListener = () => { if (document.activeElement === this.editor) this.reportCursor() }
+      document.addEventListener('selectionchange', window.__paperEditorSelectionListener)
       if (this.pendingFocusMode !== undefined) this.onFocusMode(this.pendingFocusMode)
+      if (this.pendingVisual !== undefined) this.onVisualSettings(this.pendingVisual)
       if (this.pendingValue !== undefined) this.onValueChange(this.pendingValue)
       if (this.pendingRequest) this.onRequest(this.pendingRequest)
     })
@@ -119,6 +184,19 @@ export default {
     onActiveChange(active) {
       this.active = !!active
       if (this.active && this.pendingRequest) this.onRequest(this.pendingRequest)
+      if (this.active) requestAnimationFrame(() => this.scheduleCaret())
+      else this.hideCaret()
+    },
+    onVisualSettings(payload) {
+      this.pendingVisual = payload
+      if (typeof payload === 'string') { try { payload = JSON.parse(payload) } catch (_) { return } }
+      this.animatedCursor = payload?.enabled !== false
+      this.trailColor = /^#[0-9a-f]{6}$/i.test(payload?.color) ? payload.color : '#819bcb'
+      this.trailLength = Math.min(96, Math.max(0, Number(payload?.length) || 0))
+      if (this.glow) { this.glow.style.background = this.trailColor; this.glow.style.boxShadow = `0 0 10px ${this.trailColor}` }
+      if (!this.trailLength && this.trail) this.trail.style.opacity = '0'
+      if (!this.animatedCursor) this.hideCaret()
+      else this.scheduleCaret()
     },
     onRequest(request) {
       if (typeof request === 'string') {
@@ -222,6 +300,36 @@ export default {
       this.setSelection(offsets.start + inserted.length, offsets.start + inserted.length)
       this.reportInput()
     },
+    openMenu(x, y) {
+      clearTimeout(this.longPressTimer)
+      if (!this.active || Date.now() - (this.lastMenuAt || 0) < 450) return
+      this.lastMenuAt = Date.now()
+      const selection = this.getOffsets()
+      if (!selection || selection.start === selection.end) this.selectWordAt(x, y)
+      const offsets = this.getOffsets() || { start: 0, end: 0 }
+      this.$ownerInstance.callMethod('onMenuOpen', { x: Number.isFinite(x) ? x : 60, y: Number.isFinite(y) ? y : 90, start: offsets.start, end: offsets.end })
+    },
+    selectWordAt(x, y) {
+      let range = document.caretRangeFromPoint?.(x, y)
+      if (!range && document.caretPositionFromPoint) {
+        const position = document.caretPositionFromPoint(x, y)
+        if (position) {
+          range = document.createRange()
+          range.setStart(position.offsetNode, position.offset)
+          range.collapse(true)
+        }
+      }
+      if (!range || range.startContainer.nodeType !== 3) return
+      const node = range.startContainer, text = node.textContent
+      if (!text) return
+      let start = Math.min(range.startOffset, text.length - 1), end = start + 1
+      if (/\s/.test(text[start]) && start > 0) { start -= 1; end = start + 1 }
+      if (/[A-Za-z0-9_]/.test(text[start])) {
+        while (start > 0 && /[A-Za-z0-9_]/.test(text[start - 1])) start--
+        while (end < text.length && /[A-Za-z0-9_]/.test(text[end])) end++
+      }
+      this.setSelection(this.offsetForPoint(node, start), this.offsetForPoint(node, end))
+    },
     reportCursor() {
       const offsets = this.getOffsets()
       if (!offsets) return
@@ -239,9 +347,15 @@ export default {
       if (this.frame) cancelAnimationFrame(this.frame)
       this.frame = requestAnimationFrame(() => { this.frame = 0; this.positionCaret() })
     },
-    hideCaret() { if (this.glow) this.glow.style.opacity = '0'; if (this.editor) this.editor.style.caretColor = '' },
+    hideCaret() {
+      if (this.glow) this.glow.style.opacity = '0'
+      if (this.trail) this.trail.style.opacity = '0'
+      if (this.editor) this.editor.style.caretColor = ''
+      this.previousPoint = null
+    },
     positionCaret() {
-      if (!this.editor || !this.glow || this.composing || document.activeElement !== this.editor) { this.hideCaret(); return }
+      if (!this.editor || !this.glow || !this.active || this.animatedCursor === false || this.composing || document.activeElement !== this.editor) { this.hideCaret(); return }
+      if (window.getComputedStyle(this.glow).display === 'none') { this.hideCaret(); return }
       const selection = window.getSelection()
       if (!selection || !selection.rangeCount || !selection.isCollapsed) { this.hideCaret(); return }
       const range = selection.getRangeAt(0)
@@ -262,9 +376,32 @@ export default {
       }
       const host = this.host.getBoundingClientRect()
       const size = parseFloat(window.getComputedStyle(this.editor).fontSize) || 18
+      const x = point.left - host.left + (empty ? size * 2 : 0)
+      const y = point.top - host.top + 2
+      if (!this.previousPoint) this.glow.style.transition = 'none'
+      else this.glow.style.transition = ''
       this.glow.style.height = Math.max(17, size * 1.42) + 'px'
-      this.glow.style.transform = `translate3d(${point.left - host.left + (empty ? size * 2 : 0)}px, ${point.top - host.top + 2}px, 0)`
+      this.glow.style.transform = `translate3d(${x}px, ${y}px, 0)`
       this.glow.style.opacity = '1'
+      if (!this.previousPoint) requestAnimationFrame(() => { if (this.glow) this.glow.style.transition = '' })
+      const previous = this.previousPoint
+      this.previousPoint = { x, y }
+      if (this.trail && previous && this.trailLength > 0) {
+        const dx = x - previous.x, dy = y - previous.y, distance = Math.hypot(dx, dy)
+        if (distance > 2) {
+          const length = this.trailLength
+          const angle = Math.atan2(dy, dx)
+          this.trail.style.width = length + 'px'
+          this.trail.style.left = (x - length) + 'px'
+          this.trail.style.top = (y + size * .65 - 1.5) + 'px'
+          this.trail.style.transform = `rotate(${angle}rad)`
+          this.trail.style.background = `linear-gradient(90deg, transparent, ${this.trailColor || '#819bcb'})`
+          this.trail.style.opacity = '.85'
+          clearTimeout(this.trailTimer)
+          this.trailTimer = setTimeout(() => { if (this.trail) this.trail.style.opacity = '0' }, 220)
+        }
+      }
+      this.editor.style.caretColor = 'transparent'
     }
   }
 }
@@ -272,11 +409,19 @@ export default {
 
 <style scoped>
 .document-input-host { position: relative; width: 100%; min-height: 38vh; }
-.document-input, .document-fallback { display: block; width: 100%; min-height: 38vh; padding: 0 2px; border: 0; background: transparent; color: var(--writer-text); -webkit-text-fill-color: var(--writer-text); line-height: 1.85; letter-spacing: .025em; overflow-wrap: anywhere; white-space: pre-wrap; caret-color: var(--accent); outline: none; }
-.document-fallback { resize: none; }
+.document-input, .document-fallback { display: block; width: 100%; min-height: 38vh; padding: 0 2px; border: 0; background: transparent; color: var(--writer-text); -webkit-text-fill-color: var(--writer-text); line-height: 1.85; letter-spacing: .025em; overflow-wrap: anywhere; white-space: pre-wrap; caret-color: var(--cursor-color); outline: none; }
+.document-input { -webkit-touch-callout: none; user-select: text; -webkit-user-select: text; }
+.document-fallback { resize: none; -webkit-touch-callout:none; }
 .document-fallback::placeholder { color: var(--muted); -webkit-text-fill-color: var(--muted); }
 .document-input :deep(.paragraph) { min-height: 1.85em; text-indent: 2em; transition: opacity .22s ease; }
 .document-input :deep(.paragraph.dimmed) { opacity: .23; }
-.cursor-glow { position: absolute; z-index: 3; top: 0; left: 0; width: 2px; height: 27px; border-radius: 2px; background: var(--accent); box-shadow: 0 0 9px 2px var(--accent-soft); opacity: 0; pointer-events: none; transition: transform .2s cubic-bezier(.22,.7,.25,1), opacity .12s ease; }
-@media (prefers-reduced-motion: reduce) { .cursor-glow, .document-input :deep(.paragraph) { transition: none; } }
+.cursor-glow { position: absolute; z-index: 3; top: 0; left: 0; width: 2px; height: 27px; border-radius: 2px; background: var(--cursor-color); box-shadow: 0 0 10px var(--cursor-color); opacity: 0; pointer-events: none; transition: transform .2s cubic-bezier(.22,.7,.25,1), opacity .12s ease; }
+.cursor-trail { position:absolute; z-index:2; width:0; height:3px; border-radius:5px; opacity:0; pointer-events:none; transform-origin: right center; transition:opacity .22s ease; filter:blur(1px); }
+.selection-menu-shade { position:fixed; z-index:35; inset:0; background:transparent; }
+.selection-menu { position:fixed; z-index:36; width:min(292px, calc(100vw - 24px)); height:48px; padding:4px; display:flex; align-items:center; border:1px solid var(--line); border-radius:15px; background:var(--surface); color:var(--text); box-shadow:0 16px 42px var(--shadow); animation:selection-menu-in .18s cubic-bezier(.2,.78,.25,1) both; }
+.selection-menu.closing { animation:selection-menu-out .15s ease both; }
+.selection-action { flex:1; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:650; color:var(--text); transition:background .15s ease, transform .15s ease; }.selection-action:active { background:var(--accent-soft); color:var(--accent); transform:scale(.94); }
+@keyframes selection-menu-in { from { opacity:0; transform:translateY(8px) scale(.96); } }
+@keyframes selection-menu-out { to { opacity:0; transform:translateY(5px) scale(.97); } }
+@media (prefers-reduced-motion: reduce) { .cursor-glow, .cursor-trail, .document-input :deep(.paragraph), .selection-action { transition: none; }.selection-menu,.selection-menu.closing { animation:none; } }
 </style>
