@@ -170,7 +170,7 @@ test('an external text update restores the requested caret before refreshing foc
   assert.equal(editor.lastFocusOffset, 6)
 })
 
-test('the beam cursor keeps a solid trail as wide as the caret', () => {
+test('the beam cursor keeps a visibly thick, solid trail', () => {
   const timers = []
   const nativeEditor = { style: {} }
   const range = { getClientRects: () => [{ left: 88, top: 20, height: 28 }], startContainer: { nodeType: 1 } }
@@ -185,9 +185,15 @@ test('the beam cursor keeps a solid trail as wide as the caret', () => {
     previousPoint: { x: 10, y: 22 }, hideCaret: () => {}, hideJelly: () => {}
   }
   options.methods.positionCaret.call(editor, true)
-  assert.equal(editor.glow.style.width, '5px')
+  assert.equal(editor.glow.style.width, '6px')
   assert.equal(editor.trail.style.background, '#123456')
-  assert.equal(editor.trail.style.height, '5px')
+  assert.equal(editor.trail.style.height, '7px')
+  assert.equal(editor.trail.style.opacity, '1')
+  editor.cursorStyle = 'neovim'
+  editor.setJellyTarget = () => true
+  options.methods.positionCaret.call(editor, true)
+  assert.equal(editor.trail.style.opacity, '0')
+  assert.equal(editor.trail.style.transition, 'none')
 })
 
 test('the Neovim cursor spring bends its four corners and settles after navigation', () => {
@@ -204,7 +210,7 @@ test('the Neovim cursor spring bends its four corners and settles after navigati
   for (const [name, method] of Object.entries(options.methods)) editor[name] = method.bind(editor)
   editor.setJellyTarget(10, 10, 20, 30, false)
   const staticPath = editor.jellyPath.attributes.d
-  editor.setJellyTarget(110, 10, 20, 30, true)
+  editor.setJellyTarget(40, 10, 20, 30, true)
   const firstFrame = frames.shift()
   firstFrame(16)
   const leftTravel = editor.jellyCorners[0].x - 10
@@ -212,14 +218,26 @@ test('the Neovim cursor spring bends its four corners and settles after navigati
   assert.ok(rightTravel > leftTravel)
   assert.notEqual(editor.jellyPath.attributes.d, staticPath)
   const beforeRepeat = editor.jellyCorners[0].x
-  editor.setJellyTarget(110, 10, 20, 30, true)
+  editor.setJellyTarget(40, 10, 20, 30, true)
   assert.equal(editor.jellyCorners[0].x, beforeRepeat)
   let time = 32, steps = 0
   while (frames.length && steps++ < 80) frames.shift()(time += 16)
   assert.ok(steps < 80)
-  assert.ok(Math.abs(editor.jellyCorners[0].x - 110) < .01)
-  editor.setJellyTarget(50, 50, 20, 30, false)
+  assert.ok(Math.abs(editor.jellyCorners[0].x - 40) < .01)
+  for (const x of [70, 100, 130]) editor.setJellyTarget(x, 10, 20, 30, true)
+  const destinations = editor.jellyDestinations(editor.jellyTarget)
+  editor.jellyCorners.forEach((corner, index) => {
+    assert.ok(Math.hypot(corner.x - destinations[index].x, corner.y - destinations[index].y) <= 28.01)
+  })
+  steps = 0
+  while (frames.length && steps++ < 80) frames.shift()(time += 16)
+  assert.ok(steps < 80)
+  editor.setJellyTarget(50, 240, 20, 30, true)
   assert.equal(editor.jellyCorners[0].x, 50)
+  assert.equal(editor.jellyCorners[0].y, 240)
+  assert.equal(frames.length, 0)
+  editor.setJellyTarget(60, 50, 20, 30, false)
+  assert.equal(editor.jellyCorners[0].x, 60)
 })
 
 test('focus toggling repairs a stale empty view without replacing unsaved text', () => {

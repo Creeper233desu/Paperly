@@ -278,7 +278,7 @@ export default {
       this.trailColor = /^#[0-9a-f]{6}$/i.test(payload?.color) ? payload.color : '#819bcb'
       this.trailLength = Math.min(96, Math.max(0, Number(payload?.length) || 0))
       if (this.glow) { this.glow.style.background = this.trailColor; this.glow.style.boxShadow = `0 0 10px ${this.trailColor}`; this.glow.classList.toggle('neovim', this.cursorStyle === 'neovim') }
-      if (this.jellyPath) { this.jellyPath.setAttribute('fill', this.trailColor); this.jellyPath.style.filter = `drop-shadow(0 0 7px ${this.trailColor})` }
+      if (this.jellyPath) { this.jellyPath.setAttribute('fill', this.trailColor); this.jellyPath.style.filter = `drop-shadow(0 0 4px ${this.trailColor})` }
       if (!this.trailLength && this.trail) this.trail.style.opacity = '0'
       if (!this.animatedCursor) this.hideCaret()
       else this.scheduleCaret()
@@ -481,7 +481,7 @@ export default {
       svg.setAttribute('class', 'cursor-jelly-svg')
       svg.setAttribute('aria-hidden', 'true')
       path.setAttribute('fill', this.trailColor || '#819bcb')
-      path.style.filter = `drop-shadow(0 0 7px ${this.trailColor || '#819bcb'})`
+      path.style.filter = `drop-shadow(0 0 4px ${this.trailColor || '#819bcb'})`
       svg.appendChild(path)
       this.jellyLayer.appendChild(svg)
       this.jellySvg = svg
@@ -491,6 +491,21 @@ export default {
     jellyDestinations(target) {
       const { x, y, width, height } = target
       return [{ x, y }, { x: x + width, y }, { x: x + width, y: y + height }, { x, y: y + height }]
+    },
+    boundJellyCorners() {
+      if (!this.jellyCorners || !this.jellyTarget) return
+      const destinations = this.jellyDestinations(this.jellyTarget)
+      const limit = Math.min(42, Math.max(28, this.jellyTarget.height * .9))
+      this.jellyCorners.forEach((corner, index) => {
+        const dx = corner.x - destinations[index].x
+        const dy = corner.y - destinations[index].y
+        const distance = Math.hypot(dx, dy)
+        if (distance <= limit) return
+        corner.x = destinations[index].x + dx / distance * limit
+        corner.y = destinations[index].y + dy / distance * limit
+        corner.vx = 0
+        corner.vy = 0
+      })
     },
     drawJelly() {
       if (!this.jellyPath || !this.jellyCorners) return
@@ -514,15 +529,15 @@ export default {
       this.jellySvg.style.opacity = '1'
       const dx = previous ? x - previous.x : 0
       const dy = previous ? y - previous.y : 0
+      const distance = Math.hypot(dx, dy)
       if (animate && this.jellyCorners && Math.hypot(dx, dy) < 1 && previous.width === width && previous.height === height) return true
-      if (!animate || !this.jellyCorners || Math.hypot(dx, dy) < 1) {
+      if (!animate || !this.jellyCorners || distance < 1 || distance > Math.max(72, width * 3, height * 1.5)) {
         if (this.jellyFrame) cancelAnimationFrame(this.jellyFrame)
         this.jellyFrame = 0
         this.jellyCorners = destinations.map(point => ({ ...point, vx: 0, vy: 0, omega: 36 }))
         this.drawJelly()
         return true
       }
-      const distance = Math.hypot(dx, dy)
       const shortJump = Math.abs(dx) <= width * 2.1 && Math.abs(dy) < 2
       const baseSpeed = shortJump ? 46 : 30
       const lag = .35 + (this.trailLength || 0) / 96 * .55
@@ -532,6 +547,7 @@ export default {
         const alignment = (horizontal * dx + vertical * dy) / (Math.SQRT2 * distance)
         corner.omega = baseSpeed * (1 - lag * (1 - alignment) * .35)
       })
+      this.boundJellyCorners()
       if (!this.jellyFrame) {
         this.jellyLastTime = performance.now()
         this.jellyFrame = requestAnimationFrame(time => this.stepJelly(time))
@@ -557,6 +573,7 @@ export default {
           if (Math.abs(corner[axis] - target[axis]) > .25 || Math.abs(corner[velocity]) > 2) moving = true
         }
       })
+      this.boundJellyCorners()
       if (!moving) this.jellyCorners.forEach((corner, index) => Object.assign(corner, destinations[index], { vx: 0, vy: 0 }))
       this.drawJelly()
       if (moving) this.jellyFrame = requestAnimationFrame(next => this.stepJelly(next))
@@ -587,7 +604,7 @@ export default {
       const x = point.left - host.left + (empty ? size * 2 : 0)
       const y = point.top - host.top + 2
       const height = Math.max(17, point.height || size * 1.42)
-      let cursorWidth = 5
+      let cursorWidth = 6
       if (this.cursorStyle === 'neovim') {
         cursorWidth = size * .95
         if (range.startContainer.nodeType === 3 && range.startOffset < range.startContainer.length) {
@@ -612,19 +629,23 @@ export default {
         if (!moving) { clearTimeout(this.caretTransitionTimer); this.caretTransitionTimer = setTimeout(() => { if (this.glow) this.glow.style.transition = '' }, 24) }
       }
       this.previousPoint = { x, y }
-      if (!moving && this.trail) this.trail.style.opacity = '0'
-      if (this.trail && moving && previous && this.trailLength > 0) {
+      if (this.trail) {
+        this.trail.style.transition = this.cursorStyle === 'neovim' ? 'none' : ''
+        if (!moving || this.cursorStyle === 'neovim') this.trail.style.opacity = '0'
+      }
+      if (this.trail && this.cursorStyle !== 'neovim' && moving && previous && this.trailLength > 0) {
         const dx = x - previous.x, dy = y - previous.y, distance = Math.hypot(dx, dy)
         if (distance > 2) {
           const length = this.trailLength
           const angle = Math.atan2(dy, dx)
+          const thickness = Math.max(7, cursorWidth)
           this.trail.style.width = length + 'px'
-          this.trail.style.height = cursorWidth + 'px'
+          this.trail.style.height = thickness + 'px'
           this.trail.style.left = (x - length) + 'px'
-          this.trail.style.top = (y + height / 2 - cursorWidth / 2) + 'px'
+          this.trail.style.top = (y + height / 2 - thickness / 2) + 'px'
           this.trail.style.transform = `rotate(${angle}rad)`
           this.trail.style.background = this.trailColor || '#819bcb'
-          this.trail.style.opacity = '.8'
+          this.trail.style.opacity = '1'
           clearTimeout(this.trailTimer)
           this.trailTimer = setTimeout(() => { if (this.trail) this.trail.style.opacity = '0' }, 220)
         }
@@ -643,12 +664,12 @@ export default {
 .document-fallback::placeholder { color: var(--muted); -webkit-text-fill-color: var(--muted); }
 .document-input :deep(.paragraph) { min-height: 1.85em; text-indent: 2em; transition: opacity .22s ease; }
 .document-input :deep(.paragraph.dimmed) { opacity: .23; }
-.cursor-glow { position: absolute; z-index: 3; top: 0; left: 0; width: 5px; height: 27px; border-radius: 2px; background: var(--cursor-color); box-shadow: 0 0 10px var(--cursor-color); opacity: 0; pointer-events: none; transition: transform .2s cubic-bezier(.22,.7,.25,1), width .18s ease, height .18s ease, opacity .12s ease; }
+.cursor-glow { position: absolute; z-index: 3; top: 0; left: 0; width: 6px; height: 27px; border-radius: 3px; background: var(--cursor-color); box-shadow: 0 0 10px var(--cursor-color); opacity: 0; pointer-events: none; transition: transform .2s cubic-bezier(.22,.7,.25,1), width .18s ease, height .18s ease, opacity .12s ease; }
 .cursor-glow.neovim { border-radius:3px; box-shadow:0 0 11px var(--cursor-color), inset 0 0 0 1px rgba(255,255,255,.35); }
-.cursor-trail { position:absolute; z-index:2; width:0; height:5px; border-radius:5px; opacity:0; pointer-events:none; transform-origin: right center; transition:opacity .22s ease; box-shadow:0 0 8px var(--cursor-color); }
+.cursor-trail { position:absolute; z-index:2; width:0; height:7px; border-radius:5px; opacity:0; pointer-events:none; transform-origin: right center; transition:opacity .22s ease; box-shadow:0 0 8px var(--cursor-color); }
 .cursor-jelly-layer { position:absolute; inset:0; z-index:3; overflow:visible; pointer-events:none; }
 .cursor-jelly-layer :deep(svg) { display:block; width:100%; height:100%; overflow:visible; opacity:0; pointer-events:none; }
-.cursor-jelly-layer :deep(path) { fill-opacity:.58; }
+.cursor-jelly-layer :deep(path) { fill-opacity:.54; }
 .selection-menu-shade { position:fixed; z-index:35; inset:0; background:transparent; }
 .selection-menu { position:fixed; z-index:36; width:min(292px, calc(100vw - 24px)); height:48px; padding:4px; display:flex; align-items:center; border:1px solid var(--line); border-radius:15px; background:var(--surface); color:var(--text); box-shadow:0 16px 42px var(--shadow); animation:selection-menu-in .18s cubic-bezier(.2,.78,.25,1) both; }
 .selection-menu.closing { animation:selection-menu-out .15s ease both; }
