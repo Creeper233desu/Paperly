@@ -170,7 +170,7 @@ test('an external text update restores the requested caret before refreshing foc
   assert.equal(editor.lastFocusOffset, 6)
 })
 
-test('the cursor trail stays solid and the Neovim block deforms then settles', () => {
+test('the beam cursor keeps a solid trail as wide as the caret', () => {
   const timers = []
   const nativeEditor = { style: {} }
   const range = { getClientRects: () => [{ left: 88, top: 20, height: 28 }], startContainer: { nodeType: 1 } }
@@ -181,15 +181,45 @@ test('the cursor trail stays solid and the Neovim block deforms then settles', (
   })
   const editor = {
     editor: nativeEditor, glow: { style: {} }, trail: { style: {} }, host: { getBoundingClientRect: () => ({ left: 0, top: 0 }) },
-    active: true, animatedCursor: true, cursorStyle: 'neovim', trailColor: '#123456', trailLength: 32,
-    previousPoint: { x: 10, y: 22 }, hideCaret: () => {}
+    active: true, animatedCursor: true, cursorStyle: 'beam', trailColor: '#123456', trailLength: 32,
+    previousPoint: { x: 10, y: 22 }, hideCaret: () => {}, hideJelly: () => {}
   }
   options.methods.positionCaret.call(editor, true)
-  assert.ok(parseFloat(editor.glow.style.width) > 19)
+  assert.equal(editor.glow.style.width, '5px')
   assert.equal(editor.trail.style.background, '#123456')
-  assert.equal(editor.trail.style.height, '19px')
-  timers[0]()
-  assert.equal(editor.glow.style.width, '19px')
+  assert.equal(editor.trail.style.height, '5px')
+})
+
+test('the Neovim cursor spring bends its four corners and settles after navigation', () => {
+  const frames = []
+  const makeSvgNode = () => ({ style: {}, attributes: {}, children: [], setAttribute(name, value) { this.attributes[name] = value }, appendChild(child) { this.children.push(child) } })
+  const options = optionsFor(1, {
+    document: { createElementNS: () => makeSvgNode() },
+    window: { matchMedia: () => ({ matches: false }) },
+    performance: { now: () => 0 },
+    requestAnimationFrame: callback => { frames.push(callback); return frames.length },
+    cancelAnimationFrame: () => {}
+  })
+  const editor = { jellyLayer: makeSvgNode(), trailColor: '#123456', trailLength: 64 }
+  for (const [name, method] of Object.entries(options.methods)) editor[name] = method.bind(editor)
+  editor.setJellyTarget(10, 10, 20, 30, false)
+  const staticPath = editor.jellyPath.attributes.d
+  editor.setJellyTarget(110, 10, 20, 30, true)
+  const firstFrame = frames.shift()
+  firstFrame(16)
+  const leftTravel = editor.jellyCorners[0].x - 10
+  const rightTravel = editor.jellyCorners[1].x - 30
+  assert.ok(rightTravel > leftTravel)
+  assert.notEqual(editor.jellyPath.attributes.d, staticPath)
+  const beforeRepeat = editor.jellyCorners[0].x
+  editor.setJellyTarget(110, 10, 20, 30, true)
+  assert.equal(editor.jellyCorners[0].x, beforeRepeat)
+  let time = 32, steps = 0
+  while (frames.length && steps++ < 80) frames.shift()(time += 16)
+  assert.ok(steps < 80)
+  assert.ok(Math.abs(editor.jellyCorners[0].x - 110) < .01)
+  editor.setJellyTarget(50, 50, 20, 30, false)
+  assert.equal(editor.jellyCorners[0].x, 50)
 })
 
 test('focus toggling repairs a stale empty view without replacing unsaved text', () => {

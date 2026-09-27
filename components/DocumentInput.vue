@@ -4,6 +4,7 @@
     <textarea v-if="!renderReady" class="document-fallback" :value="value" :maxlength="-1" :auto-height="true" :focus="fallbackFocus" :selection-start="selectionStart" :selection-end="selectionEnd" :style="{ fontFamily, fontSize: fontSize + 'px' }" placeholder="从这里开始写…" @input="onFallbackInput" @focus="onFallbackFocus" @blur="onFallbackBlur" @tap="reportFallbackCursor" @longpress="onFallbackLongPress" />
     <view class="cursor-glow"></view>
     <view class="cursor-trail"></view>
+    <view class="cursor-jelly-layer"></view>
     <view v-if="menu.open" class="selection-menu-shade" @tap="closeMenu"><view class="selection-menu" :class="{ closing: menu.closing }" :style="{ left: menu.left + 'px', top: menu.top + 'px' }" @tap.stop><view class="selection-action" @tap="runMenuAction('copy')">复制</view><view class="selection-action" @tap="runMenuAction('paste')">粘贴</view><view class="selection-action" @tap="runMenuAction('cut')">剪切</view><view class="selection-action" @tap="runMenuAction('all')">全选</view></view></view>
   </view>
 </template>
@@ -125,6 +126,7 @@ export default {
       this.editor = host?.querySelector('.document-input')
       this.glow = host?.querySelector('.cursor-glow')
       this.trail = host?.querySelector('.cursor-trail')
+      this.jellyLayer = host?.querySelector('.cursor-jelly-layer')
       if (!this.editor) {
         if ((this.attachAttempts || 0) < 5) { this.attachAttempts = (this.attachAttempts || 0) + 1; setTimeout(() => this.attachEditor(), 32) }
         return
@@ -276,6 +278,7 @@ export default {
       this.trailColor = /^#[0-9a-f]{6}$/i.test(payload?.color) ? payload.color : '#819bcb'
       this.trailLength = Math.min(96, Math.max(0, Number(payload?.length) || 0))
       if (this.glow) { this.glow.style.background = this.trailColor; this.glow.style.boxShadow = `0 0 10px ${this.trailColor}`; this.glow.classList.toggle('neovim', this.cursorStyle === 'neovim') }
+      if (this.jellyPath) { this.jellyPath.setAttribute('fill', this.trailColor); this.jellyPath.style.filter = `drop-shadow(0 0 7px ${this.trailColor})` }
       if (!this.trailLength && this.trail) this.trail.style.opacity = '0'
       if (!this.animatedCursor) this.hideCaret()
       else this.scheduleCaret()
@@ -463,11 +466,100 @@ export default {
       this.frame = requestAnimationFrame(() => { this.frame = 0; this.positionCaret(animate) })
     },
     hideCaret(keepPoint = false) {
-      clearTimeout(this.shapeTimer)
       if (this.glow) this.glow.style.opacity = '0'
       if (this.trail) this.trail.style.opacity = '0'
+      this.hideJelly(!keepPoint)
       if (this.editor) this.editor.style.caretColor = ''
       if (!keepPoint) this.previousPoint = null
+    },
+    ensureJelly() {
+      if (this.jellyPath) return true
+      if (!this.jellyLayer || !document.createElementNS) return false
+      const namespace = 'http://www.w3.org/2000/svg'
+      const svg = document.createElementNS(namespace, 'svg')
+      const path = document.createElementNS(namespace, 'path')
+      svg.setAttribute('class', 'cursor-jelly-svg')
+      svg.setAttribute('aria-hidden', 'true')
+      path.setAttribute('fill', this.trailColor || '#819bcb')
+      path.style.filter = `drop-shadow(0 0 7px ${this.trailColor || '#819bcb'})`
+      svg.appendChild(path)
+      this.jellyLayer.appendChild(svg)
+      this.jellySvg = svg
+      this.jellyPath = path
+      return true
+    },
+    jellyDestinations(target) {
+      const { x, y, width, height } = target
+      return [{ x, y }, { x: x + width, y }, { x: x + width, y: y + height }, { x, y: y + height }]
+    },
+    drawJelly() {
+      if (!this.jellyPath || !this.jellyCorners) return
+      const corners = this.jellyCorners
+      const points = corners.map(corner => `${corner.x.toFixed(2)} ${corner.y.toFixed(2)}`)
+      this.jellyPath.setAttribute('d', `M ${points[0]} L ${points[1]} L ${points[2]} L ${points[3]} Z`)
+    },
+    hideJelly(reset = true) {
+      if (this.jellyFrame) cancelAnimationFrame(this.jellyFrame)
+      this.jellyFrame = 0
+      if (this.jellySvg) this.jellySvg.style.opacity = '0'
+      if (reset) { this.jellyCorners = null; this.jellyTarget = null }
+    },
+    setJellyTarget(x, y, width, height, animate) {
+      if (!this.ensureJelly()) return false
+      if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) animate = false
+      const target = { x, y, width, height }
+      const destinations = this.jellyDestinations(target)
+      const previous = this.jellyTarget
+      this.jellyTarget = target
+      this.jellySvg.style.opacity = '1'
+      const dx = previous ? x - previous.x : 0
+      const dy = previous ? y - previous.y : 0
+      if (animate && this.jellyCorners && Math.hypot(dx, dy) < 1 && previous.width === width && previous.height === height) return true
+      if (!animate || !this.jellyCorners || Math.hypot(dx, dy) < 1) {
+        if (this.jellyFrame) cancelAnimationFrame(this.jellyFrame)
+        this.jellyFrame = 0
+        this.jellyCorners = destinations.map(point => ({ ...point, vx: 0, vy: 0, omega: 36 }))
+        this.drawJelly()
+        return true
+      }
+      const distance = Math.hypot(dx, dy)
+      const shortJump = Math.abs(dx) <= width * 2.1 && Math.abs(dy) < 2
+      const baseSpeed = shortJump ? 46 : 30
+      const lag = .35 + (this.trailLength || 0) / 96 * .55
+      this.jellyCorners.forEach((corner, index) => {
+        const horizontal = index === 0 || index === 3 ? -1 : 1
+        const vertical = index < 2 ? -1 : 1
+        const alignment = (horizontal * dx + vertical * dy) / (Math.SQRT2 * distance)
+        corner.omega = baseSpeed * (1 - lag * (1 - alignment) * .35)
+      })
+      if (!this.jellyFrame) {
+        this.jellyLastTime = performance.now()
+        this.jellyFrame = requestAnimationFrame(time => this.stepJelly(time))
+      }
+      return true
+    },
+    stepJelly(time) {
+      this.jellyFrame = 0
+      if (!this.jellyCorners || !this.jellyTarget || !this.jellySvg || this.jellySvg.style.opacity === '0') return
+      const dt = Math.min(.032, Math.max(.001, (time - (this.jellyLastTime || time - 16)) / 1000))
+      this.jellyLastTime = time
+      const destinations = this.jellyDestinations(this.jellyTarget)
+      let moving = false
+      this.jellyCorners.forEach((corner, index) => {
+        const target = destinations[index]
+        const omega = corner.omega || 36
+        for (const [axis, velocity] of [['x', 'vx'], ['y', 'vy']]) {
+          const error = corner[axis] - target[axis]
+          const b = corner[velocity] + omega * error
+          const decay = Math.exp(-omega * dt)
+          corner[axis] = target[axis] + (error + b * dt) * decay
+          corner[velocity] = (corner[velocity] - omega * b * dt) * decay
+          if (Math.abs(corner[axis] - target[axis]) > .25 || Math.abs(corner[velocity]) > 2) moving = true
+        }
+      })
+      if (!moving) this.jellyCorners.forEach((corner, index) => Object.assign(corner, destinations[index], { vx: 0, vy: 0 }))
+      this.drawJelly()
+      if (moving) this.jellyFrame = requestAnimationFrame(next => this.stepJelly(next))
     },
     positionCaret(animate = false) {
       if (!this.editor || !this.glow || !this.active || this.animatedCursor === false || this.composing) { this.hideCaret(); return }
@@ -508,30 +600,17 @@ export default {
       }
       const previous = this.previousPoint
       const moving = animate && !!previous
-      clearTimeout(this.shapeTimer)
-      this.glow.style.transition = moving ? '' : 'none'
-      if (moving && this.cursorStyle === 'neovim') {
-        const dx = x - previous.x, dy = y - previous.y
-        const horizontal = Math.min(cursorWidth * .9, Math.abs(dx) * .32)
-        const vertical = Math.min(height * .75, Math.abs(dy) * .24)
-        const stretchedWidth = Math.max(cursorWidth * .72, cursorWidth + horizontal - (vertical ? cursorWidth * .14 : 0))
-        const stretchedHeight = Math.max(height * .78, height + vertical - (horizontal ? height * .12 : 0))
-        this.glow.style.width = stretchedWidth + 'px'
-        this.glow.style.height = stretchedHeight + 'px'
-        this.glow.style.transform = `translate3d(${x - (dx < 0 ? horizontal : 0)}px, ${y - (dy < 0 ? vertical : 0)}px, 0)`
-        this.shapeTimer = setTimeout(() => {
-          if (!this.glow) return
-          this.glow.style.width = cursorWidth + 'px'
-          this.glow.style.height = height + 'px'
-          this.glow.style.transform = `translate3d(${x}px, ${y}px, 0)`
-        }, 85)
-      } else {
+      const jelly = this.cursorStyle === 'neovim' && this.setJellyTarget(x, y, cursorWidth, height, moving)
+      if (jelly) this.glow.style.opacity = '0'
+      else {
+        this.hideJelly()
+        this.glow.style.transition = moving ? '' : 'none'
         this.glow.style.width = cursorWidth + 'px'
         this.glow.style.height = height + 'px'
         this.glow.style.transform = `translate3d(${x}px, ${y}px, 0)`
+        this.glow.style.opacity = this.cursorStyle === 'neovim' ? '.5' : '1'
+        if (!moving) { clearTimeout(this.caretTransitionTimer); this.caretTransitionTimer = setTimeout(() => { if (this.glow) this.glow.style.transition = '' }, 24) }
       }
-      this.glow.style.opacity = this.cursorStyle === 'neovim' ? '.5' : '1'
-      if (!moving) { clearTimeout(this.caretTransitionTimer); this.caretTransitionTimer = setTimeout(() => { if (this.glow) this.glow.style.transition = '' }, 24) }
       this.previousPoint = { x, y }
       if (!moving && this.trail) this.trail.style.opacity = '0'
       if (this.trail && moving && previous && this.trailLength > 0) {
@@ -567,6 +646,9 @@ export default {
 .cursor-glow { position: absolute; z-index: 3; top: 0; left: 0; width: 5px; height: 27px; border-radius: 2px; background: var(--cursor-color); box-shadow: 0 0 10px var(--cursor-color); opacity: 0; pointer-events: none; transition: transform .2s cubic-bezier(.22,.7,.25,1), width .18s ease, height .18s ease, opacity .12s ease; }
 .cursor-glow.neovim { border-radius:3px; box-shadow:0 0 11px var(--cursor-color), inset 0 0 0 1px rgba(255,255,255,.35); }
 .cursor-trail { position:absolute; z-index:2; width:0; height:5px; border-radius:5px; opacity:0; pointer-events:none; transform-origin: right center; transition:opacity .22s ease; box-shadow:0 0 8px var(--cursor-color); }
+.cursor-jelly-layer { position:absolute; inset:0; z-index:3; overflow:visible; pointer-events:none; }
+.cursor-jelly-layer :deep(svg) { display:block; width:100%; height:100%; overflow:visible; opacity:0; pointer-events:none; }
+.cursor-jelly-layer :deep(path) { fill-opacity:.58; }
 .selection-menu-shade { position:fixed; z-index:35; inset:0; background:transparent; }
 .selection-menu { position:fixed; z-index:36; width:min(292px, calc(100vw - 24px)); height:48px; padding:4px; display:flex; align-items:center; border:1px solid var(--line); border-radius:15px; background:var(--surface); color:var(--text); box-shadow:0 16px 42px var(--shadow); animation:selection-menu-in .18s cubic-bezier(.2,.78,.25,1) both; }
 .selection-menu.closing { animation:selection-menu-out .15s ease both; }
