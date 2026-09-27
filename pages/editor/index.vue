@@ -19,6 +19,8 @@ import { loadPreferences, themeClass, updatePreferences } from '../../src/store/
 import { fontFamilyFor, loadSelectedFont } from '../../src/services/fonts'
 import DocumentInput from '../../components/DocumentInput.vue'
 import AiAssistant from '../../components/AiAssistant.vue'
+import { refreshAssistantProposals } from '../../src/store/assistant-sessions.js'
+import { rebaseBookEdit } from '../../src/services/assistant.js'
 import { prepareImageExport } from '../../src/store/image-export-draft'
 import { documentFromParagraphs, editDocument, findMatches, paragraphOffset, paragraphsFromDocument, replaceAt, replaceAll, stepMatchIndex, stripLegacyIndents } from '../../src/utils/text'
 
@@ -139,17 +141,23 @@ function onExportSelection(selection) {
 }
 function applyAiProposal(index) {
   const proposal = aiRef.value?.getProposal(index)
-  if (!proposal || proposal.error) return
+  if (!proposal || (proposal.error && !proposal.articleId)) return
   const target = getArticle(ids.value.book, proposal.chapterId, proposal.articleId)
   const latest = proposal.articleId === ids.value.article ? body.value : documentFromParagraphs(target?.paragraphs)
-  if (!target || latest !== proposal.before) return uni.showToast({ title: '正文已变化，请重新让助手生成修改', icon: 'none' })
+  if (!target) return uni.showToast({ title: '目标正文已不存在', icon: 'none' })
+  let ready = proposal
+  if (latest !== proposal.before || proposal.error) {
+    try { ready = rebaseBookEdit(book.value, proposal, ids.value.article, body.value) }
+    catch (error) { return uni.showToast({ title: `无法安全应用：${error.message}`, icon: 'none' }) }
+  }
   if (proposal.articleId === ids.value.article) {
     commitHistory()
-    body.value = proposal.after
-    focusAt(proposal.cursor, undefined, { preserveScroll: true })
+    body.value = ready.after
+    focusAt(ready.cursor, undefined, { preserveScroll: true })
     commitHistory(); saveNow()
-  } else saveArticle(ids.value.book, proposal.chapterId, proposal.articleId, { paragraphs: proposal.paragraphs, cursor: proposal.cursor })
+  } else saveArticle(ids.value.book, ready.chapterId, ready.articleId, { paragraphs: ready.paragraphs, cursor: ready.cursor })
   aiRef.value.removeProposal(index)
+  refreshAssistantProposals(book.value, ids.value.article, body.value)
   uni.showToast({ title: '已应用修改', icon: 'none' })
 }
 function showMatch(index) { if (!matches.value.length) return; matchIndex.value = (index + matches.value.length) % matches.value.length; const match = matches.value[matchIndex.value]; focusAt(paragraphOffset(paragraphs.value, match.paragraphIndex, match.end), undefined, { animate: true, reveal: true, preserveScroll: false }) }

@@ -1,6 +1,8 @@
 import { reactive } from 'vue'
-import { bookContext, DEFAULT_AI_PROMPT, planBookEdit } from '../services/assistant.js'
+import { bookContext, DEFAULT_AI_PROMPT, planBookEdit, rebaseBookEdit } from '../services/assistant.js'
+import { documentFromParagraphs } from '../utils/text.js'
 import { buildChatRequest, createChatAccumulator, streamChat } from '../services/ai-providers.js'
+import { createPacedReveal } from '../utils/paced-reveal.js'
 
 const KEY = 'paperwriter.assistantSessions.v1'
 export const assistantSessions = reactive({ sessions: [], activeByBook: {} })
@@ -60,6 +62,19 @@ export function deleteAssistantSession(bookId, sessionId) {
   return true
 }
 export function removeAssistantProposal(bookId, index) { const session = activeAssistantSession(bookId); session.proposals.splice(index, 1); persist() }
+export function refreshAssistantProposals(book, currentArticleId, currentDraft) {
+  const session = activeAssistantSession(book.id)
+  for (const proposal of session.proposals) {
+    if (!proposal.articleId) continue
+    const article = book.chapters.flatMap(chapter => chapter.articles).find(item => item.id === proposal.articleId)
+    if (!article) { proposal.error = '目标正文已不存在'; continue }
+    const latest = proposal.articleId === currentArticleId ? currentDraft : documentFromParagraphs(article.paragraphs)
+    if (latest === proposal.before) { delete proposal.error; continue }
+    try { Object.assign(proposal, rebaseBookEdit(book, proposal, currentArticleId, currentDraft)); delete proposal.error }
+    catch (error) { proposal.error = error.message }
+  }
+  persist()
+}
 
 export function compactConversation(session) {
   const completed = session.messages.filter(item => item.role === 'user' || (item.role === 'assistant' && !item.streaming))
@@ -88,22 +103,37 @@ export function sendAssistantMessage({ book, articleId, draft, selectedText = ''
   session.messages.push({ role: 'assistant', content: '', thinking: '', streaming: true, at: Date.now(), model: profile.model })
   const answer = session.messages[session.messages.length - 1]
   session.pending = true; session.updatedAt = Date.now(); persist()
-  const accumulator = createChatAccumulator(request.provider, current => {
+  const reveal = createPacedReveal(current => {
     answer.content = current.content
     answer.thinking = current.thinking
     saveSoon()
   })
+  const accumulator = createChatAccumulator(request.provider, current => reveal.push(current))
   const task = streamChat(request, event => accumulator.feed(event))
-    .then(() => {
+    .then(async () => {
       const result = accumulator.finish()
-      if (!result.content && !result.calls.length) answer.content = '模型没有返回文字内容。'
+      reveal.push({ content: result.content || (!result.calls.length ? '模型没有返回文字内容。' : ''), thinking: result.thinking })
+      await reveal.finish()
+      const workingBook = JSON.parse(JSON.stringify(bookSnapshot))
+      let workingDraft = draft
       for (const call of result.calls) {
-        try { session.proposals.push(planBookEdit(bookSnapshot, call, articleId, draft)) }
+        try {
+          const proposal = planBookEdit(workingBook, call, articleId, workingDraft)
+          session.proposals.push(proposal)
+          const article = workingBook.chapters.flatMap(chapter => chapter.articles).find(item => item.id === proposal.articleId)
+          if (article) article.paragraphs = proposal.paragraphs
+          if (proposal.articleId === articleId) workingDraft = proposal.after
+        }
         catch (error) { session.proposals.push({ title: '无法定位正文', description: call.name || '修改', error: error.message }) }
       }
       return result
     })
-    .catch(error => { answer.content += `${answer.content ? '\n' : ''}请求失败：${error.message || '请检查网络和模型配置'}`; throw error })
+    .catch(async error => {
+      const visible = accumulator.result.content
+      reveal.push({ content: `${visible}${visible ? '\n' : ''}请求失败：${error.message || '请检查网络和模型配置'}`, thinking: accumulator.result.thinking })
+      await reveal.finish()
+      throw error
+    })
     .finally(() => { answer.streaming = false; session.pending = false; session.updatedAt = Date.now(); requests.delete(session.id); persist() })
   requests.set(session.id, task)
   return task

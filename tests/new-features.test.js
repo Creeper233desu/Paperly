@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { editDocument } from '../src/utils/text.js'
-import { bookContext, planBookEdit } from '../src/services/assistant.js'
+import { bookContext, planBookEdit, rebaseBookEdit } from '../src/services/assistant.js'
 import { createTextPng, layoutImageText, paintTextImage } from '../src/services/image-export.js'
 
 test('corner quotes pair at the caret', () => {
@@ -17,6 +17,14 @@ test('AI changes are scoped and anchored, including insertion at the beginning',
   assert.equal(remove.after, '甲丙')
   assert.throws(() => planBookEdit(book, { name: 'delete_text', args: { article_id: 'outside', text: '乙' } }, 'a', '甲乙丙'), /不属于当前书本/)
   assert.throws(() => planBookEdit(book, { name: 'delete_text', args: { article_id: 'a', text: '甲' } }, 'a', '甲甲'), /不唯一/)
+})
+
+test('a second independent AI proposal safely rebases after the first is accepted', () => {
+  const first = planBookEdit(book, { name: 'insert_text', args: { article_id: 'a', after: '甲', text: '新' } }, 'a', '甲乙丙')
+  const second = planBookEdit(book, { name: 'delete_text', args: { article_id: 'a', text: '乙' } }, 'a', '甲乙丙')
+  const updated = { chapters: [{ id: 'ch', title: '第一章', articles: [{ id: 'a', title: '开篇', paragraphs: first.paragraphs }] }] }
+  assert.equal(rebaseBookEdit(updated, second, 'a', first.after).after, '甲新丙')
+  assert.throws(() => rebaseBookEdit(updated, second, 'a', '甲新乙乙丙'), /不唯一/)
 })
 
 test('custom AI prompt is included with current book context', () => {

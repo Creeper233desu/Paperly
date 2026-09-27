@@ -32,5 +32,13 @@ export function planBookEdit(book, call, currentArticleId, currentDraft) {
   if (target && (at < 0 || before.indexOf(target, at + 1) >= 0)) throw new Error('原文不存在或不唯一，无法安全定位')
   const position = call.name === 'insert_text' ? (target ? at + target.length : 0) : at
   const after = call.name === 'insert_text' ? before.slice(0, position) + inserted + before.slice(position) : before.slice(0, at) + before.slice(at + target.length)
-  return { chapterId: hit.chapter.id, articleId: hit.article.id, title: hit.article.title || '无题正文', before, after, cursor: position + inserted.length, description: call.name === 'insert_text' ? `增添 ${inserted.length} 字` : `删除 ${target.length} 字`, excerpt: call.name === 'insert_text' ? inserted : target, removed: call.name === 'delete_text' ? target : '', added: inserted, contextBefore: before.slice(Math.max(0, position - 44), position), contextAfter: before.slice(position + (call.name === 'delete_text' ? target.length : 0), position + (call.name === 'delete_text' ? target.length : 0) + 44), paragraphs: paragraphsFromDocument(after) }
+  return { chapterId: hit.chapter.id, articleId: hit.article.id, title: hit.article.title || '无题正文', before, after, cursor: position + inserted.length, description: call.name === 'insert_text' ? `增添 ${inserted.length} 字` : `删除 ${target.length} 字`, excerpt: call.name === 'insert_text' ? inserted : target, removed: call.name === 'delete_text' ? target : '', added: inserted, contextBefore: before.slice(Math.max(0, position - 44), position), contextAfter: before.slice(position + (call.name === 'delete_text' ? target.length : 0), position + (call.name === 'delete_text' ? target.length : 0) + 44), paragraphs: paragraphsFromDocument(after), operation: { name: call.name, args: { ...call.args } } }
+}
+
+export function rebaseBookEdit(book, proposal, currentArticleId, currentDraft) {
+  const operation = proposal.operation || (proposal.removed
+    ? { name: 'delete_text', args: { article_id: proposal.articleId, text: proposal.removed } }
+    : proposal.added ? { name: 'insert_text', args: { article_id: proposal.articleId, after: proposal.contextBefore || '', text: proposal.added } } : null)
+  if (!operation) throw new Error('旧提案缺少定位信息，请重新生成修改')
+  return planBookEdit(book, operation, currentArticleId, currentDraft)
 }
