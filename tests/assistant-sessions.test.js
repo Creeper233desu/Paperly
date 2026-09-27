@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { effect } from 'vue'
-import { activeAssistantSession, assistantSessions, compactConversation, sendAssistantMessage } from '../src/store/assistant-sessions.js'
+import { activeAssistantSession, assistantSessions, compactConversation, deleteAssistantSession, newAssistantSession, sendAssistantMessage } from '../src/store/assistant-sessions.js'
 
 test('a streaming reply remains in the book session while the editor is gone', async () => {
   const storage = new Map()
@@ -44,4 +44,19 @@ test('long chats retain a bounded summary and recent turns', () => {
   const first = session.summary
   compactConversation(session)
   assert.equal(session.summary, first)
+})
+
+test('deleting a session selects another conversation and keeps one empty conversation when last is removed', () => {
+  const storage = new Map()
+  globalThis.uni = { getStorageSync: key => storage.get(key), setStorageSync: (key, value) => storage.set(key, value) }
+  const first = newAssistantSession('delete-book')
+  const second = newAssistantSession('delete-book')
+  assert.equal(activeAssistantSession('delete-book').id, second.id)
+  assert.equal(deleteAssistantSession('delete-book', second.id), true)
+  assert.equal(activeAssistantSession('delete-book').id, first.id)
+  assert.equal(deleteAssistantSession('delete-book', first.id), true)
+  const empty = activeAssistantSession('delete-book')
+  assert.notEqual(empty.id, first.id)
+  assert.equal(assistantSessions.sessions.filter(item => item.bookId === 'delete-book').length, 1)
+  assert.ok(storage.get('paperwriter.assistantSessions.v1').includes(empty.id))
 })

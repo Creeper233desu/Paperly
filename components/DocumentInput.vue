@@ -508,7 +508,7 @@ export default {
       if (!this.jellyPath || !this.jellyCorners) return
       const corners = this.jellyCorners
       const points = corners.map(corner => `${corner.x.toFixed(2)} ${corner.y.toFixed(2)}`)
-      this.jellyPath.setAttribute('d', `M ${points[0]} L ${points[1]} L ${points[2]} L ${points[3]} Z`)
+      this.jellyPath.setAttribute('d', `M ${points.join(' L ')} Z`)
     },
     hideJelly(reset = true) {
       if (this.jellyFrame) cancelAnimationFrame(this.jellyFrame)
@@ -544,7 +544,9 @@ export default {
       if (!this.jellyCenter || !this.jellyTarget || !this.jellySvg || this.jellySvg.style.opacity === '0') return
       const dt = Math.min(.032, Math.max(.001, (time - (this.jellyLastTime || time - 16)) / 1000))
       this.jellyLastTime = time
-      const center = this.jellyCenter, target = this.jellyTarget, omega = 23
+      const center = this.jellyCenter, target = this.jellyTarget
+      const length = Math.max(0, Math.min(96, Number(this.trailLength) || 0))
+      const omega = 25 - length * .13
       for (const [axis, velocity] of [['x', 'vx'], ['y', 'vy']]) {
         const error = center[axis] - target[axis]
         const b = center[velocity] + omega * error
@@ -553,17 +555,22 @@ export default {
         center[velocity] = (center[velocity] - omega * b * dt) * decay
       }
       const lagX = target.x - center.x, lagY = target.y - center.y
-      const stretchX = Math.min(target.width * .42, Math.abs(lagX) * .24)
-      const stretchY = Math.min(target.height * .28, Math.abs(lagY) * .18)
-      const shearX = Math.max(-target.width * .22, Math.min(target.width * .22, lagY * .11))
-      const shearY = Math.max(-target.height * .16, Math.min(target.height * .16, lagX * .1))
-      this.jellyCorners = [
-        { x: center.x - stretchX + shearX, y: center.y - stretchY - shearY },
-        { x: center.x + target.width + stretchX + shearX, y: center.y - stretchY + shearY },
-        { x: center.x + target.width + stretchX - shearX, y: center.y + target.height + stretchY + shearY },
-        { x: center.x - stretchX - shearX, y: center.y + target.height + stretchY - shearY }
-      ]
-      const moving = Math.abs(lagX) > .2 || Math.abs(lagY) > .2 || Math.abs(center.vx) > 2 || Math.abs(center.vy) > 2
+      const lag = Math.hypot(lagX, lagY)
+      if (lag > length && lag) {
+        center.x = target.x - lagX * length / lag
+        center.y = target.y - lagY * length / lag
+      }
+      const from = { x: center.x, y: center.y, width: target.width, height: target.height }
+      // One connected silhouette joins the moving glyph and its destination.
+      // Keeping the whole glyph width avoids a thin, detached tail.
+      const points = [...this.jellyDestinations(from), ...this.jellyDestinations(target)]
+      points.sort((a, b) => a.x === b.x ? a.y - b.y : a.x - b.x)
+      const cross = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
+      const lower = [], upper = []
+      for (const point of points) { while (lower.length > 1 && cross(lower[lower.length - 2], lower[lower.length - 1], point) <= 0) lower.pop(); lower.push(point) }
+      for (let i = points.length - 1; i >= 0; i--) { const point = points[i]; while (upper.length > 1 && cross(upper[upper.length - 2], upper[upper.length - 1], point) <= 0) upper.pop(); upper.push(point) }
+      this.jellyCorners = lower.slice(0, -1).concat(upper.slice(0, -1))
+      const moving = length > 0 && (Math.abs(target.x - center.x) > .2 || Math.abs(target.y - center.y) > .2 || Math.abs(center.vx) > 2 || Math.abs(center.vy) > 2)
       if (!moving) { center.x = target.x; center.y = target.y; center.vx = 0; center.vy = 0; this.jellyCorners = this.jellyDestinations(target) }
       this.drawJelly()
       if (moving) this.jellyFrame = requestAnimationFrame(next => this.stepJelly(next))

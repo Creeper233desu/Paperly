@@ -45,6 +45,20 @@ export function selectAssistantSession(bookId, sessionId) {
   if (session) { assistantSessions.activeByBook[bookId] = sessionId; persist() }
   return session
 }
+export function deleteAssistantSession(bookId, sessionId) {
+  loadAssistantSessions()
+  const index = assistantSessions.sessions.findIndex(item => item.id === sessionId && item.bookId === bookId)
+  if (index < 0) return false
+  if (assistantSessions.sessions[index].pending || requests.has(sessionId)) throw new Error('请等待当前回复完成后再删除会话')
+  assistantSessions.sessions.splice(index, 1)
+  if (assistantSessions.activeByBook[bookId] === sessionId) {
+    const next = assistantSessions.sessions.filter(item => item.bookId === bookId).sort((a, b) => b.updatedAt - a.updatedAt)[0]
+    if (next) assistantSessions.activeByBook[bookId] = next.id
+    else { delete assistantSessions.activeByBook[bookId]; newAssistantSession(bookId) }
+  }
+  persist()
+  return true
+}
 export function removeAssistantProposal(bookId, index) { const session = activeAssistantSession(bookId); session.proposals.splice(index, 1); persist() }
 
 export function compactConversation(session) {
