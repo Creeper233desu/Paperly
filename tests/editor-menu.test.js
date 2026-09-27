@@ -80,6 +80,118 @@ test('saved focus mode highlights the remembered paragraph when the editor reope
   assert.deepEqual(dimmed, [true, false, true])
 })
 
+test('the native fallback hands off immediately when the paragraph editor is ready', () => {
+  const options = optionsFor(0)
+  const editor = { fallbackFocus: true, renderReady: false, pendingReady: false }
+  options.methods.onRenderReady.call(editor)
+  assert.equal(editor.renderReady, true)
+  assert.equal(editor.pendingReady, false)
+})
+
+test('renderjs binds the current editor host and asks the owner to replay its state', () => {
+  const calls = []
+  const nativeEditor = { isContentEditable: false, setAttribute: () => {}, addEventListener: () => {} }
+  const currentHost = {
+    id: 'paper-editor-current',
+    classList: { contains: name => name === 'document-input-host' },
+    querySelector: selector => selector === '.document-input' ? nativeEditor : { style: {} }
+  }
+  const options = optionsFor(1, {
+    document: { getElementById: id => id === currentHost.id ? currentHost : null, addEventListener: () => {}, removeEventListener: () => {} },
+    window: {}
+  })
+  const editor = {
+    hostId: currentHost.id,
+    $el: { classList: { contains: () => true } },
+    $ownerInstance: { callMethod: (name, id) => calls.push({ name, id }) }
+  }
+  for (const [name, method] of Object.entries(options.methods)) editor[name] = method.bind(editor)
+  editor.attachEditor()
+  assert.equal(editor.host, currentHost)
+  assert.equal(editor.editor, nativeEditor)
+  assert.deepEqual(calls, [{ name: 'onRenderMounted', id: currentHost.id }])
+  editor.attachEditor()
+  assert.equal(calls.length, 1)
+})
+
+test('a fresh render mount replays focus and cursor settings independently', () => {
+  const options = optionsFor(0)
+  const editor = { hostId: 'paper-editor-new', bridgeEpoch: 0, documentId: 'a', documentRevision: 0, value: '正文', focusMode: true, focusSnapshot: '正文', animatedCursor: true, cursorStyle: 'beam', cursorTrailColor: '#819bcb', cursorTrailLength: 32, renderReady: false }
+  const before = [options.computed.documentPayload.call(editor), options.computed.focusPayload.call(editor), options.computed.visualPayload.call(editor)]
+  options.methods.onRenderMounted.call(editor, 'paper-editor-old')
+  assert.equal(editor.bridgeEpoch, 0)
+  options.methods.onRenderMounted.call(editor, editor.hostId)
+  const after = [options.computed.documentPayload.call(editor), options.computed.focusPayload.call(editor), options.computed.visualPayload.call(editor)]
+  assert.equal(editor.bridgeEpoch, 1)
+  assert.ok(after.every((payload, index) => payload !== before[index]))
+  assert.equal(JSON.parse(after[1]).enabled, true)
+  assert.equal(JSON.parse(after[2]).enabled, true)
+})
+
+test('paragraph updates retain unchanged nodes and wait to refresh focus until selection is restored', () => {
+  function node() {
+    return {
+      className: '', children: [], parent: null, _text: '',
+      get classList() { return { contains: name => this.className === name } },
+      get textContent() { return this._text || this.children.map(child => child.textContent).join('') },
+      set textContent(value) { this._text = value; this.children = [] },
+      get firstChild() { return this.children[0] || null },
+      appendChild(child) { child.parent = this; this.children.push(child) },
+      removeChild(child) { this.children.splice(this.children.indexOf(child), 1) },
+      remove() { this.parent?.removeChild(this) },
+      querySelector: tag => tag === 'br' ? this.children.find(child => child.tag === 'br') : null
+    }
+  }
+  const options = optionsFor(1, { document: { createElement: tag => Object.assign(node(), { tag }) } })
+  const editor = { editor: node(), updateFocus: () => { throw new Error('focus updated before the new selection') } }
+  editor.blocks = options.methods.blocks.bind(editor)
+  options.methods.renderValue.call(editor, '第一段\n第二段')
+  const first = editor.editor.children[0]
+  options.methods.renderValue.call(editor, '第一段\n改写段')
+  assert.equal(editor.editor.children[0], first)
+  assert.equal(editor.editor.children[1].textContent, '改写段')
+  assert.equal(editor.editor.children.length, 2)
+})
+
+test('an external text update restores the requested caret before refreshing focus', () => {
+  const steps = []
+  const nativeEditor = {}
+  let visible = '第一段\n第二段'
+  const options = optionsFor(1, { document: { activeElement: nativeEditor, scrollingElement: { scrollTop: 0 } }, requestAnimationFrame: () => 1 })
+  const editor = {
+    editor: nativeEditor, documentId: 'a', documentRevision: 0, localValue: visible, ready: true,
+    pendingRequest: { documentId: 'a', start: 6, value: '第一段\n改写段' },
+    blocks: () => [{}, {}], readValue: () => visible, getOffsets: () => ({ start: 0, end: 0 }),
+    renderValue: value => { steps.push('render'); visible = value },
+    setSelection: () => steps.push('selection'), updateFocus: () => steps.push('focus'), scheduleCaret: () => {}
+  }
+  options.methods.onValueChange.call(editor, JSON.stringify({ id: 'a', revision: 0, value: '第一段\n改写段' }))
+  assert.deepEqual(steps, ['render', 'selection', 'focus'])
+  assert.equal(editor.lastFocusOffset, 6)
+})
+
+test('the cursor trail stays solid and the Neovim block deforms then settles', () => {
+  const timers = []
+  const nativeEditor = { style: {} }
+  const range = { getClientRects: () => [{ left: 88, top: 20, height: 28 }], startContainer: { nodeType: 1 } }
+  const options = optionsFor(1, {
+    document: { activeElement: nativeEditor },
+    window: { getSelection: () => ({ rangeCount: 1, isCollapsed: true, getRangeAt: () => range }), getComputedStyle: () => ({ fontSize: '20px' }) },
+    setTimeout: callback => { timers.push(callback); return timers.length }, clearTimeout: () => {}
+  })
+  const editor = {
+    editor: nativeEditor, glow: { style: {} }, trail: { style: {} }, host: { getBoundingClientRect: () => ({ left: 0, top: 0 }) },
+    active: true, animatedCursor: true, cursorStyle: 'neovim', trailColor: '#123456', trailLength: 32,
+    previousPoint: { x: 10, y: 22 }, hideCaret: () => {}
+  }
+  options.methods.positionCaret.call(editor, true)
+  assert.ok(parseFloat(editor.glow.style.width) > 19)
+  assert.equal(editor.trail.style.background, '#123456')
+  assert.equal(editor.trail.style.height, '19px')
+  timers[0]()
+  assert.equal(editor.glow.style.width, '19px')
+})
+
 test('focus toggling repairs a stale empty view without replacing unsaved text', () => {
   const scrollRoot = { scrollTop: 480 }
   const options = optionsFor(1, { document: { activeElement: null, scrollingElement: scrollRoot }, requestAnimationFrame: callback => callback() })

@@ -1,5 +1,5 @@
 <template>
-  <view class="document-input-host" :prop="documentPayload" :change:prop="editorRender.onValueChange" :focus-prop="focusPayload" :change:focus-prop="editorRender.onFocusMode" :cursor-prop="cursorPayload" :change:cursor-prop="editorRender.onRequest" :active-prop="renderReady" :change:active-prop="editorRender.onActiveChange" :visual-prop="visualPayload" :change:visual-prop="editorRender.onVisualSettings" :style="{ '--cursor-color': cursorTrailColor }">
+  <view :id="hostId" class="document-input-host" :host-prop="hostId" :change:host-prop="editorRender.onHostChange" :prop="documentPayload" :change:prop="editorRender.onValueChange" :focus-prop="focusPayload" :change:focus-prop="editorRender.onFocusMode" :cursor-prop="cursorPayload" :change:cursor-prop="editorRender.onRequest" :active-prop="renderReady" :change:active-prop="editorRender.onActiveChange" :visual-prop="visualPayload" :change:visual-prop="editorRender.onVisualSettings" :style="{ '--cursor-color': cursorTrailColor }">
     <view v-show="renderReady" class="document-input" contenteditable="true" :style="{ fontFamily, fontSize: fontSize + 'px' }"></view>
     <textarea v-if="!renderReady" class="document-fallback" :value="value" :maxlength="-1" :auto-height="true" :focus="fallbackFocus" :selection-start="selectionStart" :selection-end="selectionEnd" :style="{ fontFamily, fontSize: fontSize + 'px' }" placeholder="从这里开始写…" @input="onFallbackInput" @focus="onFallbackFocus" @blur="onFallbackBlur" @tap="reportFallbackCursor" @longpress="onFallbackLongPress" />
     <view class="cursor-glow"></view>
@@ -24,12 +24,12 @@ export default {
     cursorRequest: { type: Object, default: () => ({ seq: 0, start: 0, end: 0 }) }
   },
   emits: ['input', 'focus', 'blur', 'cursor'],
-  data() { return { focusSnapshot: this.value, renderReady: false, fallbackFocus: false, selectionStart: -1, selectionEnd: -1, menu: { open: false, left: 0, top: 0, start: 0, end: 0 }, menuRequest: null, menuSeq: 0 } },
+  data() { return { hostId: `paper-editor-${Date.now()}-${Math.random().toString(36).slice(2)}`, bridgeEpoch: 0, focusSnapshot: this.value, renderReady: false, fallbackFocus: false, selectionStart: -1, selectionEnd: -1, menu: { open: false, left: 0, top: 0, start: 0, end: 0 }, menuRequest: null, menuSeq: 0 } },
   computed: {
-    documentPayload() { return JSON.stringify({ id: this.documentId, revision: this.documentRevision, value: this.value }) },
+    documentPayload() { return JSON.stringify({ id: this.documentId, revision: this.documentRevision, value: this.value, epoch: this.bridgeEpoch }) },
     cursorPayload() { return JSON.stringify(this.menuRequest || this.cursorRequest) },
-    focusPayload() { return JSON.stringify({ enabled: this.focusMode, ready: this.renderReady, documentId: this.documentId, revision: this.documentRevision, value: this.focusSnapshot }) },
-    visualPayload() { return JSON.stringify({ enabled: this.animatedCursor, style: this.cursorStyle, color: this.cursorTrailColor, length: this.cursorTrailLength, ready: this.renderReady }) }
+    focusPayload() { return JSON.stringify({ enabled: this.focusMode, ready: this.renderReady, documentId: this.documentId, revision: this.documentRevision, value: this.focusSnapshot, epoch: this.bridgeEpoch }) },
+    visualPayload() { return JSON.stringify({ enabled: this.animatedCursor, style: this.cursorStyle, color: this.cursorTrailColor, length: this.cursorTrailLength, ready: this.renderReady, epoch: this.bridgeEpoch }) }
   },
   watch: {
     value(next) { if (!this.renderReady) this.focusSnapshot = next },
@@ -45,14 +45,15 @@ export default {
     }
   },
   methods: {
-    onRenderReady() { if (this.fallbackFocus) this.pendingReady = true; else this.renderReady = true },
+    onRenderMounted(id) { if (id === this.hostId) this.bridgeEpoch += 1 },
+    onRenderReady() { this.renderReady = true },
     onChange(detail) { this.$emit('input', { detail }) },
     onCursor(position) { this.$emit('cursor', position) },
     onFocus() { this.$emit('focus') },
     onBlur() { this.$emit('blur') },
     onFallbackInput(event) { this.$emit('input', { detail: { ...event.detail, documentId: this.documentId, userEdit: true } }); if (Number.isFinite(event.detail?.cursor)) this.$emit('cursor', event.detail.cursor) },
     onFallbackFocus(event) { this.fallbackFocus = true; this.$emit('focus', event); this.reportFallbackCursor() },
-    onFallbackBlur(event) { this.fallbackFocus = false; if (Number.isFinite(event.detail?.cursor)) this.$emit('cursor', event.detail.cursor); this.$emit('blur', event); if (this.pendingReady) this.renderReady = true },
+    onFallbackBlur(event) { this.fallbackFocus = false; if (Number.isFinite(event.detail?.cursor)) this.$emit('cursor', event.detail.cursor); this.$emit('blur', event) },
     onFallbackLongPress(event) {
       const touch = event.touches?.[0] || event.changedTouches?.[0]
       const x = touch?.clientX ?? 150, y = touch?.clientY ?? 100
@@ -105,16 +106,32 @@ export default {
 <script module="editorRender" lang="renderjs">
 export default {
   mounted() {
-    this.$nextTick(() => {
-      const host = this.$el?.querySelector ? this.$el : document.querySelector('.document-input-host')
+    this.$nextTick(() => this.attachEditor())
+  },
+  methods: {
+    onHostChange(id) {
+      this.hostId = id
+      this.$nextTick(() => this.attachEditor())
+    },
+    attachEditor() {
+      const root = this.$el
+      const host = this.hostId ? document.getElementById(this.hostId) : (root?.classList?.contains('document-input-host') ? root : root?.querySelector?.('.document-input-host'))
+      if (!host || !host.classList?.contains('document-input-host')) {
+        if ((this.attachAttempts || 0) < 5) { this.attachAttempts = (this.attachAttempts || 0) + 1; setTimeout(() => this.attachEditor(), 32) }
+        return
+      }
+      if (this.editor && this.host === host) return
       this.host = host
       this.editor = host?.querySelector('.document-input')
       this.glow = host?.querySelector('.cursor-glow')
       this.trail = host?.querySelector('.cursor-trail')
-      if (!this.editor) return
+      if (!this.editor) {
+        if ((this.attachAttempts || 0) < 5) { this.attachAttempts = (this.attachAttempts || 0) + 1; setTimeout(() => this.attachEditor(), 32) }
+        return
+      }
+      this.attachAttempts = 0
       this.editor.setAttribute('contenteditable', 'true')
       this.editor.contentEditable = 'true'
-      if (!this.editor.isContentEditable) return
       this.editor.setAttribute('spellcheck', 'false')
       this.editor.setAttribute('role', 'textbox')
       this.editor.setAttribute('aria-multiline', 'true')
@@ -151,23 +168,28 @@ export default {
       if (this.pendingVisual !== undefined) this.onVisualSettings(this.pendingVisual)
       if (this.pendingValue !== undefined) this.onValueChange(this.pendingValue)
       if (this.pendingRequest) this.onRequest(this.pendingRequest)
-    })
-  },
-  methods: {
+      this.$ownerInstance.callMethod('onRenderMounted', this.hostId || host.id)
+    },
     blocks() { return Array.from(this.editor.children).filter(node => node.classList.contains('paragraph')) },
     readValue() { return this.blocks().map(node => node.textContent).join('\n') },
     renderValue(value) {
-      const fragment = document.createDocumentFragment()
-      String(value).replace(/\r\n?/g, '\n').split('\n').forEach(text => {
-        const block = document.createElement('div')
-        block.className = 'paragraph'
-        if (text) block.textContent = text
-        else block.appendChild(document.createElement('br'))
-        fragment.appendChild(block)
+      const paragraphs = String(value).replace(/\r\n?/g, '\n').split('\n')
+      const blocks = this.blocks()
+      paragraphs.forEach((text, index) => {
+        let block = blocks[index]
+        if (!block) {
+          block = document.createElement('div')
+          block.className = 'paragraph'
+          this.editor.appendChild(block)
+        }
+        if (block.textContent !== text || (!text && !block.querySelector('br'))) {
+          while (block.firstChild) block.removeChild(block.firstChild)
+          if (text) block.textContent = text
+          else block.appendChild(document.createElement('br'))
+        }
       })
-      while (this.editor.firstChild) this.editor.removeChild(this.editor.firstChild)
-      this.editor.appendChild(fragment)
-      this.updateFocus()
+      blocks.slice(paragraphs.length).forEach(block => block.remove())
+      Array.from(this.editor.children).filter(node => !node.classList.contains('paragraph')).forEach(node => node.remove())
     },
     onValueChange(payload) {
       let packet = payload
@@ -195,13 +217,11 @@ export default {
         this.lastPropValue = value
         if (value !== this.localValue) {
           if (!this.composing && this.readValue() !== this.localValue) this.renderValue(this.localValue)
-          this.updateFocus()
           return
         }
         this.awaitingEcho = false
       } else if (!changedDocument && this.awaitingEcho && value === this.lastPropValue) {
         if (!this.composing && this.readValue() !== this.localValue) this.renderValue(this.localValue)
-        this.updateFocus()
         return
       } else {
         this.localValue = value
@@ -212,7 +232,9 @@ export default {
       if (!this.composing && (!this.blocks().length || this.readValue() !== value)) {
         const scrollRoot = document.scrollingElement || document.documentElement
         const scrollTop = scrollRoot?.scrollTop || 0
-        const offset = changedDocument ? 0 : this.getOffsets()?.start ?? this.lastFocusOffset ?? 0
+        const requestedOffset = this.pendingRequest?.documentId === id && this.pendingRequest?.value === value ? this.pendingRequest.start : null
+        const offset = changedDocument ? (requestedOffset ?? 0) : (requestedOffset ?? this.getOffsets()?.start ?? this.lastFocusOffset ?? 0)
+        this.lastFocusOffset = offset
         this.renderValue(value)
         if (!changedDocument && document.activeElement === this.editor) this.setSelection(offset, offset)
         if (scrollRoot) { scrollRoot.scrollTop = scrollTop; requestAnimationFrame(() => { scrollRoot.scrollTop = scrollTop }) }
@@ -220,7 +242,7 @@ export default {
       this.updateFocus()
       this.scheduleCaret()
       if (changedDocument && this.pendingRequest?.documentId === id) this.onRequest(this.pendingRequest)
-      if (!this.ready && this.blocks().length && this.readValue() === value && this.editor.isContentEditable) {
+      if (!this.ready && this.blocks().length && this.readValue() === value) {
         this.ready = true
         this.$ownerInstance.callMethod('onRenderReady')
       }
@@ -264,7 +286,7 @@ export default {
       }
       this.pendingRequest = request
       if (!this.editor || !this.active || !request || !request.seq || (request.seq === this.appliedSeq && request.source === this.appliedSource) || (request.documentId && request.documentId !== this.documentId)) return
-      if (Number.isFinite(request.start)) { this.lastFocusOffset = request.start; this.updateFocus() }
+      if (Number.isFinite(request.start)) this.lastFocusOffset = request.start
       this.appliedSeq = request.seq
       this.appliedSource = request.source
       this.$nextTick(() => {
@@ -441,6 +463,7 @@ export default {
       this.frame = requestAnimationFrame(() => { this.frame = 0; this.positionCaret(animate) })
     },
     hideCaret(keepPoint = false) {
+      clearTimeout(this.shapeTimer)
       if (this.glow) this.glow.style.opacity = '0'
       if (this.trail) this.trail.style.opacity = '0'
       if (this.editor) this.editor.style.caretColor = ''
@@ -483,14 +506,32 @@ export default {
         }
         cursorWidth = Math.max(size * .5, Math.min(size * 1.2, cursorWidth))
       }
-      const moving = animate && !!this.previousPoint
+      const previous = this.previousPoint
+      const moving = animate && !!previous
+      clearTimeout(this.shapeTimer)
       this.glow.style.transition = moving ? '' : 'none'
-      this.glow.style.width = cursorWidth + 'px'
-      this.glow.style.height = height + 'px'
-      this.glow.style.transform = `translate3d(${x}px, ${y}px, 0)`
+      if (moving && this.cursorStyle === 'neovim') {
+        const dx = x - previous.x, dy = y - previous.y
+        const horizontal = Math.min(cursorWidth * .9, Math.abs(dx) * .32)
+        const vertical = Math.min(height * .75, Math.abs(dy) * .24)
+        const stretchedWidth = Math.max(cursorWidth * .72, cursorWidth + horizontal - (vertical ? cursorWidth * .14 : 0))
+        const stretchedHeight = Math.max(height * .78, height + vertical - (horizontal ? height * .12 : 0))
+        this.glow.style.width = stretchedWidth + 'px'
+        this.glow.style.height = stretchedHeight + 'px'
+        this.glow.style.transform = `translate3d(${x - (dx < 0 ? horizontal : 0)}px, ${y - (dy < 0 ? vertical : 0)}px, 0)`
+        this.shapeTimer = setTimeout(() => {
+          if (!this.glow) return
+          this.glow.style.width = cursorWidth + 'px'
+          this.glow.style.height = height + 'px'
+          this.glow.style.transform = `translate3d(${x}px, ${y}px, 0)`
+        }, 85)
+      } else {
+        this.glow.style.width = cursorWidth + 'px'
+        this.glow.style.height = height + 'px'
+        this.glow.style.transform = `translate3d(${x}px, ${y}px, 0)`
+      }
       this.glow.style.opacity = this.cursorStyle === 'neovim' ? '.5' : '1'
       if (!moving) { clearTimeout(this.caretTransitionTimer); this.caretTransitionTimer = setTimeout(() => { if (this.glow) this.glow.style.transition = '' }, 24) }
-      const previous = this.previousPoint
       this.previousPoint = { x, y }
       if (!moving && this.trail) this.trail.style.opacity = '0'
       if (this.trail && moving && previous && this.trailLength > 0) {
@@ -503,8 +544,8 @@ export default {
           this.trail.style.left = (x - length) + 'px'
           this.trail.style.top = (y + height / 2 - cursorWidth / 2) + 'px'
           this.trail.style.transform = `rotate(${angle}rad)`
-          this.trail.style.background = `linear-gradient(90deg, transparent, ${this.trailColor || '#819bcb'})`
-          this.trail.style.opacity = '.85'
+          this.trail.style.background = this.trailColor || '#819bcb'
+          this.trail.style.opacity = '.8'
           clearTimeout(this.trailTimer)
           this.trailTimer = setTimeout(() => { if (this.trail) this.trail.style.opacity = '0' }, 220)
         }
@@ -523,7 +564,7 @@ export default {
 .document-fallback::placeholder { color: var(--muted); -webkit-text-fill-color: var(--muted); }
 .document-input :deep(.paragraph) { min-height: 1.85em; text-indent: 2em; transition: opacity .22s ease; }
 .document-input :deep(.paragraph.dimmed) { opacity: .23; }
-.cursor-glow { position: absolute; z-index: 3; top: 0; left: 0; width: 5px; height: 27px; border-radius: 2px; background: var(--cursor-color); box-shadow: 0 0 10px var(--cursor-color); opacity: 0; pointer-events: none; transition: transform .2s cubic-bezier(.22,.7,.25,1), width .18s ease, opacity .12s ease; }
+.cursor-glow { position: absolute; z-index: 3; top: 0; left: 0; width: 5px; height: 27px; border-radius: 2px; background: var(--cursor-color); box-shadow: 0 0 10px var(--cursor-color); opacity: 0; pointer-events: none; transition: transform .2s cubic-bezier(.22,.7,.25,1), width .18s ease, height .18s ease, opacity .12s ease; }
 .cursor-glow.neovim { border-radius:3px; box-shadow:0 0 11px var(--cursor-color), inset 0 0 0 1px rgba(255,255,255,.35); }
 .cursor-trail { position:absolute; z-index:2; width:0; height:5px; border-radius:5px; opacity:0; pointer-events:none; transform-origin: right center; transition:opacity .22s ease; box-shadow:0 0 8px var(--cursor-color); }
 .selection-menu-shade { position:fixed; z-index:35; inset:0; background:transparent; }
