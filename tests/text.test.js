@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { documentFromParagraphs, editDocument, editParagraph, findMatches, paragraphOffset, paragraphsFromDocument, replaceAt, replaceAll, stripLegacyIndents } from '../src/utils/text.js'
+import { documentFromParagraphs, editDocument, editParagraph, findMatches, paragraphOffset, paragraphsFromDocument, replaceAt, replaceAll, stepMatchIndex, stripLegacyIndents } from '../src/utils/text.js'
 
 test('continuous document lets backspace merge paragraphs', () => {
   const before = documentFromParagraphs(['第一段', '第二段'])
@@ -38,4 +38,8 @@ test('search and replacement preserve surrounding text', () => {
   ])
   assert.deepEqual(replaceAt(paragraphs, { paragraphIndex: 0, start: 2, end: 4 }, '山川'), ['天地山川', '天地'])
   assert.deepEqual(replaceAll(paragraphs, '天地', '山川'), { paragraphs: ['山川山川', '山川'], count: 3 })
+  assert.equal(stepMatchIndex(-1, 3, 1), 0)
+  assert.equal(stepMatchIndex(-1, 3, -1), 2)
+  assert.equal(stepMatchIndex(0, 3, -1), 2)
+  assert.equal(stepMatchIndex(2, 3, 1), 0)
 })

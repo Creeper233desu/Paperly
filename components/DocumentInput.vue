@@ -1,9 +1,9 @@
 <template>
-  <view class="document-input-host" :prop="value" :change:prop="editorRender.onValueChange" :focus-prop="focusPayload" :change:focus-prop="editorRender.onFocusMode" :cursor-prop="cursorPayload" :change:cursor-prop="editorRender.onRequest" :active-prop="renderReady" :change:active-prop="editorRender.onActiveChange" :visual-prop="visualPayload" :change:visual-prop="editorRender.onVisualSettings" :style="{ '--cursor-color': cursorTrailColor }">
-    <view v-show="renderReady" class="document-input" contenteditable="true" :style="{ fontFamily, fontSize: fontSize + 'px' }"><view v-for="(paragraph, index) in initialParagraphs" :key="index" class="paragraph">{{ paragraph }}<br v-if="!paragraph" /></view></view>
+  <view class="document-input-host" :prop="documentPayload" :change:prop="editorRender.onValueChange" :focus-prop="focusPayload" :change:focus-prop="editorRender.onFocusMode" :cursor-prop="cursorPayload" :change:cursor-prop="editorRender.onRequest" :active-prop="renderReady" :change:active-prop="editorRender.onActiveChange" :visual-prop="visualPayload" :change:visual-prop="editorRender.onVisualSettings" :style="{ '--cursor-color': cursorTrailColor }">
+    <view v-show="renderReady" class="document-input" contenteditable="true" :style="{ fontFamily, fontSize: fontSize + 'px' }"></view>
     <textarea v-if="!renderReady" class="document-fallback" :value="value" :maxlength="-1" :auto-height="true" :focus="fallbackFocus" :selection-start="selectionStart" :selection-end="selectionEnd" :style="{ fontFamily, fontSize: fontSize + 'px' }" placeholder="从这里开始写…" @input="onFallbackInput" @focus="onFallbackFocus" @blur="onFallbackBlur" @tap="reportFallbackCursor" @longpress="onFallbackLongPress" />
-    <view v-show="renderReady && animatedCursor" class="cursor-glow"></view>
-    <view v-show="renderReady && animatedCursor" class="cursor-trail"></view>
+    <view class="cursor-glow"></view>
+    <view class="cursor-trail"></view>
     <view v-if="menu.open" class="selection-menu-shade" @tap="closeMenu"><view class="selection-menu" :class="{ closing: menu.closing }" :style="{ left: menu.left + 'px', top: menu.top + 'px' }" @tap.stop><view class="selection-action" @tap="runMenuAction('copy')">复制</view><view class="selection-action" @tap="runMenuAction('paste')">粘贴</view><view class="selection-action" @tap="runMenuAction('cut')">剪切</view><view class="selection-action" @tap="runMenuAction('all')">全选</view></view></view>
   </view>
 </template>
@@ -12,23 +12,30 @@
 export default {
   props: {
     value: { type: String, default: '' },
+    documentId: { type: String, default: '' },
+    documentRevision: { type: Number, default: 0 },
     fontFamily: { type: String, default: '' },
     fontSize: { type: Number, default: 18 },
     focusMode: Boolean,
     animatedCursor: { type: Boolean, default: true },
+    cursorStyle: { type: String, default: 'beam' },
     cursorTrailColor: { type: String, default: '#819bcb' },
     cursorTrailLength: { type: Number, default: 32 },
     cursorRequest: { type: Object, default: () => ({ seq: 0, start: 0, end: 0 }) }
   },
   emits: ['input', 'focus', 'blur', 'cursor'],
-  data() { return { initialParagraphs: this.value.replace(/\r\n?/g, '\n').split('\n'), renderReady: false, fallbackFocus: false, selectionStart: -1, selectionEnd: -1, menu: { open: false, left: 0, top: 0, start: 0, end: 0 }, menuRequest: null, menuSeq: 0 } },
+  data() { return { focusSnapshot: this.value, renderReady: false, fallbackFocus: false, selectionStart: -1, selectionEnd: -1, menu: { open: false, left: 0, top: 0, start: 0, end: 0 }, menuRequest: null, menuSeq: 0 } },
   computed: {
+    documentPayload() { return JSON.stringify({ id: this.documentId, revision: this.documentRevision, value: this.value }) },
     cursorPayload() { return JSON.stringify(this.menuRequest || this.cursorRequest) },
-    focusPayload() { return JSON.stringify({ enabled: this.focusMode, ready: this.renderReady }) },
-    visualPayload() { return JSON.stringify({ enabled: this.animatedCursor, color: this.cursorTrailColor, length: this.cursorTrailLength }) }
+    focusPayload() { return JSON.stringify({ enabled: this.focusMode, ready: this.renderReady, documentId: this.documentId, revision: this.documentRevision, value: this.focusSnapshot }) },
+    visualPayload() { return JSON.stringify({ enabled: this.animatedCursor, style: this.cursorStyle, color: this.cursorTrailColor, length: this.cursorTrailLength, ready: this.renderReady }) }
   },
   watch: {
-    value(next) { if (!this.renderReady) this.initialParagraphs = next.replace(/\r\n?/g, '\n').split('\n') },
+    value(next) { if (!this.renderReady) this.focusSnapshot = next },
+    documentId() { this.focusSnapshot = this.value },
+    focusMode() { this.focusSnapshot = this.value },
+    renderReady() { this.focusSnapshot = this.value },
     cursorRequest(request) {
       this.menuRequest = null
       if (this.renderReady || !request?.seq) return
@@ -43,7 +50,7 @@ export default {
     onCursor(position) { this.$emit('cursor', position) },
     onFocus() { this.$emit('focus') },
     onBlur() { this.$emit('blur') },
-    onFallbackInput(event) { this.$emit('input', event); if (Number.isFinite(event.detail?.cursor)) this.$emit('cursor', event.detail.cursor) },
+    onFallbackInput(event) { this.$emit('input', { detail: { ...event.detail, documentId: this.documentId, userEdit: true } }); if (Number.isFinite(event.detail?.cursor)) this.$emit('cursor', event.detail.cursor) },
     onFallbackFocus(event) { this.fallbackFocus = true; this.$emit('focus', event); this.reportFallbackCursor() },
     onFallbackBlur(event) { this.fallbackFocus = false; if (Number.isFinite(event.detail?.cursor)) this.$emit('cursor', event.detail.cursor); this.$emit('blur', event); if (this.pendingReady) this.renderReady = true },
     onFallbackLongPress(event) {
@@ -65,14 +72,14 @@ export default {
     closeMenu() { if (!this.menu.open || this.menu.closing) return; this.menu.closing = true; this.menuTimer = setTimeout(() => { this.menu.open = false; this.menu.closing = false }, 150) },
     requestMenuSelection(start, end, value = this.value) {
       this.menuSeq = Math.max(this.menuSeq, this.cursorRequest.seq) + 1
-      this.menuRequest = { seq: this.menuSeq, start, end, value }
+      this.menuRequest = { seq: this.menuSeq, source: 'menu', documentId: this.documentId, start, end, value }
       if (!this.renderReady) { this.fallbackFocus = false; this.selectionStart = -1; this.selectionEnd = -1; this.$nextTick(() => { this.selectionStart = start; this.selectionEnd = end; this.fallbackFocus = true }) }
     },
     replaceMenuSelection(inserted, start = this.menu.start, end = this.menu.end) {
       inserted = String(inserted).replace(/\r\n?/g, '\n')
       const value = this.value.slice(0, start) + inserted + this.value.slice(end)
       const cursor = start + inserted.length
-      this.$emit('input', { detail: { value, cursor, source: 'menu' } })
+      this.$emit('input', { detail: { value, cursor, source: 'menu', documentId: this.documentId } })
       this.$emit('cursor', cursor)
       this.requestMenuSelection(cursor, cursor, value)
     },
@@ -113,11 +120,11 @@ export default {
       this.editor.setAttribute('aria-multiline', 'true')
       this.editor.addEventListener('beforeinput', event => { this.editingUntil = Date.now() + 160; this.navigationPending = false; this.beforeInput(event) })
       this.editor.addEventListener('paste', event => this.pasteText(event))
-      this.editor.addEventListener('input', () => this.reportInput())
+      this.editor.addEventListener('input', event => { if (event.isTrusted) this.reportInput() })
       this.editor.addEventListener('compositionstart', () => { this.composing = true; this.navigationPending = false; this.hideCaret() })
       this.editor.addEventListener('compositionend', () => { this.composing = false; this.editingUntil = Date.now() + 160; this.reportInput() })
       this.editor.addEventListener('focus', () => { this.$ownerInstance.callMethod('onFocus'); this.reportCursor() })
-      this.editor.addEventListener('blur', () => { this.hideCaret(); this.$ownerInstance.callMethod('onBlur') })
+      this.editor.addEventListener('blur', () => { this.hideCaret(true); this.$ownerInstance.callMethod('onBlur') })
       this.editor.addEventListener('keydown', event => { this.navigationPending = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key); if (this.navigationPending) this.editingUntil = 0 })
       this.editor.addEventListener('mousedown', () => { this.navigationPending = true; this.editingUntil = 0 })
       this.editor.addEventListener('contextmenu', event => { event.preventDefault(); this.openMenu(event.clientX, event.clientY) })
@@ -162,21 +169,57 @@ export default {
       this.editor.appendChild(fragment)
       this.updateFocus()
     },
-    onValueChange(value) {
-      this.pendingValue = value
-      if (!this.editor || typeof value !== 'string') return
-      const pending = this.recentInputs?.indexOf(value) ?? -1
-      if (pending >= 0) {
-        this.recentInputs.splice(0, pending + 1)
-        if (this.readValue() !== value) { this.updateFocus(); return }
+    onValueChange(payload) {
+      let packet = payload
+      if (typeof packet === 'string') {
+        try { packet = JSON.parse(packet) } catch (_) { packet = { id: this.documentId || '', value: payload } }
       }
-      if (!this.composing && this.readValue() !== value) {
-        const offset = this.getOffsets()?.start ?? 0
+      if (!packet || typeof packet.value !== 'string') return
+      const value = packet.value, id = packet.id || ''
+      const revision = Number(packet.revision) || 0
+      if (revision < (this.documentRevision || 0)) return
+      this.pendingValue = payload
+      this.documentRevision = revision
+      const changedDocument = this.documentId !== id
+      if (changedDocument) {
+        this.documentId = id
+        this.lastFocusOffset = 0
+        this.recentInputs = []
+        this.awaitingEcho = false
+        this.localValue = value
+      }
+      if (!this.editor) return
+      const pending = this.recentInputs?.indexOf(value) ?? -1
+      if (!changedDocument && pending >= 0) {
+        this.recentInputs.splice(0, pending + 1)
+        this.lastPropValue = value
+        if (value !== this.localValue) {
+          if (!this.composing && this.readValue() !== this.localValue) this.renderValue(this.localValue)
+          this.updateFocus()
+          return
+        }
+        this.awaitingEcho = false
+      } else if (!changedDocument && this.awaitingEcho && value === this.lastPropValue) {
+        if (!this.composing && this.readValue() !== this.localValue) this.renderValue(this.localValue)
+        this.updateFocus()
+        return
+      } else {
+        this.localValue = value
+        this.awaitingEcho = false
+        this.recentInputs = []
+      }
+      this.lastPropValue = value
+      if (!this.composing && (!this.blocks().length || this.readValue() !== value)) {
+        const scrollRoot = document.scrollingElement || document.documentElement
+        const scrollTop = scrollRoot?.scrollTop || 0
+        const offset = changedDocument ? 0 : this.getOffsets()?.start ?? this.lastFocusOffset ?? 0
         this.renderValue(value)
-        if (document.activeElement === this.editor) this.setSelection(offset, offset)
+        if (!changedDocument && document.activeElement === this.editor) this.setSelection(offset, offset)
+        if (scrollRoot) { scrollRoot.scrollTop = scrollTop; requestAnimationFrame(() => { scrollRoot.scrollTop = scrollTop }) }
       }
       this.updateFocus()
       this.scheduleCaret()
+      if (changedDocument && this.pendingRequest?.documentId === id) this.onRequest(this.pendingRequest)
       if (!this.ready && this.blocks().length && this.readValue() === value && this.editor.isContentEditable) {
         this.ready = true
         this.$ownerInstance.callMethod('onRenderReady')
@@ -186,21 +229,31 @@ export default {
       this.pendingFocusMode = enabled
       if (typeof enabled === 'string') { try { enabled = JSON.parse(enabled) } catch (_) { /* older boolean payload */ } }
       this.focusMode = typeof enabled === 'object' ? !!enabled?.enabled : !!enabled
+      const snapshot = typeof enabled === 'object' && (!enabled.documentId || enabled.documentId === this.documentId) && (enabled.revision == null || enabled.revision === this.documentRevision) ? enabled.value : undefined
+      const restoreValue = this.awaitingEcho ? this.localValue : (snapshot ?? this.localValue)
+      if (this.editor && !this.composing && document.activeElement !== this.editor && restoreValue && !this.readValue()) {
+        const scrollRoot = document.scrollingElement || document.documentElement
+        const scrollTop = scrollRoot?.scrollTop || 0
+        this.localValue = restoreValue
+        this.renderValue(restoreValue)
+        if (scrollRoot) scrollRoot.scrollTop = scrollTop
+      }
       this.updateFocus()
     },
     onActiveChange(active) {
       this.active = !!active
       if (this.active && this.pendingRequest) this.onRequest(this.pendingRequest)
-      if (this.active) requestAnimationFrame(() => { this.updateFocus(); this.scheduleCaret() })
+      if (this.active) requestAnimationFrame(() => requestAnimationFrame(() => { this.updateFocus(); this.scheduleCaret() }))
       else this.hideCaret()
     },
     onVisualSettings(payload) {
       this.pendingVisual = payload
       if (typeof payload === 'string') { try { payload = JSON.parse(payload) } catch (_) { return } }
       this.animatedCursor = payload?.enabled !== false
+      this.cursorStyle = payload?.style === 'neovim' ? 'neovim' : 'beam'
       this.trailColor = /^#[0-9a-f]{6}$/i.test(payload?.color) ? payload.color : '#819bcb'
       this.trailLength = Math.min(96, Math.max(0, Number(payload?.length) || 0))
-      if (this.glow) { this.glow.style.background = this.trailColor; this.glow.style.boxShadow = `0 0 10px ${this.trailColor}` }
+      if (this.glow) { this.glow.style.background = this.trailColor; this.glow.style.boxShadow = `0 0 10px ${this.trailColor}`; this.glow.classList.toggle('neovim', this.cursorStyle === 'neovim') }
       if (!this.trailLength && this.trail) this.trail.style.opacity = '0'
       if (!this.animatedCursor) this.hideCaret()
       else this.scheduleCaret()
@@ -210,15 +263,38 @@ export default {
         try { request = JSON.parse(request) } catch (_) { return }
       }
       this.pendingRequest = request
-      if (Number.isFinite(request?.start)) { this.lastFocusOffset = request.start; this.updateFocus() }
-      if (!this.editor || !this.active || !request || !request.seq || request.seq === this.appliedSeq) return
+      if (!this.editor || !this.active || !request || !request.seq || (request.seq === this.appliedSeq && request.source === this.appliedSource) || (request.documentId && request.documentId !== this.documentId)) return
+      if (Number.isFinite(request.start)) { this.lastFocusOffset = request.start; this.updateFocus() }
       this.appliedSeq = request.seq
+      this.appliedSource = request.source
       this.$nextTick(() => {
+        if (request.documentId && request.documentId !== this.documentId) return
+        const scrollRoot = document.scrollingElement || document.documentElement
+        const scrollTop = scrollRoot?.scrollTop || 0
         if (request.value != null && this.readValue() !== request.value) this.renderValue(request.value)
-        this.editor.focus()
-        this.setSelection(request.start, request.end)
-        this.reportCursor()
+        if (request.focus !== false) {
+          try { this.editor.focus({ preventScroll: true }) } catch (_) { this.editor.focus() }
+        }
+        if (request.animate) { this.navigationPending = true; this.editingUntil = 0; setTimeout(() => { this.navigationPending = false }, 250) }
+        this.setSelection(request.start, request.end, !!request.animate)
+        this.reportCursor(!!request.animate)
+        if (request.reveal) this.revealCaret()
+        else if (request.preserveScroll !== false && scrollRoot) {
+          scrollRoot.scrollTop = scrollTop
+          requestAnimationFrame(() => { scrollRoot.scrollTop = scrollTop; requestAnimationFrame(() => { scrollRoot.scrollTop = scrollTop }) })
+        }
       })
+    },
+    revealCaret() {
+      const selection = window.getSelection()
+      if (!selection?.rangeCount) return
+      const rect = selection.getRangeAt(0).getBoundingClientRect()
+      const viewport = window.innerHeight || document.documentElement.clientHeight
+      if (rect.top < 100 || rect.bottom > viewport - 125) {
+        const delta = rect.top < 100 ? rect.top - 155 : rect.bottom - viewport + 185
+        const root = document.scrollingElement || document.documentElement
+        window.scrollTo({ top: Math.max(0, (root?.scrollTop || 0) + delta), behavior: 'smooth' })
+      }
     },
     pointForOffset(position) {
       const blocks = this.blocks()
@@ -238,7 +314,7 @@ export default {
       }
       return { node: this.editor, offset: 0 }
     },
-    setSelection(start, end) {
+    setSelection(start, end, animate = false) {
       const first = this.pointForOffset(start), last = this.pointForOffset(end)
       const range = document.createRange()
       range.setStart(first.node, first.offset)
@@ -248,7 +324,7 @@ export default {
       selection.addRange(range)
       this.lastFocusOffset = start
       this.updateFocus()
-      this.scheduleCaret()
+      this.scheduleCaret(animate)
     },
     offsetForPoint(node, offset) {
       const blocks = this.blocks()
@@ -274,11 +350,14 @@ export default {
       this.navigationPending = false
       if (!this.blocks().length) { this.renderValue(''); this.setSelection(0, 0) }
       const value = this.readValue()
+      if (!value && this.localValue && Date.now() > (this.editingUntil || 0)) { this.renderValue(this.localValue); this.updateFocus(); return }
+      this.localValue = value
+      this.awaitingEcho = true
       const cursor = this.getOffsets()?.start ?? value.length
       if (!this.recentInputs) this.recentInputs = []
       this.recentInputs.push(value)
       if (this.recentInputs.length > 20) this.recentInputs.shift()
-      this.$ownerInstance.callMethod('onChange', { value, cursor })
+      this.$ownerInstance.callMethod('onChange', { value, cursor, documentId: this.documentId, userEdit: true })
       this.reportCursor()
     },
     beforeInput(event) {
@@ -345,7 +424,7 @@ export default {
       const offsets = this.getOffsets()
       if (!offsets) return
       this.lastFocusOffset = offsets.start
-      this.$ownerInstance.callMethod('onCursor', offsets.start)
+      this.$ownerInstance.callMethod('onCursor', { offset: offsets.start, documentId: this.documentId })
       this.updateFocus()
       this.scheduleCaret(animate)
     },
@@ -361,15 +440,15 @@ export default {
       if (this.frame) cancelAnimationFrame(this.frame)
       this.frame = requestAnimationFrame(() => { this.frame = 0; this.positionCaret(animate) })
     },
-    hideCaret() {
+    hideCaret(keepPoint = false) {
       if (this.glow) this.glow.style.opacity = '0'
       if (this.trail) this.trail.style.opacity = '0'
       if (this.editor) this.editor.style.caretColor = ''
-      this.previousPoint = null
+      if (!keepPoint) this.previousPoint = null
     },
     positionCaret(animate = false) {
-      if (!this.editor || !this.glow || !this.active || this.animatedCursor === false || this.composing || document.activeElement !== this.editor) { this.hideCaret(); return }
-      if (window.getComputedStyle(this.glow).display === 'none') { this.hideCaret(); return }
+      if (!this.editor || !this.glow || !this.active || this.animatedCursor === false || this.composing) { this.hideCaret(); return }
+      if (document.activeElement !== this.editor) { this.hideCaret(true); return }
       const selection = window.getSelection()
       if (!selection || !selection.rangeCount || !selection.isCollapsed) { this.hideCaret(); return }
       const range = selection.getRangeAt(0)
@@ -392,11 +471,24 @@ export default {
       const size = parseFloat(window.getComputedStyle(this.editor).fontSize) || 18
       const x = point.left - host.left + (empty ? size * 2 : 0)
       const y = point.top - host.top + 2
+      const height = Math.max(17, point.height || size * 1.42)
+      let cursorWidth = 5
+      if (this.cursorStyle === 'neovim') {
+        cursorWidth = size * .95
+        if (range.startContainer.nodeType === 3 && range.startOffset < range.startContainer.length) {
+          const glyph = range.cloneRange()
+          glyph.setEnd(range.startContainer, range.startOffset + 1)
+          const glyphWidth = glyph.getBoundingClientRect().width
+          if (glyphWidth > 0) cursorWidth = glyphWidth
+        }
+        cursorWidth = Math.max(size * .5, Math.min(size * 1.2, cursorWidth))
+      }
       const moving = animate && !!this.previousPoint
       this.glow.style.transition = moving ? '' : 'none'
-      this.glow.style.height = Math.max(17, size * 1.42) + 'px'
+      this.glow.style.width = cursorWidth + 'px'
+      this.glow.style.height = height + 'px'
       this.glow.style.transform = `translate3d(${x}px, ${y}px, 0)`
-      this.glow.style.opacity = '1'
+      this.glow.style.opacity = this.cursorStyle === 'neovim' ? '.5' : '1'
       if (!moving) { clearTimeout(this.caretTransitionTimer); this.caretTransitionTimer = setTimeout(() => { if (this.glow) this.glow.style.transition = '' }, 24) }
       const previous = this.previousPoint
       this.previousPoint = { x, y }
@@ -407,8 +499,9 @@ export default {
           const length = this.trailLength
           const angle = Math.atan2(dy, dx)
           this.trail.style.width = length + 'px'
+          this.trail.style.height = cursorWidth + 'px'
           this.trail.style.left = (x - length) + 'px'
-          this.trail.style.top = (y + size * .65 - 1.5) + 'px'
+          this.trail.style.top = (y + height / 2 - cursorWidth / 2) + 'px'
           this.trail.style.transform = `rotate(${angle}rad)`
           this.trail.style.background = `linear-gradient(90deg, transparent, ${this.trailColor || '#819bcb'})`
           this.trail.style.opacity = '.85'
@@ -430,8 +523,9 @@ export default {
 .document-fallback::placeholder { color: var(--muted); -webkit-text-fill-color: var(--muted); }
 .document-input :deep(.paragraph) { min-height: 1.85em; text-indent: 2em; transition: opacity .22s ease; }
 .document-input :deep(.paragraph.dimmed) { opacity: .23; }
-.cursor-glow { position: absolute; z-index: 3; top: 0; left: 0; width: 3px; height: 27px; border-radius: 2px; background: var(--cursor-color); box-shadow: 0 0 10px var(--cursor-color); opacity: 0; pointer-events: none; transition: transform .2s cubic-bezier(.22,.7,.25,1), opacity .12s ease; }
-.cursor-trail { position:absolute; z-index:2; width:0; height:3px; border-radius:5px; opacity:0; pointer-events:none; transform-origin: right center; transition:opacity .22s ease; box-shadow:0 0 6px var(--cursor-color); }
+.cursor-glow { position: absolute; z-index: 3; top: 0; left: 0; width: 5px; height: 27px; border-radius: 2px; background: var(--cursor-color); box-shadow: 0 0 10px var(--cursor-color); opacity: 0; pointer-events: none; transition: transform .2s cubic-bezier(.22,.7,.25,1), width .18s ease, opacity .12s ease; }
+.cursor-glow.neovim { border-radius:3px; box-shadow:0 0 11px var(--cursor-color), inset 0 0 0 1px rgba(255,255,255,.35); }
+.cursor-trail { position:absolute; z-index:2; width:0; height:5px; border-radius:5px; opacity:0; pointer-events:none; transform-origin: right center; transition:opacity .22s ease; box-shadow:0 0 8px var(--cursor-color); }
 .selection-menu-shade { position:fixed; z-index:35; inset:0; background:transparent; }
 .selection-menu { position:fixed; z-index:36; width:min(292px, calc(100vw - 24px)); height:48px; padding:4px; display:flex; align-items:center; border:1px solid var(--line); border-radius:15px; background:var(--surface); color:var(--text); box-shadow:0 16px 42px var(--shadow); animation:selection-menu-in .18s cubic-bezier(.2,.78,.25,1) both; }
 .selection-menu.closing { animation:selection-menu-out .15s ease both; }

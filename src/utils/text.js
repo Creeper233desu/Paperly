@@ -65,6 +65,12 @@ export function findMatches(paragraphs, query, caseSensitive = false) {
   return matches
 }
 
+export function stepMatchIndex(current, count, direction) {
+  if (!count) return -1
+  if (current < 0) return direction < 0 ? count - 1 : 0
+  return (current + direction + count) % count
+}
+
 export function replaceAt(paragraphs, match, replacement) {
   const copy = [...paragraphs]
   const text = copy[match.paragraphIndex]

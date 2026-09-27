@@ -1,7 +1,7 @@
 import { reactive } from 'vue'
 
 const KEY = 'paperwriter.preferences.v1'
-const defaults = { theme: 'system', font: 'system', fontSize: 18, focus: false, autoPair: true, animatedCursor: true, cursorTrailColor: '#819bcb', cursorTrailLength: 32, customFonts: [] }
+const defaults = { theme: 'system', font: 'system', fontSize: 18, focus: false, autoPair: true, animatedCursor: true, cursorStyle: 'beam', cursorTrailColor: '#819bcb', cursorTrailLength: 32, customFonts: [] }
 export const preferences = reactive({ ...defaults })
 const appearance = reactive({ dark: false })
 let loaded = false
@@ -11,6 +11,7 @@ export function loadPreferences() {
   loaded = true
   try { Object.assign(preferences, defaults, JSON.parse(uni.getStorageSync(KEY) || '{}')) } catch (_) { /* keep defaults */ }
   if (!Array.isArray(preferences.customFonts)) preferences.customFonts = []
+  if (!['beam', 'neovim'].includes(preferences.cursorStyle)) preferences.cursorStyle = defaults.cursorStyle
   if (!/^#[0-9a-f]{6}$/i.test(preferences.cursorTrailColor)) preferences.cursorTrailColor = defaults.cursorTrailColor
   const trailLength = Number(preferences.cursorTrailLength)
   preferences.cursorTrailLength = Number.isFinite(trailLength) ? Math.min(96, Math.max(0, trailLength)) : defaults.cursorTrailLength
