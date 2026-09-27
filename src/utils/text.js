@@ -1,5 +1,4 @@
 export const PAIRS = { '(': ')', '（': '）', '[': ']', '【': '】', '{': '}', '“': '”', '‘': '’', '《': '》' }
-export const PARAGRAPH_INDENT = '\u3000\u3000'
 
 export function documentFromParagraphs(paragraphs) {
   return (paragraphs?.length ? paragraphs : ['']).join('\n')
@@ -9,23 +8,27 @@ export function paragraphsFromDocument(document) {
   return String(document).replace(/\r\n?/g, '\n').split('\n')
 }
 
+export function stripLegacyIndents(paragraphs, cursor = null) {
+  let originalOffset = 0
+  let nextCursor = cursor
+  const cleaned = paragraphs.map((paragraph, index) => {
+    let value = paragraph
+    if (index && value.startsWith('\u3000\u3000')) {
+      if (nextCursor !== null && cursor > originalOffset) nextCursor -= Math.min(2, cursor - originalOffset)
+      value = value.slice(2)
+    }
+    originalOffset += paragraph.length + 1
+    return value
+  })
+  return { paragraphs: cleaned, cursor: nextCursor }
+}
+
 export function editDocument(previous, value, cursor, autoPair = true) {
   const normalized = String(value).replace(/\r\n?/g, '\n')
   const hasCursor = Number.isFinite(cursor) && cursor >= 0
   const at = Math.max(0, Math.min(hasCursor ? cursor : normalized.length, normalized.length))
   if (normalized.length !== previous.length + 1) return { text: normalized, cursor: at }
   const inserted = normalized[at - 1]
-  if (inserted === '\n' && previous === normalized.slice(0, at - 1) + normalized.slice(at)) {
-    return { text: normalized.slice(0, at) + PARAGRAPH_INDENT + normalized.slice(at), cursor: at + PARAGRAPH_INDENT.length }
-  }
-  if (!hasCursor) {
-    let index = 0
-    while (index < previous.length && previous[index] === normalized[index]) index++
-    if (normalized[index] === '\n' && previous === normalized.slice(0, index) + normalized.slice(index + 1)) {
-      const end = index + 1
-      return { text: normalized.slice(0, end) + PARAGRAPH_INDENT + normalized.slice(end), cursor: end + PARAGRAPH_INDENT.length }
-    }
-  }
   if (!autoPair) return { text: normalized, cursor: at }
   if (!PAIRS[inserted] || previous !== normalized.slice(0, at - 1) + normalized.slice(at)) return { text: normalized, cursor: at }
   return { text: normalized.slice(0, at) + PAIRS[inserted] + normalized.slice(at), cursor: at }

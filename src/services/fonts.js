@@ -82,7 +82,7 @@ function readDisplayName(resolver, uri) {
 async function copyFontFromUri(activity, uri) {
   const File = plus.android.importClass('java.io.File')
   const FileOutputStream = plus.android.importClass('java.io.FileOutputStream')
-  const Channels = plus.android.importClass('java.nio.channels.Channels')
+  const FileInputStream = plus.android.importClass('java.io.FileInputStream')
   const resolver = activity.getContentResolver()
   const displayName = readDisplayName(resolver, uri)
   let mime = ''
@@ -97,15 +97,16 @@ async function copyFontFromUri(activity, uri) {
   if (!plus.android.invoke(directory, 'exists') && !plus.android.invoke(directory, 'mkdirs')) throw new Error('无法创建应用字体目录')
   const path = `_doc/fonts/${id}.${extension}`
   const target = new File(directory, `${id}.${extension}`)
-  const input = plus.android.invoke(resolver, 'openInputStream', uri)
-  if (!input) throw new Error('无法读取所选字体')
-  let output, inputChannel, outputChannel
+  const descriptor = plus.android.invoke(resolver, 'openFileDescriptor', uri, 'r')
+  if (!descriptor) throw new Error('无法读取所选字体')
+  let input, output, inputChannel, outputChannel
   let total = 0
   try {
+    input = new FileInputStream(plus.android.invoke(descriptor, 'getFileDescriptor'))
     output = new FileOutputStream(target)
-    inputChannel = plus.android.invoke(Channels, 'newChannel', input)
+    inputChannel = plus.android.invoke(input, 'getChannel')
     outputChannel = plus.android.invoke(output, 'getChannel')
-    if (!inputChannel || !outputChannel) throw new Error('无法建立字体复制通道')
+    if (!inputChannel || !outputChannel) throw new Error('无法读取字体文件流')
     while (total <= MAX_BYTES) {
       const count = Number(plus.android.invoke(outputChannel, 'transferFrom', inputChannel, total, Math.min(COPY_CHUNK, MAX_BYTES + 1 - total)))
       if (!Number.isFinite(count) || count < 0) throw new Error('复制字体时读取失败')
@@ -120,9 +121,10 @@ async function copyFontFromUri(activity, uri) {
     throw error
   } finally {
     if (inputChannel) plus.android.invoke(inputChannel, 'close')
-    else plus.android.invoke(input, 'close')
+    if (input) plus.android.invoke(input, 'close')
     if (outputChannel) plus.android.invoke(outputChannel, 'close')
     if (output) plus.android.invoke(output, 'close')
+    plus.android.invoke(descriptor, 'close')
   }
   const size = plus.android.invoke(target, 'length')
   if (!total || size !== total) { plus.android.invoke(target, 'delete'); throw new Error(total ? '字体复制不完整，请重试' : '字体文件为空') }

@@ -15,11 +15,12 @@ export default {
 </script>
 
 <style>
+html, body, page { color-scheme: only light; }
 page { background: #f5f6f8; color: #242936; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
 view, text, input, textarea, button, image { box-sizing: border-box; }
 button::after { border: 0; }
-.theme-light { --bg: #f5f6f8; --surface: #fff; --surface-alt: #edf0f4; --text: #242936; --muted: #828a99; --line: #e3e7ed; --accent: #536787; --accent-soft: #e9edf5; --danger: #bf6269; --shadow: rgba(32, 41, 57, .09); }
-.theme-dark { --bg: #111318; --surface: #1c2028; --surface-alt: #282d37; --text: #edf0f4; --muted: #929aa9; --line: #343945; --accent: #b6c6e1; --accent-soft: #30394b; --danger: #e38c92; --shadow: rgba(0, 0, 0, .28); }
+.theme-light { color-scheme: only light; --bg: #f5f6f8; --surface: #fff; --surface-alt: #edf0f4; --text: #242936; --muted: #828a99; --line: #e3e7ed; --accent: #536787; --accent-soft: #e9edf5; --danger: #bf6269; --shadow: rgba(32, 41, 57, .09); }
+.theme-dark { color-scheme: dark; --bg: #111318; --surface: #1c2028; --surface-alt: #282d37; --text: #edf0f4; --muted: #929aa9; --line: #343945; --accent: #b6c6e1; --accent-soft: #30394b; --danger: #e38c92; --shadow: rgba(0, 0, 0, .28); }
 .screen { min-height: 100vh; background: var(--bg); color: var(--text); padding: calc(var(--status-bar-height) + 12px) 22px 110px; transition: background .28s ease, color .28s ease; }
 .page-wrap { width: 100%; max-width: 1220px; margin: 0 auto; }
 .topbar { min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 15px; }

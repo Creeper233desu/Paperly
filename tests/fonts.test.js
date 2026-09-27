@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-test('Android font picker copies TTF and OTF through channels and offers local preview sources', async () => {
+test('Android font picker copies TTF and OTF from a file descriptor and offers local preview sources', async () => {
   const files = new Map()
   let selectedName = '手写字体.ttf'
   let selectedMime = 'font/ttf'
@@ -14,7 +14,7 @@ test('Android font picker copies TTF and OTF through channels and offers local p
   const resolver = {
     query: () => cursor,
     getType: () => selectedMime,
-    openInputStream: () => ({ remaining: 4200, close: () => {} })
+    openFileDescriptor: () => ({ getFileDescriptor: () => ({ remaining: 4200 }), close: () => {} })
   }
   class File {
     constructor(parent, name) { this.path = name ? `${parent.path || parent}/${name}` : parent }
@@ -42,6 +42,11 @@ test('Android font picker copies TTF and OTF through channels and offers local p
     flush() {}
     close() {}
   }
+  class FileInputStream {
+    constructor(descriptor) { this.descriptor = descriptor }
+    getChannel() { return { get remaining() { return this.stream.descriptor.remaining }, set remaining(value) { this.stream.descriptor.remaining = value }, stream: this, close: () => {} } }
+    close() {}
+  }
   class Intent {
     static ACTION_OPEN_DOCUMENT = 'open'
     static CATEGORY_OPENABLE = 'openable'
@@ -65,8 +70,8 @@ test('Android font picker copies TTF and OTF through channels and offers local p
       importClass: name => ({
         'android.content.Intent': Intent,
         'java.io.File': File,
+        'java.io.FileInputStream': FileInputStream,
         'java.io.FileOutputStream': FileOutputStream,
-        'java.nio.channels.Channels': { newChannel: input => input }
       })[name],
       invoke: (receiver, method, ...args) => receiver[method](...args)
     }
