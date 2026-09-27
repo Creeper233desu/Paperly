@@ -1,7 +1,8 @@
 import { reactive } from 'vue'
+import { DEFAULT_AI_PROMPT } from '../services/assistant.js'
 
 const KEY = 'paperwriter.preferences.v1'
-const defaults = { theme: 'system', font: 'system', fontSize: 18, focus: false, autoPair: true, animatedCursor: true, cursorStyle: 'beam', cursorTrailColor: '#819bcb', cursorTrailLength: 32, customFonts: [] }
+const defaults = { theme: 'system', font: 'system', fontSize: 18, focus: false, autoPair: true, animatedCursor: true, cursorStyle: 'beam', cursorTrailColor: '#819bcb', cursorTrailLength: 32, customFonts: [], aiApiKey: '', aiModel: 'deepseek-flash', aiSystemPrompt: DEFAULT_AI_PROMPT }
 export const preferences = reactive({ ...defaults })
 const appearance = reactive({ dark: false })
 let loaded = false

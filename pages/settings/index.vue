@@ -10,6 +10,7 @@
         <view class="section-tile card" @tap="openPanel('appearance')"><view class="section-symbol appearance-symbol"><view></view></view><text>外观主题</text></view>
         <view class="section-tile card" @tap="openPanel('fonts')"><view class="section-symbol font-symbol">Aa</view><text>文章字体</text></view>
         <view class="section-tile card" @tap="openPanel('editing')"><view class="section-symbol editing-symbol"><view></view><view></view><view></view></view><text>编辑体验</text></view>
+        <view class="section-tile card" @tap="openPanel('ai')"><view class="section-symbol ai-symbol">✦</view><text>AI 写作助手</text></view>
       </view>
     </view></view>
     <AppNav v-if="!embedded" active="settings" />
@@ -41,7 +42,7 @@
             <view><view class="modal-intro">让文字跟随你的节奏</view><view class="option-list card">
               <view class="option-row"><view><view class="option-name">正文字号</view><view class="option-note">当前 {{ prefs.fontSize }} px</view></view><view class="stepper"><text @tap="changeSize(-1)">−</text><text @tap="changeSize(1)">＋</text></view></view>
               <view class="option-row" @tap="setOption('focus', !prefs.focus)"><view><view class="option-name">聚焦当前段落</view><view class="option-note">淡化未在编辑的段落</view></view><view class="toggle" :class="{ on: prefs.focus }"><view></view></view></view>
-              <view class="option-row" @tap="setOption('autoPair', !prefs.autoPair)"><view><view class="option-name">自动补全标点</view><view class="option-note">括号、引号与书名号</view></view><view class="toggle" :class="{ on: prefs.autoPair }"><view></view></view></view>
+              <view class="option-row" @tap="setOption('autoPair', !prefs.autoPair)"><view><view class="option-name">自动补全标点</view><view class="option-note">括号、引号与「」</view></view><view class="toggle" :class="{ on: prefs.autoPair }"><view></view></view></view>
               <view class="option-row" @tap="setOption('animatedCursor', !prefs.animatedCursor)"><view><view class="option-name">动画光标</view><view class="option-note">光标移动时显示柔和轨迹</view></view><view class="toggle" :class="{ on: prefs.animatedCursor }"><view></view></view></view>
               <view v-if="prefs.animatedCursor" class="cursor-options">
                 <view class="cursor-option-title">光标样式</view>
@@ -51,9 +52,18 @@
                 <view class="cursor-length-row"><view class="cursor-option-title">拖尾长度</view><text class="cursor-length-value">{{ trailLengthDraft }} px</text></view>
                 <slider class="cursor-length-slider" :value="trailLengthDraft" :min="0" :max="96" :step="1" :activeColor="prefs.cursorTrailColor" :backgroundColor="themeClass() === 'theme-dark' ? '#404653' : '#dfe4ed'" block-color="#ffffff" :block-size="20" @changing="onTrailLengthChanging" @change="onTrailLengthChange" />
                 <view class="cursor-demo"><view v-if="prefs.cursorStyle !== 'neovim'" class="cursor-demo-line" :style="{ width: trailLengthDraft + 'px', background: prefs.cursorTrailColor, boxShadow: `0 0 5px ${prefs.cursorTrailColor}` }"></view><view class="cursor-demo-caret" :class="{ block: prefs.cursorStyle === 'neovim' }" :style="{ backgroundColor: prefs.cursorTrailColor, boxShadow: `0 0 12px ${prefs.cursorTrailColor}` }"></view><text>字句之间</text></view>
+                <view class="cursor-live card" :style="{ '--preview-cursor': prefs.cursorTrailColor, '--preview-trail': trailLengthDraft + 'px' }"><text>实时光标预览</text><view class="cursor-live-line">写下每一个动人的瞬间<view class="cursor-live-motion" :class="{ neovim: prefs.cursorStyle === 'neovim' }"><view class="cursor-live-trail"></view><view class="cursor-live-head"></view></view></view></view>
               </view>
             </view></view>
             <view class="preview-column"><view class="preview-caption">实时预览</view><view class="type-preview card" :style="{ fontFamily: fontFamilyFor(prefs.font), fontSize: prefs.fontSize + 'px' }"><view>第一章</view><view>写下第一句，接下来的故事就有了开始。</view><view>窗外的风很轻，纸上的字也慢慢有了方向。</view></view></view>
+          </view>
+          <view v-if="activePanel === 'ai'" class="ai-settings">
+            <view class="modal-intro">连接 DeepSeek，在编辑器中讨论文字或提出正文改动。修改会先预览，再由你确认。</view>
+            <view class="ai-setting-card card"><view class="option-name">API Key</view><view class="option-note">仅保存在本机应用设置中</view><input class="field" password :value="apiKeyDraft" placeholder="填写 DeepSeek API Key" @input="apiKeyDraft = $event.detail.value; aiTestResult = ''" /></view>
+            <view class="ai-setting-card card"><view class="option-name">选择模型</view><view class="model-options"><view v-for="item in DEEPSEEK_MODELS" :key="item.id" class="model-option" :class="{ selected: modelDraft === item.id }" @tap="modelDraft = item.id; aiTestResult = ''"><text>{{ item.name }}</text><text>{{ item.id }}</text></view></view></view>
+            <view class="ai-setting-card card"><view class="prompt-heading"><view><view class="option-name">系统提示词</view><view class="option-note">定义助手的写作方式和修改边界</view></view><text @tap="promptDraft = DEFAULT_AI_PROMPT">恢复默认</text></view><textarea v-model="promptDraft" class="prompt-input" maxlength="4000" /></view>
+            <view class="ai-setting-actions"><view class="ghost-button" @tap="testAi">{{ aiTesting ? '连接中…' : '测试连通' }}</view><view class="primary-button" @tap="saveAi">保存配置</view></view>
+            <view v-if="aiTestResult" class="ai-test-result" :class="{ error: aiTestError }">{{ aiTestResult }}</view>
           </view>
         </view>
       </view>
@@ -80,10 +90,13 @@ import AppNav from '../../components/AppNav.vue'
 import AppDialog from '../../components/AppDialog.vue'
 import { navigatePrimary } from '../../src/store/navigation'
 import { hexToHsv, hsvToHex } from '../../src/utils/color'
+import { DEFAULT_AI_PROMPT, DEEPSEEK_MODELS, testDeepSeek } from '../../src/services/assistant'
 
 defineProps({ embedded: { type: Boolean, default: false } })
 const emit = defineEmits(['modal-change'])
 const prefs = loadPreferences()
+const apiKeyDraft = ref(prefs.aiApiKey || ''), modelDraft = ref(prefs.aiModel || 'deepseek-flash'), aiTesting = ref(false), aiTestResult = ref(''), aiTestError = ref(false)
+const promptDraft = ref(prefs.aiSystemPrompt || DEFAULT_AI_PROMPT)
 const instance = getCurrentInstance()
 const themes = [{ id: 'system', label: '跟随系统' }, { id: 'light', label: '浅色' }, { id: 'dark', label: '深色' }]
 const cursorColors = ['#819bcb', '#a48bc6', '#78aeb1', '#d0a571', '#d98591']
@@ -93,7 +106,7 @@ const pickerHue = ref(0), pickerSaturation = ref(100), pickerValue = ref(100)
 const hueColor = computed(() => hsvToHex(pickerHue.value, 100, 100))
 const pickerColor = computed(() => hsvToHex(pickerHue.value, pickerSaturation.value, pickerValue.value))
 const activePanel = ref(''), closing = ref(false), fontPreviewErrors = ref({})
-const panelTitle = computed(() => ({ appearance: '外观主题', fonts: '文章字体', editing: '编辑体验' })[activePanel.value] || '')
+const panelTitle = computed(() => ({ appearance: '外观主题', fonts: '文章字体', editing: '编辑体验', ai: 'AI 写作助手' })[activePanel.value] || '')
 const fontChoices = computed(() => [
   { id: 'system', label: '系统默认' }, { id: 'noto', label: '思源宋体' }, { id: 'wenkai', label: '霞鹜文楷' }, { id: 'sans', label: '系统无衬线' },
   ...prefs.customFonts.map(font => ({ id: font.id, label: font.name, custom: true }))
@@ -108,6 +121,7 @@ function openPanel(id) {
   closing.value = false
   activePanel.value = id
   if (id === 'editing') trailLengthDraft.value = prefs.cursorTrailLength
+  if (id === 'ai') { apiKeyDraft.value = prefs.aiApiKey || ''; modelDraft.value = prefs.aiModel || 'deepseek-flash'; promptDraft.value = prefs.aiSystemPrompt || DEFAULT_AI_PROMPT; aiTestResult.value = '' }
   emit('modal-change', true)
   if (id === 'fonts') prepareFontPreviews()
 }
@@ -151,6 +165,14 @@ function setPickerPoint(event) {
 }
 function applyPickerColor() { updatePreferences({ cursorTrailColor: pickerColor.value }); closeColorPicker() }
 function changeSize(delta) { updatePreferences({ fontSize: Math.min(30, Math.max(14, prefs.fontSize + delta)) }) }
+async function testAi() {
+  if (aiTesting.value) return
+  aiTesting.value = true; aiTestResult.value = ''; aiTestError.value = false
+  try { await testDeepSeek(apiKeyDraft.value, modelDraft.value); aiTestResult.value = '连接成功，当前模型可用' }
+  catch (error) { aiTestError.value = true; aiTestResult.value = error.message || '连接失败' }
+  finally { aiTesting.value = false }
+}
+function saveAi() { updatePreferences({ aiApiKey: apiKeyDraft.value.trim(), aiModel: modelDraft.value, aiSystemPrompt: promptDraft.value.trim() || DEFAULT_AI_PROMPT }); aiTestResult.value = '配置已保存'; aiTestError.value = false }
 async function chooseFont(id) {
   try {
     if (id === 'noto' || id === 'wenkai') await loadBundledFont(id)
@@ -181,6 +203,9 @@ function confirmRemove() { removeFont(removeId.value); removeId.value = '' }
 .cursor-colors { gap:11px; }.cursor-color { width:29px; height:29px; }.cursor-custom { display:flex; align-items:center; gap:6px; min-height:34px; padding:4px 9px; border:1px solid var(--line); border-radius:11px; background:var(--surface-alt); color:var(--muted); font-size:11px; font-weight:600; }.cursor-custom.selected { border-color:var(--accent); color:var(--accent); }.cursor-custom-dot { width:16px; height:16px; border-radius:50%; box-shadow:0 0 0 2px var(--surface),0 0 0 3px var(--line); }
 .cursor-length-row { margin-bottom:4px; }.cursor-length-value { color:var(--accent); font-size:12px; font-weight:650; }.cursor-length-slider { width:100%; margin:0 0 12px; }.cursor-demo-caret { width:3px; }
 .cursor-style-list { display:grid; grid-template-columns:1fr 1fr; gap:9px; margin:0 0 23px; }.cursor-style-choice { display:flex; align-items:center; gap:9px; min-height:54px; padding:9px 11px; border:1px solid var(--line); border-radius:12px; background:var(--surface-alt); color:var(--muted); font-size:11px; font-weight:650; transition:border-color .18s ease,transform .18s ease; }.cursor-style-choice.selected { border-color:var(--accent); color:var(--accent); }.cursor-style-choice:active { transform:scale(.97); }.cursor-style-preview { position:relative; width:29px; height:31px; display:flex; align-items:center; justify-content:center; border-radius:7px; background:var(--surface); color:var(--text); font-size:15px; flex-shrink:0; }.beam-preview view { position:absolute; right:4px; top:5px; width:5px; height:21px; border-radius:2px; background:var(--accent); }.block-preview view { position:absolute; right:3px; top:4px; width:13px; height:23px; border-radius:3px; background:var(--accent); opacity:.5; }.cursor-demo-line { height:7px; }.cursor-demo-caret { width:6px; }.cursor-demo-caret.block { width:16px; opacity:.55; clip-path:polygon(0 10%,70% 0,100% 100%,0 88%); }
+.cursor-live { margin-top:17px; padding:14px 17px; overflow:hidden; }.cursor-live>text { font-size:11px; color:var(--muted); }.cursor-live-line { position:relative; margin-top:13px; white-space:nowrap; color:var(--text); font-size:16px; letter-spacing:.03em; }.cursor-live-motion { position:absolute; top:-2px; left:0; width:6px; height:27px; animation:cursor-live-travel 3.2s cubic-bezier(.22,.76,.25,1) infinite alternate; }.cursor-live-head { position:absolute; left:0; top:0; width:6px; height:25px; border-radius:3px; background:var(--preview-cursor); box-shadow:0 0 10px var(--preview-cursor); }.cursor-live-trail { position:absolute; right:4px; top:2px; width:var(--preview-trail); max-width:96px; height:21px; border-radius:4px; background:var(--preview-cursor); opacity:.2; filter:blur(3px); }.cursor-live-motion.neovim,.cursor-live-motion.neovim .cursor-live-head { width:17px; }.cursor-live-motion.neovim .cursor-live-head { opacity:.55; animation:cursor-live-shape 3.2s ease infinite alternate; }.cursor-live-motion.neovim .cursor-live-trail { display:none; }@keyframes cursor-live-travel { 0%,12% { transform:translateX(5px) } 55%,100% { transform:translateX(min(230px,72vw)) } }@keyframes cursor-live-shape { 0%,100% { transform:scale(1,1) } 48% { transform:scale(1.8,.8) } }
+.ai-symbol { font-size:27px; }.ai-settings { max-width:520px; margin:0 auto; }.ai-setting-card { padding:18px; margin-bottom:13px; }.ai-setting-card .field { margin:15px 0 0; }.model-options { display:grid; grid-template-columns:1fr 1fr; gap:9px; margin-top:14px; }.model-option { min-height:70px; padding:12px; border:1px solid var(--line); border-radius:13px; background:var(--surface-alt); display:flex; flex-direction:column; gap:7px; font-size:13px; }.model-option text:last-child { color:var(--muted); font-size:11px; }.model-option.selected { border-color:var(--accent); background:var(--accent-soft); }.ai-setting-actions { display:flex; justify-content:flex-end; gap:9px; margin-top:19px; }.ai-test-result { margin-top:15px; font-size:12px; color:var(--accent); }.ai-test-result.error { color:var(--danger); }
+.prompt-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }.prompt-heading>text { color:var(--accent); font-size:11px; white-space:nowrap; }.prompt-input { display:block; width:100%; height:170px; margin-top:14px; padding:12px; border:1px solid var(--line); border-radius:11px; background:var(--surface-alt); color:var(--text); font-size:12px; line-height:1.6; }
 .color-picker-overlay { position:fixed; z-index:60; inset:0; display:flex; align-items:center; justify-content:center; padding:18px; background:rgba(13,18,28,.48); animation:overlay-in .19s ease both; }.color-picker-overlay.closing { animation:overlay-out .19s ease both; }.color-picker-modal { width:min(390px,calc(100vw - 36px)); padding:23px; border:1px solid var(--line); border-radius:24px; background:var(--surface); color:var(--text); box-shadow:0 26px 75px rgba(0,0,0,.26); animation:modal-in .22s cubic-bezier(.2,.78,.24,1) both; }.color-picker-overlay.closing .color-picker-modal { animation:modal-out .19s ease both; }.color-picker-head { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:19px; }.color-picker-title { font-size:20px; font-weight:700; margin-top:6px; }
 .color-plane { position:relative; width:100%; height:185px; border-radius:14px; overflow:hidden; touch-action:none; }.color-plane-white,.color-plane-black { position:absolute; inset:0; pointer-events:none; }.color-plane-white { background:linear-gradient(90deg,#fff,transparent); }.color-plane-black { background:linear-gradient(0deg,#000,transparent); }.color-plane-knob { position:absolute; z-index:1; width:17px; height:17px; border:3px solid #fff; border-radius:50%; box-shadow:0 1px 6px rgba(0,0,0,.55); transform:translate(-50%,-50%); pointer-events:none; }.hue-caption { display:flex; justify-content:space-between; gap:8px; margin:19px 2px 9px; color:var(--muted); font-size:11px; }.hue-caption text:first-child { color:var(--text); font-weight:650; }.hue-track { height:30px; border-radius:14px; background:linear-gradient(90deg,#f44,#ff0,#0e5,#0ef,#25f,#e4f,#f44); }.hue-track slider { margin:0; }.color-picker-bottom { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:22px; }.color-picker-preview { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:11px; }.color-picker-preview view { width:23px; height:23px; border-radius:8px; box-shadow:0 0 0 1px var(--line); }.color-picker-actions { display:flex; align-items:center; gap:13px; color:var(--muted); font-size:12px; }.color-picker-apply { padding:10px 13px; border-radius:10px; background:var(--accent); color:#fff; font-weight:650; }
 @keyframes cursor-options-in { from { opacity:0; transform:translateY(-7px); } }

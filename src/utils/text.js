@@ -1,4 +1,4 @@
-export const PAIRS = { '(': ')', '（': '）', '[': ']', '【': '】', '{': '}', '“': '”', '‘': '’', '《': '》' }
+export const PAIRS = { '(': ')', '（': '）', '[': ']', '【': '】', '{': '}', '“': '”', '‘': '’', '「': '」', '《': '》' }
 
 export function documentFromParagraphs(paragraphs) {
   return (paragraphs?.length ? paragraphs : ['']).join('\n')

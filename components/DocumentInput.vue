@@ -5,7 +5,7 @@
     <view class="cursor-glow"></view>
     <view class="cursor-trail"></view>
     <view class="cursor-jelly-layer"></view>
-    <view v-if="menu.open" class="selection-menu-shade" @tap="closeMenu"><view class="selection-menu" :class="{ closing: menu.closing }" :style="{ left: menu.left + 'px', top: menu.top + 'px' }" @tap.stop><view class="selection-action" @tap="runMenuAction('copy')">复制</view><view class="selection-action" @tap="runMenuAction('paste')">粘贴</view><view class="selection-action" @tap="runMenuAction('cut')">剪切</view><view class="selection-action" @tap="runMenuAction('all')">全选</view></view></view>
+    <view v-if="menu.open" class="selection-menu-shade" @tap="closeMenu"><view class="selection-menu" :class="{ closing: menu.closing }" :style="{ left: menu.left + 'px', top: menu.top + 'px' }" @tap.stop><view class="selection-action" @tap="runMenuAction('copy')">复制</view><view class="selection-action" @tap="runMenuAction('paste')">粘贴</view><view class="selection-action" @tap="runMenuAction('cut')">剪切</view><view class="selection-action" @tap="runMenuAction('all')">全选</view><view class="selection-action ask-action" @tap="runMenuAction('ask')">问 AI</view></view></view>
   </view>
 </template>
 
@@ -24,7 +24,7 @@ export default {
     cursorTrailLength: { type: Number, default: 32 },
     cursorRequest: { type: Object, default: () => ({ seq: 0, start: 0, end: 0 }) }
   },
-  emits: ['input', 'focus', 'blur', 'cursor'],
+  emits: ['input', 'focus', 'blur', 'cursor', 'ask-ai'],
   data() { return { hostId: `paper-editor-${Date.now()}-${Math.random().toString(36).slice(2)}`, bridgeEpoch: 0, focusSnapshot: this.value, renderReady: false, fallbackFocus: false, selectionStart: -1, selectionEnd: -1, menu: { open: false, left: 0, top: 0, start: 0, end: 0 }, menuRequest: null, menuSeq: 0 } },
   computed: {
     documentPayload() { return JSON.stringify({ id: this.documentId, revision: this.documentRevision, value: this.value, epoch: this.bridgeEpoch }) },
@@ -65,7 +65,7 @@ export default {
       const info = uni.getSystemInfoSync()
       const width = info.windowWidth || 360
       const height = info.windowHeight || 720
-      const menuWidth = Math.min(292, width - 24)
+      const menuWidth = Math.min(350, width - 24)
       const start = Math.max(0, Math.min(this.value.length, selection.start))
       const end = Math.max(start, Math.min(this.value.length, selection.end))
       clearTimeout(this.menuTimer)
@@ -90,6 +90,7 @@ export default {
       const selected = this.value.slice(start, end)
       this.closeMenu()
       if (action === 'all') { this.requestMenuSelection(0, this.value.length); return }
+      if (action === 'ask') { if (selected) this.$emit('ask-ai', { text: selected, start, end, documentId: this.documentId }); return }
       if (action === 'paste') { uni.getClipboardData({ success: result => this.replaceMenuSelection(result.data || '', start, end), fail: () => uni.showToast({ title: '无法读取剪贴板', icon: 'none' }) }); return }
       if (!selected) return
       uni.setClipboardData({ data: selected, showToast: false, success: () => { if (action === 'cut') this.replaceMenuSelection('', start, end) }, fail: () => uni.showToast({ title: '无法写入剪贴板', icon: 'none' }) })
@@ -153,8 +154,9 @@ export default {
         this.navigationPending = true
         this.editingUntil = 0
         this.touchPoint = { x: touch.clientX, y: touch.clientY }
+        this.longPressActive = false
         clearTimeout(this.longPressTimer)
-        this.longPressTimer = setTimeout(() => this.openMenu(this.touchPoint.x, this.touchPoint.y), 480)
+        this.longPressTimer = setTimeout(() => { this.longPressActive = true; this.openMenu(this.touchPoint.x, this.touchPoint.y) }, 480)
       }, { passive: true })
       this.editor.addEventListener('touchmove', event => {
         const touch = event.touches[0]
@@ -162,7 +164,7 @@ export default {
       }, { passive: true })
       for (const name of ['touchend', 'touchcancel']) this.editor.addEventListener(name, () => clearTimeout(this.longPressTimer))
       this.editor.addEventListener('keyup', event => { this.reportCursor(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key)); setTimeout(() => { this.navigationPending = false }, 120) })
-      for (const name of ['click', 'touchend']) this.editor.addEventListener(name, () => { this.reportCursor(true); setTimeout(() => { this.navigationPending = false }, 120) })
+      for (const name of ['click', 'touchend']) this.editor.addEventListener(name, () => { this.reportCursor(true); this.suppressInsertionHandle(); setTimeout(() => { this.navigationPending = false }, 120) })
       if (window.__paperEditorSelectionListener) document.removeEventListener('selectionchange', window.__paperEditorSelectionListener)
       window.__paperEditorSelectionListener = () => { if (document.activeElement === this.editor) this.reportCursor(!!this.navigationPending && Date.now() > (this.editingUntil || 0)) }
       document.addEventListener('selectionchange', window.__paperEditorSelectionListener)
@@ -369,7 +371,7 @@ export default {
       const range = selection.getRangeAt(0)
       return { start: this.offsetForPoint(range.startContainer, range.startOffset), end: this.offsetForPoint(range.endContainer, range.endOffset) }
     },
-    reportInput() {
+    reportInput(animateCursor = false) {
       if (this.composing) return
       this.editingUntil = Date.now() + 160
       this.navigationPending = false
@@ -383,7 +385,7 @@ export default {
       this.recentInputs.push(value)
       if (this.recentInputs.length > 20) this.recentInputs.shift()
       this.$ownerInstance.callMethod('onChange', { value, cursor, documentId: this.documentId, userEdit: true })
-      this.reportCursor()
+      this.reportCursor(animateCursor)
     },
     beforeInput(event) {
       if (this.composing || !['insertParagraph', 'insertLineBreak', 'deleteContentBackward'].includes(event.inputType)) return
@@ -401,8 +403,8 @@ export default {
       event.preventDefault()
       const next = value.slice(0, offsets.start) + '\n' + value.slice(offsets.end)
       this.renderValue(next)
-      this.setSelection(offsets.start + 1, offsets.start + 1)
-      this.reportInput()
+      this.setSelection(offsets.start + 1, offsets.start + 1, true)
+      this.reportInput(true)
     },
     pasteText(event) {
       const value = event.clipboardData?.getData('text/plain')
@@ -452,6 +454,15 @@ export default {
       this.$ownerInstance.callMethod('onCursor', { offset: offsets.start, documentId: this.documentId })
       this.updateFocus()
       this.scheduleCaret(animate)
+    },
+    suppressInsertionHandle() {
+      // Android WebView's insertion handle is a native overlay. Briefly disabling
+      // touch selection after a collapsed tap dismisses it; range selection stays enabled.
+      const offsets = this.getOffsets()
+      if (!offsets || offsets.start !== offsets.end || this.longPressActive) return
+      this.editor.style.webkitUserSelect = 'none'
+      clearTimeout(this.handleTimer)
+      this.handleTimer = setTimeout(() => { if (this.editor) this.editor.style.webkitUserSelect = 'text' }, 90)
     },
     updateFocus() {
       if (!this.editor) return
@@ -671,7 +682,8 @@ export default {
 .cursor-jelly-layer :deep(svg) { display:block; width:100%; height:100%; overflow:visible; opacity:0; pointer-events:none; }
 .cursor-jelly-layer :deep(path) { fill-opacity:.54; }
 .selection-menu-shade { position:fixed; z-index:35; inset:0; background:transparent; }
-.selection-menu { position:fixed; z-index:36; width:min(292px, calc(100vw - 24px)); height:48px; padding:4px; display:flex; align-items:center; border:1px solid var(--line); border-radius:15px; background:var(--surface); color:var(--text); box-shadow:0 16px 42px var(--shadow); animation:selection-menu-in .18s cubic-bezier(.2,.78,.25,1) both; }
+.selection-menu { position:fixed; z-index:36; width:min(350px, calc(100vw - 24px)); height:48px; padding:4px; display:flex; align-items:center; border:1px solid var(--line); border-radius:15px; background:var(--surface); color:var(--text); box-shadow:0 16px 42px var(--shadow); animation:selection-menu-in .18s cubic-bezier(.2,.78,.25,1) both; }
+.ask-action { color:var(--accent); }
 .selection-menu.closing { animation:selection-menu-out .15s ease both; }
 .selection-action { flex:1; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:650; color:var(--text); transition:background .15s ease, transform .15s ease; }.selection-action:active { background:var(--accent-soft); color:var(--accent); transform:scale(.94); }
 @keyframes selection-menu-in { from { opacity:0; transform:translateY(8px) scale(.96); } }

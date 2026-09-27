@@ -1,7 +1,7 @@
 <template>
   <view class="screen book-screen" :class="themeClass()"><view class="page-wrap">
     <view class="topbar"><text class="back" @tap="back">‹　返回书架</text><view class="book-top-menu" @tap="openBookMenu"><text>更多操作</text><MoreIcon /></view></view>
-    <view v-if="book" class="book-layout"><view class="book-sidebar"><view class="large-cover"><image v-if="book.cover" :src="book.cover" mode="aspectFill" /><view v-else class="large-letter">{{ book.title.slice(0, 1) }}</view><view class="large-spine"></view></view><view class="sidebar-label">当前书籍</view><view class="sidebar-title">{{ book.title }}</view><view class="sidebar-author">{{ book.author || '未设置作者' }}</view><view v-if="book.description" class="sidebar-description">{{ book.description }}</view><view class="sidebar-stats"><view><text class="stat-number">{{ book.chapters.length }}</text><text>章节</text></view><view><text class="stat-number">{{ totalArticles }}</text><text>正文</text></view><view><text class="stat-number">{{ totalWords }}</text><text>字数</text></view></view><view class="sidebar-export" @tap="showExport = true">导出 PDF　↗</view></view>
+    <view v-if="book" class="book-layout"><view class="book-sidebar"><view class="large-cover"><image v-if="book.cover" :src="book.cover" mode="aspectFill" /><view v-else class="large-letter">{{ book.title.slice(0, 1) }}</view><view class="large-spine"></view></view><view class="sidebar-label">当前书籍</view><view class="sidebar-title">{{ book.title }}</view><view class="sidebar-author">{{ book.author || '未设置作者' }}</view><view v-if="book.description" class="sidebar-description">{{ book.description }}</view><view class="sidebar-stats"><view><text class="stat-number">{{ book.chapters.length }}</text><text>章节</text></view><view><text class="stat-number">{{ totalArticles }}</text><text>正文</text></view><view><text class="stat-number">{{ totalWords }}</text><text>字数</text></view></view><view class="sidebar-exports"><view class="sidebar-export" @tap="showExport = true">导出 PDF　↗</view><view class="sidebar-export" @tap="openImageExport">导出图片　↗</view></view></view>
       <view class="book-content"><view class="content-heading"><view><view class="eyebrow">写作目录</view><view class="page-title">章节与正文</view><view class="subtle">继续写下一个片段，或从已有的正文开始。</view></view><view class="new-chapter" @tap="openCreateChapter">＋ 新建章节</view></view><view class="search-box"><text>⌕</text><input v-model="query" placeholder="搜索章节、篇名或正文" confirm-type="search" /></view><view v-if="lastEdited" class="resume-card" @tap="resumeWriting"><view class="resume-mark"><view class="resume-line"></view></view><view class="resume-copy"><text>继续上次写作</text><strong>{{ lastEdited.title }}</strong></view><view class="resume-arrow"></view></view>
       <view v-if="!book.chapters.length" class="empty card">先创建一个章节，再写第一篇正文。</view><view v-for="(chapter, ci) in visibleChapters" :key="chapter.id" class="chapter-card card"><view class="chapter-heading" @tap="toggleChapter(chapter.id)"><view class="chapter-num">{{ String(ci + 1).padStart(2, '0') }}</view><view class="chapter-name">{{ chapter.title }} <text class="chapter-article-count">{{ chapter.articles.length }} 篇</text></view><view class="chapter-caret" :class="{ folded: collapsed[chapter.id] && !query }"></view><MoreIcon class="chapter-action" @tap.stop="openChapterMenu(chapter)" /></view><view v-if="query || !collapsed[chapter.id]" class="chapter-children"><view v-for="article in filteredArticles(chapter)" :key="article.id" class="article-row" @tap="openArticle(chapter.id, article.id)" @longpress="openArticleMenu(chapter, article)"><view class="article-icon"><view></view><view></view></view><view class="article-main"><view class="article-title">{{ article.title || '无题正文' }}</view><view class="article-preview">{{ preview(article) }}</view></view><view class="article-tail"><text>{{ wordCount(article) }} 字</text><MoreIcon class="article-more" @tap.stop="openArticleMenu(chapter, article)" /></view></view><view class="add-article" @tap="startArticle(chapter.id)">＋ 添加正文</view></view></view><view v-if="query && !visibleChapters.length" class="empty">没有找到匹配内容</view></view>
     </view>
@@ -43,7 +43,7 @@ const visibleChapters = computed(() => book.value?.chapters.filter(ch => !query.
 const filteredArticles = ch => !query.value || ch.title.toLocaleLowerCase().includes(query.value.toLocaleLowerCase()) ? ch.articles : ch.articles.filter(articleMatches)
 const preview = a => a.paragraphs.find(p => p.trim()) || '还没有正文'
 const menuTitle = computed(() => menuType.value === 'book' ? book.value?.title : menuType.value === 'chapter' ? selectedChapter.value?.title : selectedArticle.value?.title || '无题正文')
-const menuItems = computed(() => menuType.value === 'book' ? [{ label: '编辑书籍信息' }, { label: '导出 PDF' }] : menuType.value === 'chapter' ? [{ label: '重命名章节' }, { label: '删除章节', danger: true }] : [{ label: '删除正文', danger: true }])
+const menuItems = computed(() => menuType.value === 'book' ? [{ label: '编辑书籍信息' }, { label: '导出 PDF' }, { label: '导出图片' }] : menuType.value === 'chapter' ? [{ label: '重命名章节' }, { label: '删除章节', danger: true }] : [{ label: '删除正文', danger: true }])
 function back() { uni.navigateBack() }
 function openBookMenu() { if (book.value) menuType.value = 'book' }
 function openChapterMenu(chapter) { selectedChapter.value = chapter; menuType.value = 'chapter' }
@@ -53,6 +53,7 @@ function onMenuSelect(index) {
   const type = menuType.value; menuType.value = ''
   if (type === 'book' && index === 0) { Object.assign(bookDraft, { title: book.value.title, author: book.value.author || '', description: book.value.description || '', cover: book.value.cover || '' }); dialogType.value = 'book' }
   if (type === 'book' && index === 1) showExport.value = true
+  if (type === 'book' && index === 2) openImageExport()
   if (type === 'chapter' && index === 0) { chapterDraftId.value = selectedChapter.value.id; chapterDraftTitle.value = selectedChapter.value.title; dialogType.value = 'chapter' }
   if (type === 'chapter' && index === 1) dialogType.value = 'deleteChapter'
   if (type === 'article') dialogType.value = 'deleteArticle'
@@ -66,6 +67,7 @@ function confirmDeleteArticle() { deleteArticle(bookId.value, selectedChapter.va
 function startArticle(chapterId) { const a = addArticle(bookId.value, chapterId); openArticle(chapterId, a.id) }
 function resumeWriting() { if (lastEdited.value) openArticle(lastEdited.value.chapterId, lastEdited.value.articleId, lastEdited.value.cursor) }
 function openArticle(chapterId, articleId, cursor = 0) { if (!menuType.value) uni.navigateTo({ url: `/pages/editor/index?bookId=${bookId.value}&chapterId=${chapterId}&articleId=${articleId}&cursor=${cursor}` }) }
+function openImageExport() { uni.navigateTo({ url: `/pages/export-image/index?bookId=${bookId.value}` }) }
 function doExport() {
   showExport.value = false
   try { const path = exportBookPdf(book.value, withToc.value); exportResult.value = { ok: true, path, message: `文件已保存在 ${path}` } }
@@ -87,6 +89,8 @@ function openExport() {
 @media (max-width: 700px) { .book-layout { display: block; }.book-sidebar { display: grid; grid-template-columns: 92px 1fr; column-gap: 20px; padding: 18px; margin-bottom: 27px; }.large-cover { grid-row: span 5; width: 92px; height: 132px; margin: 0; }.large-letter { font-size: 47px; }.sidebar-label { align-self: end; }.sidebar-title { margin-top: 5px; }.sidebar-description, .sidebar-stats, .sidebar-export { display: none; } }
 @media (max-width: 520px) { .content-heading { align-items: start; }.new-chapter { margin-top: 6px; }.content-heading .page-title { font-size: 29px; }.article-tail text:first-child { display: none; } }
 .chapter-card { overflow: hidden; transition: box-shadow .2s ease, transform .2s ease; }
+.sidebar-exports { display:flex; gap:18px; flex-wrap:wrap; }.sidebar-export { padding-top:20px; }
+@media (max-width:700px) { .book-sidebar .sidebar-exports { grid-column:1 / -1; display:flex; }.book-sidebar .sidebar-export { display:block; padding-top:14px; } }
 .chapter-heading { cursor: pointer; }
 .chapter-article-count { color: var(--muted); font-size: 11px; font-weight: 450; margin-left: 8px; }
 .chapter-caret { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; }

@@ -48,6 +48,17 @@ test('custom selection menu copies, cuts, pastes and selects all using the store
   assert.equal(editor.menuRequest.end, 3)
 })
 
+test('selected text can be sent to AI without changing the document', () => {
+  const events = []
+  const options = optionsFor(0, { uni: {}, setTimeout: () => 1 })
+  const editor = { value: '甲乙丙', documentId: 'article-1', menu: { open: true, closing: false, start: 1, end: 2 }, $emit: (name, payload) => events.push({ name, payload }) }
+  editor.closeMenu = options.methods.closeMenu.bind(editor)
+  options.methods.runMenuAction.call(editor, 'ask')
+  assert.equal(events.length, 1)
+  assert.equal(events[0].name, 'ask-ai')
+  assert.equal(events[0].payload.text, '乙')
+})
+
 test('editor activation schedules the animated caret after a new page mount', () => {
   let selectionRequests = 0, caretSchedules = 0
   const options = optionsFor(1, { requestAnimationFrame: callback => callback() })
