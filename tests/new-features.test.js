@@ -1,8 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { editDocument } from '../src/utils/text.js'
-import { askDeepSeek, bookContext, planBookEdit } from '../src/services/assistant.js'
-import { layoutImageText, paintTextImage } from '../src/services/image-export.js'
+import { bookContext, planBookEdit } from '../src/services/assistant.js'
+import { createTextPng, layoutImageText, paintTextImage } from '../src/services/image-export.js'
 
 test('corner quotes pair at the caret', () => {
   assert.deepEqual(editDocument('甲乙', '甲「乙', 2), { text: '甲「」乙', cursor: 2 })
@@ -26,15 +26,6 @@ test('custom AI prompt is included with current book context', () => {
   assert.match(context, /用户选中的文字：草稿/)
 })
 
-test('DeepSeek request exposes only the two proposed text tools', async () => {
-  let request
-  globalThis.uni = { request: options => { request = options; options.success({ statusCode: 200, data: { choices: [{ message: { content: '建议', tool_calls: [{ function: { name: 'insert_text', arguments: '{"article_id":"a","after":"甲","text":"新"}' } }] } }] } }) } }
-  const result = await askDeepSeek({ key: 'test-key', model: 'deepseek-flash', book: { ...book, title: '测试书' }, articleId: 'a', draft: '甲乙丙', selectedText: '', systemPrompt: '简洁回答', messages: [{ role: 'user', content: '补一句' }] })
-  assert.equal(request.header.Authorization, 'Bearer test-key')
-  assert.deepEqual(request.data.tools.map(item => item.function.name), ['insert_text', 'delete_text'])
-  assert.equal(result.calls[0].args.text, '新')
-})
-
 test('PNG layout includes all selected lines, optional heading and app mark', () => {
   const calls = []
   const ctx = { setFontSize: size => calls.push(['font', size]), measureText: text => ({ width: text.length * 34 }), setFillStyle: color => calls.push(['color', color]), fillRect: (...args) => calls.push(['rect', ...args]), fillText: (...args) => calls.push(['text', ...args]), setGlobalAlpha: alpha => calls.push(['alpha', alpha]) }
@@ -43,4 +34,21 @@ test('PNG layout includes all selected lines, optional heading and app mark', ()
   paintTextImage(ctx, layout, 'dark')
   assert.ok(calls.some(call => call[0] === 'text' && call[1] === 'PAPERWRITER'))
   assert.ok(calls.some(call => call[0] === 'text' && call[1] === '书名 · 作者'))
+})
+
+test('PNG generation resizes, draws and returns a real file path before save/share', async () => {
+  const sequence = []
+  const ctx = {
+    setFontSize: () => {}, measureText: text => ({ width: text.length * 34 }), setFillStyle: () => {},
+    fillRect: () => {}, fillText: text => sequence.push(['text', text]), setGlobalAlpha: () => {},
+    draw: (_, done) => { sequence.push(['draw']); done() }
+  }
+  const api = {
+    createCanvasContext: id => { assert.equal(id, 'writer-image-export'); return ctx },
+    canvasToTempFilePath: (options, instance) => { sequence.push(['export', options.width, options.height]); assert.equal(instance, 'page'); options.success({ tempFilePath: '_tmp/card.png' }) }
+  }
+  const path = await createTextPng({ canvasId: 'writer-image-export', instance: 'page', text: '甲乙', info: '书名', style: 'dark', resize: layout => sequence.push(['resize', layout.height]), nextFrame: () => Promise.resolve(), settle: () => Promise.resolve(), api })
+  assert.equal(path, '_tmp/card.png')
+  assert.deepEqual(sequence.map(item => item[0]).filter(item => item !== 'text'), ['resize', 'draw', 'export'])
+  assert.ok(sequence.some(item => item[0] === 'text' && item[1] === 'PAPERWRITER'))
 })

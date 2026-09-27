@@ -59,6 +59,17 @@ test('selected text can be sent to AI without changing the document', () => {
   assert.equal(events[0].payload.text, '乙')
 })
 
+test('selected text can open image export without changing the document', () => {
+  const events = []
+  const options = optionsFor(0, { uni: {}, setTimeout: () => 1 })
+  const editor = { value: '甲乙丙', documentId: 'article-1', menu: { open: true, closing: false, start: 1, end: 3 }, $emit: (name, payload) => events.push({ name, payload }) }
+  editor.closeMenu = options.methods.closeMenu.bind(editor)
+  options.methods.runMenuAction.call(editor, 'export')
+  assert.equal(events.length, 1)
+  assert.equal(events[0].name, 'export-image')
+  assert.deepEqual(JSON.parse(JSON.stringify(events[0].payload)), { text: '乙丙', start: 1, end: 3, documentId: 'article-1' })
+})
+
 test('editor activation schedules the animated caret after a new page mount', () => {
   let selectionRequests = 0, caretSchedules = 0
   const options = optionsFor(1, { requestAnimationFrame: callback => callback() })
@@ -198,7 +209,7 @@ test('the beam cursor keeps a visibly thick, solid trail', () => {
   options.methods.positionCaret.call(editor, true)
   assert.equal(editor.glow.style.width, '6px')
   assert.equal(editor.trail.style.background, '#123456')
-  assert.equal(editor.trail.style.height, '7px')
+  assert.equal(editor.trail.style.height, '19px')
   assert.equal(editor.trail.style.opacity, '1')
   editor.cursorStyle = 'neovim'
   editor.setJellyTarget = () => true
@@ -236,17 +247,17 @@ test('the Neovim cursor spring bends its four corners and settles after navigati
   assert.ok(steps < 80)
   assert.ok(Math.abs(editor.jellyCorners[0].x - 40) < .01)
   for (const x of [70, 100, 130]) editor.setJellyTarget(x, 10, 20, 30, true)
-  const destinations = editor.jellyDestinations(editor.jellyTarget)
-  editor.jellyCorners.forEach((corner, index) => {
-    assert.ok(Math.hypot(corner.x - destinations[index].x, corner.y - destinations[index].y) <= 28.01)
-  })
+  frames.shift()(time += 16)
+  assert.ok(editor.jellyCorners[1].x - editor.jellyCorners[0].x < 38)
+  assert.ok(editor.jellyCorners[2].y - editor.jellyCorners[1].y < 47)
   steps = 0
   while (frames.length && steps++ < 80) frames.shift()(time += 16)
   assert.ok(steps < 80)
   editor.setJellyTarget(50, 240, 20, 30, true)
-  assert.equal(editor.jellyCorners[0].x, 50)
-  assert.equal(editor.jellyCorners[0].y, 240)
-  assert.equal(frames.length, 0)
+  assert.notEqual(editor.jellyCorners[0].y, 240)
+  assert.ok(frames.length > 0)
+  frames.shift()(time += 16)
+  assert.ok(editor.jellyCorners[2].y - editor.jellyCorners[1].y < 47)
   editor.setJellyTarget(60, 50, 20, 30, false)
   assert.equal(editor.jellyCorners[0].x, 60)
 })

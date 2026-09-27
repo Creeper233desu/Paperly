@@ -45,3 +45,28 @@ export function paintTextImage(ctx, layout, style) {
   ctx.setFontSize(15)
   ctx.fillText('PAPERWRITER', 895, foot - 2)
 }
+
+export async function createTextPng({ canvasId, instance, text, info = '', style = 'light', resize, nextFrame, settle = () => new Promise(resolve => setTimeout(resolve, 80)), api = uni }) {
+  const ctx = api.createCanvasContext(canvasId, instance)
+  if (!ctx) throw new Error('无法建立图片画布')
+  const layout = layoutImageText(ctx, text, info)
+  resize(layout)
+  await nextFrame()
+  await settle()
+  paintTextImage(ctx, layout, style)
+  await new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('画布绘制超时')), 8000)
+    try { ctx.draw(false, () => { clearTimeout(timeout); resolve() }) }
+    catch (error) { clearTimeout(timeout); reject(error) }
+  })
+  await settle()
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('图片导出超时')), 8000)
+    api.canvasToTempFilePath({
+      canvasId, fileType: 'png', width: layout.width, height: layout.height,
+      destWidth: layout.width, destHeight: layout.height,
+      success: result => { clearTimeout(timeout); result.tempFilePath ? resolve(result.tempFilePath) : reject(new Error('画布没有返回图片文件')) },
+      fail: error => { clearTimeout(timeout); reject(new Error(error?.errMsg || '图片生成失败')) }
+    }, instance)
+  })
+}

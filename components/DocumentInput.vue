@@ -5,7 +5,7 @@
     <view class="cursor-glow"></view>
     <view class="cursor-trail"></view>
     <view class="cursor-jelly-layer"></view>
-    <view v-if="menu.open" class="selection-menu-shade" @tap="closeMenu"><view class="selection-menu" :class="{ closing: menu.closing }" :style="{ left: menu.left + 'px', top: menu.top + 'px' }" @tap.stop><view class="selection-action" @tap="runMenuAction('copy')">复制</view><view class="selection-action" @tap="runMenuAction('paste')">粘贴</view><view class="selection-action" @tap="runMenuAction('cut')">剪切</view><view class="selection-action" @tap="runMenuAction('all')">全选</view><view class="selection-action ask-action" @tap="runMenuAction('ask')">问 AI</view></view></view>
+    <view v-if="menu.open" class="selection-menu-shade" @tap="closeMenu"><view class="selection-menu" :class="{ closing: menu.closing }" :style="{ left: menu.left + 'px', top: menu.top + 'px' }" @tap.stop><view class="selection-action" @tap="runMenuAction('copy')">复制</view><view class="selection-action" @tap="runMenuAction('paste')">粘贴</view><view class="selection-action" @tap="runMenuAction('cut')">剪切</view><view class="selection-action" @tap="runMenuAction('all')">全选</view><view class="selection-action ask-action" @tap="runMenuAction('ask')">问 AI</view><view class="selection-action export-action" @tap="runMenuAction('export')">导出图片</view></view></view>
   </view>
 </template>
 
@@ -24,7 +24,7 @@ export default {
     cursorTrailLength: { type: Number, default: 32 },
     cursorRequest: { type: Object, default: () => ({ seq: 0, start: 0, end: 0 }) }
   },
-  emits: ['input', 'focus', 'blur', 'cursor', 'ask-ai'],
+  emits: ['input', 'focus', 'blur', 'cursor', 'ask-ai', 'export-image'],
   data() { return { hostId: `paper-editor-${Date.now()}-${Math.random().toString(36).slice(2)}`, bridgeEpoch: 0, focusSnapshot: this.value, renderReady: false, fallbackFocus: false, selectionStart: -1, selectionEnd: -1, menu: { open: false, left: 0, top: 0, start: 0, end: 0 }, menuRequest: null, menuSeq: 0 } },
   computed: {
     documentPayload() { return JSON.stringify({ id: this.documentId, revision: this.documentRevision, value: this.value, epoch: this.bridgeEpoch }) },
@@ -65,11 +65,11 @@ export default {
       const info = uni.getSystemInfoSync()
       const width = info.windowWidth || 360
       const height = info.windowHeight || 720
-      const menuWidth = Math.min(350, width - 24)
+      const menuWidth = Math.min(460, width - 24)
       const start = Math.max(0, Math.min(this.value.length, selection.start))
       const end = Math.max(start, Math.min(this.value.length, selection.end))
       clearTimeout(this.menuTimer)
-      this.menu = { open: true, closing: false, start, end, left: Math.max(12, Math.min(selection.x - menuWidth / 2, width - menuWidth - 12)), top: Math.max(12, Math.min(selection.y > 70 ? selection.y - 68 : selection.y + 20, height - 72)) }
+      this.menu = { open: true, closing: false, start, end, left: Math.max(12, Math.min(selection.x - menuWidth / 2, width - menuWidth - 12)), top: Math.max(12, Math.min(selection.y > 110 ? selection.y - 110 : selection.y + 20, height - 108)) }
     },
     closeMenu() { if (!this.menu.open || this.menu.closing) return; this.menu.closing = true; this.menuTimer = setTimeout(() => { this.menu.open = false; this.menu.closing = false }, 150) },
     requestMenuSelection(start, end, value = this.value) {
@@ -91,6 +91,7 @@ export default {
       this.closeMenu()
       if (action === 'all') { this.requestMenuSelection(0, this.value.length); return }
       if (action === 'ask') { if (selected) this.$emit('ask-ai', { text: selected, start, end, documentId: this.documentId }); return }
+      if (action === 'export') { if (selected) this.$emit('export-image', { text: selected, start, end, documentId: this.documentId }); else uni.showToast({ title: '请先选中文字', icon: 'none' }); return }
       if (action === 'paste') { uni.getClipboardData({ success: result => this.replaceMenuSelection(result.data || '', start, end), fail: () => uni.showToast({ title: '无法读取剪贴板', icon: 'none' }) }); return }
       if (!selected) return
       uni.setClipboardData({ data: selected, showToast: false, success: () => { if (action === 'cut') this.replaceMenuSelection('', start, end) }, fail: () => uni.showToast({ title: '无法写入剪贴板', icon: 'none' }) })
@@ -503,21 +504,6 @@ export default {
       const { x, y, width, height } = target
       return [{ x, y }, { x: x + width, y }, { x: x + width, y: y + height }, { x, y: y + height }]
     },
-    boundJellyCorners() {
-      if (!this.jellyCorners || !this.jellyTarget) return
-      const destinations = this.jellyDestinations(this.jellyTarget)
-      const limit = Math.min(42, Math.max(28, this.jellyTarget.height * .9))
-      this.jellyCorners.forEach((corner, index) => {
-        const dx = corner.x - destinations[index].x
-        const dy = corner.y - destinations[index].y
-        const distance = Math.hypot(dx, dy)
-        if (distance <= limit) return
-        corner.x = destinations[index].x + dx / distance * limit
-        corner.y = destinations[index].y + dy / distance * limit
-        corner.vx = 0
-        corner.vy = 0
-      })
-    },
     drawJelly() {
       if (!this.jellyPath || !this.jellyCorners) return
       const corners = this.jellyCorners
@@ -528,7 +514,7 @@ export default {
       if (this.jellyFrame) cancelAnimationFrame(this.jellyFrame)
       this.jellyFrame = 0
       if (this.jellySvg) this.jellySvg.style.opacity = '0'
-      if (reset) { this.jellyCorners = null; this.jellyTarget = null }
+      if (reset) { this.jellyCorners = null; this.jellyTarget = null; this.jellyCenter = null }
     },
     setJellyTarget(x, y, width, height, animate) {
       if (!this.ensureJelly()) return false
@@ -538,27 +524,15 @@ export default {
       const previous = this.jellyTarget
       this.jellyTarget = target
       this.jellySvg.style.opacity = '1'
-      const dx = previous ? x - previous.x : 0
-      const dy = previous ? y - previous.y : 0
-      const distance = Math.hypot(dx, dy)
-      if (animate && this.jellyCorners && Math.hypot(dx, dy) < 1 && previous.width === width && previous.height === height) return true
-      if (!animate || !this.jellyCorners || distance < 1 || distance > Math.max(72, width * 3, height * 1.5)) {
+      if (animate && this.jellyCenter && previous && Math.hypot(x - previous.x, y - previous.y) < 1 && previous.width === width && previous.height === height) return true
+      if (!animate || !this.jellyCenter) {
         if (this.jellyFrame) cancelAnimationFrame(this.jellyFrame)
         this.jellyFrame = 0
-        this.jellyCorners = destinations.map(point => ({ ...point, vx: 0, vy: 0, omega: 36 }))
+        this.jellyCenter = { x, y, vx: 0, vy: 0 }
+        this.jellyCorners = destinations
         this.drawJelly()
         return true
       }
-      const shortJump = Math.abs(dx) <= width * 2.1 && Math.abs(dy) < 2
-      const baseSpeed = shortJump ? 46 : 30
-      const lag = .35 + (this.trailLength || 0) / 96 * .55
-      this.jellyCorners.forEach((corner, index) => {
-        const horizontal = index === 0 || index === 3 ? -1 : 1
-        const vertical = index < 2 ? -1 : 1
-        const alignment = (horizontal * dx + vertical * dy) / (Math.SQRT2 * distance)
-        corner.omega = baseSpeed * (1 - lag * (1 - alignment) * .35)
-      })
-      this.boundJellyCorners()
       if (!this.jellyFrame) {
         this.jellyLastTime = performance.now()
         this.jellyFrame = requestAnimationFrame(time => this.stepJelly(time))
@@ -567,25 +541,30 @@ export default {
     },
     stepJelly(time) {
       this.jellyFrame = 0
-      if (!this.jellyCorners || !this.jellyTarget || !this.jellySvg || this.jellySvg.style.opacity === '0') return
+      if (!this.jellyCenter || !this.jellyTarget || !this.jellySvg || this.jellySvg.style.opacity === '0') return
       const dt = Math.min(.032, Math.max(.001, (time - (this.jellyLastTime || time - 16)) / 1000))
       this.jellyLastTime = time
-      const destinations = this.jellyDestinations(this.jellyTarget)
-      let moving = false
-      this.jellyCorners.forEach((corner, index) => {
-        const target = destinations[index]
-        const omega = corner.omega || 36
-        for (const [axis, velocity] of [['x', 'vx'], ['y', 'vy']]) {
-          const error = corner[axis] - target[axis]
-          const b = corner[velocity] + omega * error
-          const decay = Math.exp(-omega * dt)
-          corner[axis] = target[axis] + (error + b * dt) * decay
-          corner[velocity] = (corner[velocity] - omega * b * dt) * decay
-          if (Math.abs(corner[axis] - target[axis]) > .25 || Math.abs(corner[velocity]) > 2) moving = true
-        }
-      })
-      this.boundJellyCorners()
-      if (!moving) this.jellyCorners.forEach((corner, index) => Object.assign(corner, destinations[index], { vx: 0, vy: 0 }))
+      const center = this.jellyCenter, target = this.jellyTarget, omega = 23
+      for (const [axis, velocity] of [['x', 'vx'], ['y', 'vy']]) {
+        const error = center[axis] - target[axis]
+        const b = center[velocity] + omega * error
+        const decay = Math.exp(-omega * dt)
+        center[axis] = target[axis] + (error + b * dt) * decay
+        center[velocity] = (center[velocity] - omega * b * dt) * decay
+      }
+      const lagX = target.x - center.x, lagY = target.y - center.y
+      const stretchX = Math.min(target.width * .42, Math.abs(lagX) * .24)
+      const stretchY = Math.min(target.height * .28, Math.abs(lagY) * .18)
+      const shearX = Math.max(-target.width * .22, Math.min(target.width * .22, lagY * .11))
+      const shearY = Math.max(-target.height * .16, Math.min(target.height * .16, lagX * .1))
+      this.jellyCorners = [
+        { x: center.x - stretchX + shearX, y: center.y - stretchY - shearY },
+        { x: center.x + target.width + stretchX + shearX, y: center.y - stretchY + shearY },
+        { x: center.x + target.width + stretchX - shearX, y: center.y + target.height + stretchY + shearY },
+        { x: center.x - stretchX - shearX, y: center.y + target.height + stretchY - shearY }
+      ]
+      const moving = Math.abs(lagX) > .2 || Math.abs(lagY) > .2 || Math.abs(center.vx) > 2 || Math.abs(center.vy) > 2
+      if (!moving) { center.x = target.x; center.y = target.y; center.vx = 0; center.vy = 0; this.jellyCorners = this.jellyDestinations(target) }
       this.drawJelly()
       if (moving) this.jellyFrame = requestAnimationFrame(next => this.stepJelly(next))
     },
@@ -648,11 +627,11 @@ export default {
         const dx = x - previous.x, dy = y - previous.y, distance = Math.hypot(dx, dy)
         if (distance > 2) {
           const length = this.trailLength
-          const angle = Math.atan2(dy, dx)
-          const thickness = Math.max(7, cursorWidth)
+          const angle = Math.atan2(previous.y - y, previous.x - x)
+          const thickness = Math.min(height, Math.max(16, size * .95))
           this.trail.style.width = length + 'px'
           this.trail.style.height = thickness + 'px'
-          this.trail.style.left = (x - length) + 'px'
+          this.trail.style.left = (x + cursorWidth / 2) + 'px'
           this.trail.style.top = (y + height / 2 - thickness / 2) + 'px'
           this.trail.style.transform = `rotate(${angle}rad)`
           this.trail.style.background = this.trailColor || '#819bcb'
@@ -677,13 +656,14 @@ export default {
 .document-input :deep(.paragraph.dimmed) { opacity: .23; }
 .cursor-glow { position: absolute; z-index: 3; top: 0; left: 0; width: 6px; height: 27px; border-radius: 3px; background: var(--cursor-color); box-shadow: 0 0 10px var(--cursor-color); opacity: 0; pointer-events: none; transition: transform .2s cubic-bezier(.22,.7,.25,1), width .18s ease, height .18s ease, opacity .12s ease; }
 .cursor-glow.neovim { border-radius:3px; box-shadow:0 0 11px var(--cursor-color), inset 0 0 0 1px rgba(255,255,255,.35); }
-.cursor-trail { position:absolute; z-index:2; width:0; height:7px; border-radius:5px; opacity:0; pointer-events:none; transform-origin: right center; transition:opacity .22s ease; box-shadow:0 0 8px var(--cursor-color); }
+.cursor-trail { position:absolute; z-index:2; width:0; height:1em; border-radius:4px; opacity:0; pointer-events:none; transform-origin:left center; transition:opacity .22s ease; box-shadow:0 0 8px var(--cursor-color); }
 .cursor-jelly-layer { position:absolute; inset:0; z-index:3; overflow:visible; pointer-events:none; }
 .cursor-jelly-layer :deep(svg) { display:block; width:100%; height:100%; overflow:visible; opacity:0; pointer-events:none; }
-.cursor-jelly-layer :deep(path) { fill-opacity:.54; }
+.cursor-jelly-layer :deep(path) { fill-opacity:.68; filter:drop-shadow(0 0 5px var(--cursor-color)); }
 .selection-menu-shade { position:fixed; z-index:35; inset:0; background:transparent; }
-.selection-menu { position:fixed; z-index:36; width:min(350px, calc(100vw - 24px)); height:48px; padding:4px; display:flex; align-items:center; border:1px solid var(--line); border-radius:15px; background:var(--surface); color:var(--text); box-shadow:0 16px 42px var(--shadow); animation:selection-menu-in .18s cubic-bezier(.2,.78,.25,1) both; }
+.selection-menu { position:fixed; z-index:36; width:min(460px, calc(100vw - 24px)); min-height:48px; padding:4px; display:flex; flex-wrap:wrap; align-items:center; border:1px solid var(--line); border-radius:15px; background:var(--surface); color:var(--text); box-shadow:0 16px 42px var(--shadow); animation:selection-menu-in .18s cubic-bezier(.2,.78,.25,1) both; }
 .ask-action { color:var(--accent); }
+.export-action { color:var(--accent); min-width:72px; }
 .selection-menu.closing { animation:selection-menu-out .15s ease both; }
 .selection-action { flex:1; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:650; color:var(--text); transition:background .15s ease, transform .15s ease; }.selection-action:active { background:var(--accent-soft); color:var(--accent); transform:scale(.94); }
 @keyframes selection-menu-in { from { opacity:0; transform:translateY(8px) scale(.96); } }
