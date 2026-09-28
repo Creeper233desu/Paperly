@@ -26,11 +26,11 @@
             <view class="style-options"><view :class="{ active: style === 'light' }" @tap="style = 'light'">☼　浅色纸张</view><view :class="{ active: style === 'dark' }" @tap="style = 'dark'">☾　深色纸张</view></view>
             <view class="info-option" @tap="showBookInfo = !showBookInfo"><view><view>左上角添加书本信息</view><text>书名 · 作者 · 篇名</text></view><view class="toggle" :class="{ on: showBookInfo }"><view /></view></view>
           </view>
-          <view v-if="currentEntry" class="actions"><view class="primary" :class="{ busy: working }" @tap="generate">{{ working ? '正在生成…' : generatedPath ? '重新生成 PNG' : '生成 PNG' }}</view><view :class="{ disabled: !generatedPath }" @tap="saveImage">保存到相册</view><view :class="{ disabled: !generatedPath }" @tap="shareImage">分享图片 ↗</view></view>
+          <view v-if="currentEntry" class="actions"><view class="primary" :class="{ busy: working }" @tap="generate">{{ working ? '正在生成…' : generatedPath ? '重新生成 PNG' : '生成 PNG' }}</view><view :class="{ disabled: !generatedPath }" @tap="saveImage">保存到相册</view><view :class="{ disabled: !generatedPath }" @tap="shareImage">打开并分享 ↗</view></view>
           <view v-if="errorMessage" class="error-message">{{ errorMessage }}</view>
           <view class="note">生成后可先检查图片，再保存或分享到系统中可用的应用。</view>
         </view>
-        <view v-if="currentEntry" class="preview-column"><view class="preview-label">{{ generatedPath ? '已生成 · PNG' : '实时预览' }}<text>{{ style === 'dark' ? '深色' : '浅色' }}</text></view><image v-if="generatedPath" class="generated-image" :src="generatedPath" mode="widthFix" /><view v-else class="preview-paper" :class="style"><view v-if="showBookInfo" class="preview-info">{{ book.title }} · {{ book.author || '佚名' }} · {{ currentEntry.article.title || '无题正文' }}</view><view class="preview-copy"><text>{{ articleText.slice(Math.max(0, start - 50), start) }}</text><text class="highlight">{{ selectedText || '你选中的文字，会显示在这里。' }}</text><text>{{ articleText.slice(end, end + 50) }}</text></view><view class="brand">纸间 <text>PAPERWRITER</text></view></view></view>
+        <view v-if="currentEntry" class="preview-column"><view class="preview-label">{{ generatedPath ? '已生成 · PNG' : '实时预览' }}<text>{{ style === 'dark' ? '深色' : '浅色' }}</text></view><image v-if="generatedPath" class="generated-image" :src="generatedPath" mode="widthFix" /><view v-else class="preview-paper" :class="style" :style="{ fontFamily: fontFamilyFor(prefs.font) }"><view v-if="showBookInfo" class="preview-info">{{ book.title }} · {{ book.author || '佚名' }} · {{ currentEntry.article.title || '无题正文' }}</view><view class="preview-copy"><text>{{ articleText.slice(Math.max(0, start - 50), start) }}</text><text class="highlight">{{ selectedText || '你选中的文字，会显示在这里。' }}</text><text>{{ articleText.slice(end, end + 50) }}</text></view><view class="brand">纸间 <text>PAPERWRITER</text></view></view></view>
       </view>
     </view>
     <canvas canvas-id="writer-image-export" id="writer-image-export" class="export-canvas" :style="{ width: canvasWidth + 'px', height: canvasHeight + 'px' }"></canvas>
@@ -42,10 +42,12 @@ import { computed, getCurrentInstance, nextTick, ref, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { getBook } from '../../src/store/library'
 import { takeImageExport } from '../../src/store/image-export-draft'
-import { themeClass } from '../../src/store/preferences'
+import { loadPreferences, themeClass } from '../../src/store/preferences'
+import { fontFamilyFor, loadSelectedFont } from '../../src/services/fonts'
 import { createTextPng } from '../../src/services/image-export'
 
 const instance = getCurrentInstance()
+const prefs = loadPreferences()
 const bookId = ref(''), source = ref('book'), articleIndex = ref(0), articleListOpen = ref(false)
 const start = ref(0), end = ref(0), style = ref('light'), showBookInfo = ref(false)
 const working = ref(false), generatedPath = ref(''), savedPath = ref(''), errorMessage = ref('')
@@ -57,6 +59,7 @@ const articleText = computed(() => currentEntry.value?.article.paragraphs.join('
 const selectedText = computed(() => articleText.value.slice(start.value, end.value))
 
 onLoad(options => {
+  loadSelectedFont().catch(() => {})
   bookId.value = options.bookId || ''
   source.value = options.source || 'book'
   if (source.value === 'selection') {
@@ -97,7 +100,7 @@ function captureSelection() {
 }
 async function renderPng() {
   const info = showBookInfo.value ? `${book.value.title} · ${book.value.author || '佚名'} · ${currentEntry.value.article.title || '无题正文'}` : ''
-  return createTextPng({ canvasId: 'writer-image-export', instance: instance.proxy, text: selectedText.value, info, style: style.value,
+  return createTextPng({ canvasId: 'writer-image-export', instance: instance.proxy, text: selectedText.value, info, style: style.value, fontFamily: fontFamilyFor(prefs.font),
     resize: layout => { canvasWidth.value = layout.width; canvasHeight.value = layout.height }, nextFrame: nextTick })
 }
 async function generate() {
@@ -121,12 +124,13 @@ async function saveImage() {
 }
 async function shareImage() {
   if (!generatedPath.value) return
-  try {
-    const path = await ensureAlbumCopy()
-    uni.shareWithSystem({ type: 'image', imageUrl: path,
-      fail: error => { errorMessage.value = `${error?.errMsg || '系统分享失败'}。图片已保存到相册，可从相册继续分享。` }
-    })
-  } catch (error) { errorMessage.value = error.message }
+  // #ifdef APP-PLUS
+  try { plus.runtime.openFile(generatedPath.value, {}, error => { errorMessage.value = `${error?.message || '无法打开图片'}。可以先保存到相册再分享。` }) }
+  catch (error) { errorMessage.value = error.message || '无法打开图片' }
+  // #endif
+  // #ifndef APP-PLUS
+  errorMessage.value = '请在 Android App 中打开图片'
+  // #endif
 }
 </script>
 

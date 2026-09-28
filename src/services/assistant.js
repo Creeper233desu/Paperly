@@ -1,10 +1,11 @@
 import { documentFromParagraphs, paragraphsFromDocument } from '../utils/text.js'
 
-export const DEFAULT_AI_PROMPT = '你是「纸间」的写作助手。请用简体中文回答，尊重作者的语气、视角和情节设定。讨论文字时指出具体依据，给出可操作的建议；不要把推测说成书中事实。只有作者明确要求修改时才调用工具。正文文字可用 insert_text、delete_text；篇章结构可用 add_chapter、delete_chapter、rename_chapter、add_article、delete_article、rename_article。操作必须限于当前书本，目标 ID 必须来自提供的目录；文字定位片段必须与原文完全一致且唯一。不要宣称改动已经生效。所有提议会先作为差异展示，作者接受后才写入。'
+export const DEFAULT_AI_PROMPT = '你是「纸间」的写作助手。请用简体中文回答，尊重作者的语气、视角和情节设定。讨论文字时指出具体依据，给出可操作的建议；不要把推测说成书中事实。只有作者明确要求修改时才调用工具。正文文字可用 insert_text、delete_text；清理空白段落使用 remove_blank_lines（支持当前正文或整本书，不要求唯一片段）；篇章结构可用 add_chapter、delete_chapter、rename_chapter、add_article、delete_article、rename_article。操作必须限于当前书本，目标 ID 必须来自提供的目录；普通文字定位片段必须与原文完全一致且唯一。不要宣称改动已经生效。所有提议会先作为差异展示，作者接受后才写入。'
 
 export const TEXT_TOOLS = [
   { type: 'function', function: { name: 'insert_text', description: '在当前书本的某篇正文中插入文字。after 必须是正文中唯一存在的原文片段；在正文开头插入时将 after 设为空字符串。', parameters: { type: 'object', properties: { article_id: { type: 'string' }, after: { type: 'string' }, text: { type: 'string' } }, required: ['article_id', 'after', 'text'] } } },
   { type: 'function', function: { name: 'delete_text', description: '删除当前书本某篇正文中唯一匹配的原文片段。', parameters: { type: 'object', properties: { article_id: { type: 'string' }, text: { type: 'string' } }, required: ['article_id', 'text'] } } },
+  { type: 'function', function: { name: 'remove_blank_lines', description: '删除正文中所有空白段落。scope=book 处理整本书；scope=article 处理指定正文。不要求空行唯一匹配。', parameters: { type: 'object', properties: { scope: { type: 'string', enum: ['book', 'article'] }, article_id: { type: 'string' } }, required: ['scope'] } } },
   { type: 'function', function: { name: 'add_chapter', description: '在当前书本末尾新建章节。', parameters: { type: 'object', properties: { title: { type: 'string' } }, required: ['title'] } } },
   { type: 'function', function: { name: 'delete_chapter', description: '删除当前书本中的章节及其全部正文。', parameters: { type: 'object', properties: { chapter_id: { type: 'string' } }, required: ['chapter_id'] } } },
   { type: 'function', function: { name: 'rename_chapter', description: '修改当前书本中的章节名称。', parameters: { type: 'object', properties: { chapter_id: { type: 'string' }, title: { type: 'string' } }, required: ['chapter_id', 'title'] } } },
@@ -28,6 +29,16 @@ export function bookContext(book, currentArticleId, currentDraft, selectedText =
 export function planBookEdit(book, call, currentArticleId, currentDraft) {
   if (call.error) throw new Error(call.error)
   if (['add_chapter', 'delete_chapter', 'rename_chapter', 'add_article', 'delete_article', 'rename_article'].includes(call.name)) return planStructureEdit(book, call)
+  if (call.name === 'remove_blank_lines') {
+    const hit = book.chapters.flatMap(chapter => chapter.articles.map(article => ({ chapter, article }))).find(item => item.article.id === call.args?.article_id)
+    if (!hit) throw new Error('目标正文不属于当前书本')
+    const before = hit.article.id === currentArticleId ? currentDraft : documentFromParagraphs(hit.article.paragraphs)
+    const source = paragraphsFromDocument(before)
+    const cleaned = source.filter(line => line.trim())
+    const after = documentFromParagraphs(cleaned.length ? cleaned : [''])
+    if (after === before) throw new Error('这篇正文没有多余空行')
+    return { chapterId: hit.chapter.id, articleId: hit.article.id, title: hit.article.title || '无题正文', before, after, cursor: 0, description: `清理 ${source.length - cleaned.length} 个空白段落`, removed: `空白段落 × ${source.length - cleaned.length}`, added: '', contextBefore: '', contextAfter: '', paragraphs: paragraphsFromDocument(after), operation: { name: call.name, args: { article_id: hit.article.id } } }
+  }
   if (!['insert_text', 'delete_text'].includes(call.name)) throw new Error('不支持的操作')
   const hit = book.chapters.flatMap(chapter => chapter.articles.map(article => ({ chapter, article }))).find(item => item.article.id === call.args?.article_id)
   if (!hit) throw new Error('目标正文不属于当前书本')
@@ -41,6 +52,16 @@ export function planBookEdit(book, call, currentArticleId, currentDraft) {
   const position = call.name === 'insert_text' ? (target ? at + target.length : 0) : at
   const after = call.name === 'insert_text' ? before.slice(0, position) + inserted + before.slice(position) : before.slice(0, at) + before.slice(at + target.length)
   return { chapterId: hit.chapter.id, articleId: hit.article.id, title: hit.article.title || '无题正文', before, after, cursor: position + inserted.length, description: call.name === 'insert_text' ? `增添 ${inserted.length} 字` : `删除 ${target.length} 字`, excerpt: call.name === 'insert_text' ? inserted : target, removed: call.name === 'delete_text' ? target : '', added: inserted, contextBefore: before.slice(Math.max(0, position - 44), position), contextAfter: before.slice(position + (call.name === 'delete_text' ? target.length : 0), position + (call.name === 'delete_text' ? target.length : 0) + 44), paragraphs: paragraphsFromDocument(after), operation: { name: call.name, args: { ...call.args } } }
+}
+
+export function planBookEdits(book, call, currentArticleId, currentDraft) {
+  if (call.name !== 'remove_blank_lines' || call.args?.scope !== 'book') return [planBookEdit(book, call, currentArticleId, currentDraft)]
+  const proposals = []
+  for (const chapter of book.chapters) for (const article of chapter.articles) {
+    try { proposals.push(planBookEdit(book, { name: 'remove_blank_lines', args: { article_id: article.id } }, currentArticleId, currentDraft)) }
+    catch (error) { if (!/没有多余空行/.test(error.message)) throw error }
+  }
+  return proposals
 }
 
 export function rebaseBookEdit(book, proposal, currentArticleId, currentDraft) {

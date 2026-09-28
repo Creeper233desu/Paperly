@@ -252,9 +252,9 @@ function replaceEvery() { if (!searchQuery.value) return; const result = replace
 @media (prefers-reduced-motion:reduce) { .ai-dock,.ai-dock :deep(.glyph) { transition:none; } }
 .editor-header { position:sticky; top:var(--status-bar-height); z-index:21; box-sizing:border-box; background:var(--writer-bg); border-bottom:1px solid transparent; transition:background .25s ease,opacity .2s ease; }
 .pinch-lock { width:39px; height:39px; box-sizing:border-box; display:flex; align-items:center; justify-content:center; }
-.lock-icon { position:relative; width:13px; height:11px; margin-top:7px; border:2px solid currentColor; border-radius:3px; box-sizing:border-box; }
-.lock-icon::before { content:''; position:absolute; left:1px; bottom:7px; width:7px; height:8px; border:2px solid currentColor; border-bottom:0; border-radius:6px 6px 0 0; transition:transform .2s ease; }
-.lock-icon.unlocked::before { transform:translate(5px,-2px) rotate(34deg); }
+.lock-icon { position:relative; width:16px; height:13px; margin-top:6px; border:2px solid currentColor; border-radius:3px; box-sizing:border-box; }
+.lock-icon::before { content:''; position:absolute; left:2px; bottom:9px; width:8px; height:9px; border:2px solid currentColor; border-bottom:0; border-radius:7px 7px 0 0; box-sizing:border-box; transition:transform .2s ease; }
+.lock-icon.unlocked::before { transform:translateX(7px); }
 .editor-dock { width:min(650px,calc(100vw - 32px)); box-sizing:border-box; }
 .dock-scroll { min-width:0; flex:1; white-space:nowrap; }
 .dock-scroll-content { width:max-content; display:flex; align-items:center; gap:9px; }

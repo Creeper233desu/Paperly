@@ -1,7 +1,7 @@
 import { reactive } from 'vue'
-import { applyStructureToSnapshot, bookContext, DEFAULT_AI_PROMPT, planBookEdit, rebaseBookEdit } from '../services/assistant.js'
+import { applyStructureToSnapshot, bookContext, DEFAULT_AI_PROMPT, planBookEdits, rebaseBookEdit } from '../services/assistant.js'
 import { documentFromParagraphs } from '../utils/text.js'
-import { buildChatRequest, createChatAccumulator, streamChat } from '../services/ai-providers.js'
+import { buildChatRequest, createChatAccumulator, requestCompleteChat, streamChat } from '../services/ai-providers.js'
 import { createPacedReveal } from '../utils/paced-reveal.js'
 
 const KEY = 'paperwriter.assistantSessions.v1'
@@ -123,24 +123,28 @@ export function sendAssistantMessage({ book, articleId, draft, selectedText = ''
   const accumulator = createChatAccumulator(request.provider, current => reveal.push(current))
   const task = streamChat(request, event => accumulator.feed(event))
     .then(async () => {
-      const result = accumulator.finish()
-      reveal.push({ content: result.content || (!result.calls.length ? '模型没有返回文字内容。' : ''), thinking: result.thinking })
+      let result = accumulator.finish()
+      if (!result.content.trim() && !result.calls.length) result = await requestCompleteChat(request)
+      reveal.push({ content: result.content || (result.calls.length ? '' : '服务没有返回可显示内容，请重试。'), thinking: result.thinking })
       await reveal.finish()
       const workingBook = JSON.parse(JSON.stringify(bookSnapshot))
       let workingDraft = draft
+      const proposalCountBefore = session.proposals.length
       for (const call of result.calls) {
         try {
-          const proposal = planBookEdit(workingBook, call, articleId, workingDraft)
-          session.proposals.push(proposal)
-          if (proposal.kind === 'structure') applyStructureToSnapshot(workingBook, proposal)
-          else {
-            const article = workingBook.chapters.flatMap(chapter => chapter.articles).find(item => item.id === proposal.articleId)
-            if (article) article.paragraphs = proposal.paragraphs
-            if (proposal.articleId === articleId) workingDraft = proposal.after
+          for (const proposal of planBookEdits(workingBook, call, articleId, workingDraft)) {
+            session.proposals.push(proposal)
+            if (proposal.kind === 'structure') applyStructureToSnapshot(workingBook, proposal)
+            else {
+              const article = workingBook.chapters.flatMap(chapter => chapter.articles).find(item => item.id === proposal.articleId)
+              if (article) article.paragraphs = proposal.paragraphs
+              if (proposal.articleId === articleId) workingDraft = proposal.after
+            }
           }
         }
         catch (error) { session.proposals.push({ title: '无法定位正文', description: call.name || '修改', error: error.message }) }
       }
+      if (!answer.content && result.calls.length) answer.content = session.proposals.length > proposalCountBefore ? `已生成 ${session.proposals.length - proposalCountBefore} 项修改提案，请逐项审阅。` : '没有找到需要修改的内容。'
       return result
     })
     .catch(async error => {

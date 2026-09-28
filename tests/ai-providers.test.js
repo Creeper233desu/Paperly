@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { AI_PROVIDERS, buildChatRequest, createChatAccumulator, createSseDecoder, fetchProviderModels, streamChat } from '../src/services/ai-providers.js'
+import { AI_PROVIDERS, buildChatRequest, createChatAccumulator, createSseDecoder, fetchProviderModels, flushActiveStreams, streamChat } from '../src/services/ai-providers.js'
 import { prepareImageExport, takeImageExport } from '../src/store/image-export-draft.js'
 
 test('provider model lists come from the selected endpoint and are not fixed in the app', async () => {
@@ -31,7 +31,7 @@ test('OpenAI-compatible and Anthropic requests include scoped text and structure
   assert.equal(openai.url, 'https://api.openai.com/v1/responses')
   assert.equal(openai.data.reasoning.effort, 'high')
   assert.equal(openai.data.reasoning.summary, 'auto')
-  const toolNames = ['insert_text', 'delete_text', 'add_chapter', 'delete_chapter', 'rename_chapter', 'add_article', 'delete_article', 'rename_article']
+  const toolNames = ['insert_text', 'delete_text', 'remove_blank_lines', 'add_chapter', 'delete_chapter', 'rename_chapter', 'add_article', 'delete_article', 'rename_article']
   assert.deepEqual(openai.data.tools.map(item => item.name), toolNames)
   const anthropic = buildChatRequest({ provider: 'anthropic', apiKey: 'key', model: 'claude-sonnet-4-6', effort: 'medium' }, 'system', [{ role: 'user', content: 'hello' }])
   assert.equal(anthropic.url, 'https://api.anthropic.com/v1/messages')
@@ -106,6 +106,21 @@ test('the app XHR transport dispatches progress before completion', async () => 
   globalThis.plus = { net: { XMLHttpRequest: FakeXHR } }
   await streamChat({ url: 'https://example.com', headers: {}, data: {} }, event => seen.push(JSON.parse(event.data).choices[0].delta.content))
   assert.deepEqual(seen, ['前', 'still running', '后'])
+  delete globalThis.plus
+})
+
+test('foreground flush completes a deferred Android stream callback', async () => {
+  class DeferredXHR {
+    open() {}
+    setRequestHeader() {}
+    send() { this.readyState = 4; this.status = 200; this.responseText = 'data: {"choices":[{"delta":{"content":"继续"}}]}\n\n' }
+  }
+  globalThis.plus = { net: { XMLHttpRequest: DeferredXHR } }
+  const received = []
+  const pending = streamChat({ url: 'https://example.com', headers: {}, data: {} }, event => received.push(JSON.parse(event.data).choices[0].delta.content))
+  flushActiveStreams()
+  await pending
+  assert.deepEqual(received, ['继续'])
   delete globalThis.plus
 })
 

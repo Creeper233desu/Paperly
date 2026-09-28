@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { editDocument } from '../src/utils/text.js'
-import { applyStructureToSnapshot, bookContext, planBookEdit, rebaseBookEdit, validateStructureProposal } from '../src/services/assistant.js'
+import { applyStructureToSnapshot, bookContext, planBookEdit, planBookEdits, rebaseBookEdit, validateStructureProposal } from '../src/services/assistant.js'
 import { createTextPng, layoutImageText, paintTextImage } from '../src/services/image-export.js'
 
 test('corner quotes pair at the caret', () => {
@@ -44,6 +44,18 @@ test('AI chapter and article proposals stay scoped and reject stale destructive 
   assert.equal(validateStructureProposal(draft, remove), false)
   assert.throws(() => applyStructureToSnapshot(draft, remove), /已变化/)
   assert.throws(() => planBookEdit(draft, { name: 'delete_article', args: { article_id: 'outside' } }, 'a', '甲乙丙'), /不属于当前书本/)
+})
+
+test('blank-line cleanup plans every affected article without requiring a unique anchor', () => {
+  const draft = { chapters: [{ id: 'c', title: '章', articles: [
+    { id: 'a', title: '一', paragraphs: ['甲', '', '乙', ''] },
+    { id: 'b', title: '二', paragraphs: ['丙', '  ', '丁'] },
+    { id: 'c', title: '三', paragraphs: ['完整'] }
+  ] }] }
+  const proposals = planBookEdits(draft, { name: 'remove_blank_lines', args: { scope: 'book' } }, 'a', '甲\n\n乙\n')
+  assert.equal(proposals.length, 2)
+  assert.deepEqual(proposals.map(item => item.after), ['甲\n乙', '丙\n丁'])
+  assert.equal(rebaseBookEdit(draft, proposals[0], 'a', '甲\n\n乙\n').after, '甲\n乙')
 })
 
 test('custom AI prompt is included with current book context', () => {

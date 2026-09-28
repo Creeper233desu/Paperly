@@ -1,6 +1,7 @@
 <script>
 import { initStore } from './src/store/library'
 import { applyTheme } from './src/store/preferences'
+import { flushActiveStreams } from './src/services/ai-providers'
 
 export default {
   onLaunch() {
@@ -10,6 +11,7 @@ export default {
   },
   onShow() {
     applyTheme()
+    flushActiveStreams()
   }
 }
 </script>

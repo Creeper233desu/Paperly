@@ -185,6 +185,49 @@ export function createChatAccumulator(provider, onUpdate = () => {}) {
   return { feed, finish, result }
 }
 
+const activeStreamReaders = new Set()
+
+// Android may defer XHR progress/completion callbacks while the app is in background.
+export function flushActiveStreams() { for (const read of [...activeStreamReaders]) read() }
+
+export function parseCompleteChat(provider, data) {
+  if (provider === 'openai-responses') {
+    const output = data?.output || []
+    return {
+      content: output.filter(item => item.type === 'message').flatMap(item => item.content || []).filter(item => item.type === 'output_text').map(item => item.text || '').join(''),
+      thinking: output.filter(item => item.type === 'reasoning').flatMap(item => item.summary || []).map(item => item.text || '').join('\n'),
+      calls: output.filter(item => item.type === 'function_call').map(item => ({ name: item.name, args: JSON.parse(item.arguments || '{}') }))
+    }
+  }
+  if (provider === 'anthropic') return {
+    content: (data?.content || []).filter(item => item.type === 'text').map(item => item.text || '').join(''),
+    thinking: (data?.content || []).filter(item => item.type === 'thinking').map(item => item.thinking || '').join('\n'),
+    calls: (data?.content || []).filter(item => item.type === 'tool_use').map(item => ({ name: item.name, args: item.input || {} }))
+  }
+  const message = data?.choices?.[0]?.message || {}
+  return { content: message.content || '', thinking: message.reasoning_content || '', calls: (message.tool_calls || []).map(item => ({ name: item.function?.name, args: JSON.parse(item.function?.arguments || '{}') })) }
+}
+
+export function requestCompleteChat(request) {
+  return new Promise((resolve, reject) => {
+    if (typeof plus === 'undefined' || !plus.net?.XMLHttpRequest) return reject(new Error('当前运行环境不支持模型请求'))
+    const xhr = new plus.net.XMLHttpRequest()
+    try {
+      xhr.open('POST', request.url, true)
+      xhr.timeout = 180000
+      for (const [name, value] of Object.entries(request.headers)) xhr.setRequestHeader(name, value)
+      xhr.onload = () => {
+        if (xhr.status < 200 || xhr.status >= 300) return reject(new Error(`模型服务返回 ${xhr.status}`))
+        try { resolve(parseCompleteChat(request.provider, JSON.parse(xhr.responseText || '{}'))) }
+        catch (error) { reject(new Error(`无法解析模型响应：${error.message}`)) }
+      }
+      xhr.onerror = () => reject(new Error('网络请求中断'))
+      xhr.ontimeout = () => reject(new Error('模型响应超时'))
+      xhr.send(JSON.stringify({ ...request.data, stream: false }))
+    } catch (error) { reject(error) }
+  })
+}
+
 // The request lives in the logic layer, independently of editor/sidebar components.
 export function streamChat(request, onEvent) {
   return new Promise((resolve, reject) => {
@@ -201,13 +244,9 @@ export function streamChat(request, onEvent) {
         catch (error) { fail(error) }
       }
     }
-    const fail = error => { if (!settled) { settled = true; reject(error instanceof Error ? error : new Error(String(error))) } }
-    xhr.onprogress = ingest
-    xhr.onreadystatechange = () => { if (xhr.readyState === 3) ingest() }
-    xhr.onerror = () => fail(new Error('网络请求中断'))
-    xhr.ontimeout = () => fail(new Error('模型响应超时'))
-    xhr.onload = () => {
-      if (settled) return
+    const fail = error => { if (!settled) { settled = true; activeStreamReaders.delete(resume); reject(error instanceof Error ? error : new Error(String(error))) } }
+    const complete = (force = false) => {
+      if (settled || (!force && xhr.readyState !== 4)) return
       try {
         ingest()
         if (settled) return
@@ -216,9 +255,16 @@ export function streamChat(request, onEvent) {
           try { message = JSON.parse(xhr.responseText).error?.message || message } catch (_) { /* keep status */ }
           throw new Error(message)
         }
-        decoder.finish(); settled = true; resolve()
+        decoder.finish(); settled = true; activeStreamReaders.delete(resume); resolve()
       } catch (error) { fail(error) }
     }
+    const resume = () => { ingest(); complete() }
+    activeStreamReaders.add(resume)
+    xhr.onprogress = ingest
+    xhr.onreadystatechange = () => { if (xhr.readyState === 3) ingest(); else if (xhr.readyState === 4) complete() }
+    xhr.onerror = () => fail(new Error('网络请求中断'))
+    xhr.ontimeout = () => fail(new Error('模型响应超时'))
+    xhr.onload = () => complete(true)
     try {
       xhr.open('POST', request.url, true)
       xhr.timeout = 180000

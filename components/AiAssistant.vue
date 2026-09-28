@@ -5,12 +5,12 @@
     <view class="menu-scrim" :class="{ visible: sessionMenuOpen || modelMenuOpen || effortMenuOpen || contextMenuOpen }" @tap="closeMenus" />
     <view class="pop-list session-list" :class="{ open: sessionMenuOpen }"><view class="menu-caption">当前书籍的会话</view><view v-for="item in bookSessions" :key="item.id" class="session-option" :class="{ active: item.id === session?.id }" @tap="switchSession(item.id)"><view class="session-label"><text>{{ item.title }}</text><small>{{ item.pending ? '回复中' : `${item.messages.length} 条消息` }}</small></view><view class="session-delete" aria-label="删除会话" @tap.stop="askDelete(item)"><AssistantGlyph name="close" /></view></view></view>
     <view v-if="selectedText" class="assistant-selection"><text>正在讨论的文字</text><view>{{ selectedText }}</view><text class="selection-clear" @tap="$emit('clear-selection')">清除选区</text></view>
-    <scroll-view class="assistant-messages" scroll-y :scroll-into-view="scrollTarget">
+    <scroll-view class="assistant-messages" scroll-y :scroll-top="scrollTop"><view class="assistant-scroll-content">
       <view v-if="!session?.messages.length" class="assistant-empty"><view class="assistant-star"><AssistantGlyph name="sparkle" /></view><view>从一个问题开始</view><text>可以讨论表达和情节，也可以提出增添或删除正文的修改。修改会由你确认。</text></view>
       <view v-for="(message, index) in session?.messages || []" :key="index" class="assistant-message" :class="message.role"><text class="message-role">{{ message.role === 'user' ? '你' : message.model || '写作助手' }}</text><view v-if="message.thinking" class="thinking-block"><text>思考过程 · 模型返回</text><view>{{ message.thinking }}</view></view><view class="message-text">{{ message.content || (message.streaming ? '正在生成回复…' : '') }}<text v-if="message.streaming" class="stream-caret">▍</text></view></view>
       <view v-for="(proposal, index) in session?.proposals || []" :key="index" class="proposal-card" :class="{ resolved: proposal.status && proposal.status !== 'pending' }"><view class="proposal-label">{{ proposal.status === 'accepted' ? '✓ 已接受' : proposal.status === 'rejected' ? '× 已拒绝' : proposal.kind === 'structure' ? '待确认的篇章修改' : '待确认的正文修改' }}</view><view class="proposal-title">{{ proposal.title }} · {{ proposal.description }}</view><view class="proposal-diff"><text>{{ proposal.contextBefore }}</text><text v-if="proposal.removed" class="diff-removed">− {{ proposal.removed }}</text><text v-if="proposal.added" class="diff-added">＋ {{ proposal.added }}</text><text>{{ proposal.contextAfter }}</text></view><view v-if="proposal.error && (!proposal.status || proposal.status === 'pending')" class="proposal-error">{{ proposal.error }}</view><view v-if="!proposal.status || proposal.status === 'pending'" class="proposal-actions"><view @tap="rejectProposal(index)">拒绝</view><view v-if="!proposal.error" @tap="$emit('apply', index)">接受修改</view></view></view>
-      <view :id="scrollAnchor" class="scroll-anchor"></view>
-    </scroll-view>
+      <view class="scroll-anchor"></view>
+    </view></scroll-view>
     <view class="assistant-composer"><textarea v-model="draft" auto-height maxlength="4000" placeholder="描述想讨论的内容，或需要修改的地方…" /><view class="composer-foot"><view class="composer-selectors"><view class="model-trigger" :class="{ selected: modelMenuOpen }" @tap="toggleMenu('model')"><text>{{ profile?.model || '选择模型' }}</text><AssistantGlyph name="chevron" :open="modelMenuOpen" /></view><view v-if="supportsReasoning(profile)" class="effort-trigger" :class="{ selected: effortMenuOpen }" @tap="toggleMenu('effort')"><text>{{ effortLabel(profile?.effort) }}</text><AssistantGlyph name="chevron" :open="effortMenuOpen" /></view></view><view class="send-button" :class="{ disabled: session?.pending || !draft.trim(), pending: session?.pending }" :aria-label="session?.pending ? '回复中' : '发送消息'" @tap="send"><view v-if="session?.pending" class="send-pulse" /><AssistantGlyph v-else name="send" /></view></view><view class="context-trigger" :class="{ selected: contextMenuOpen }" @tap="toggleMenu('context')"><view class="context-ring" :style="{ '--context-fill': `${usage.percent}%` }"><view /></view><text>上下文约 {{ formatTokenCount(usage.total) }}{{ usage.window ? ` / ${formatTokenCount(usage.window)}` : '' }} tokens</text><AssistantGlyph name="chevron" :open="contextMenuOpen" /></view></view>
     <view class="pop-list model-list" :class="{ open: modelMenuOpen }"><view class="menu-caption">选择模型</view><view v-if="!aiProfiles.profiles.length" class="empty-model" @tap="openSettings">先到设置添加模型配置</view><view v-for="item in aiProfiles.profiles" :key="item.id" class="profile-group"><text>{{ item.name }} · {{ providerInfo(item.provider).name }}</text><view v-for="model in item.models" :key="model" :class="{ active: profile?.id === item.id && profile?.model === model }" @tap="chooseModel(item, model)">{{ model }}</view><view v-if="!item.models.length" class="empty-model" @tap="openSettings">在设置中获取模型列表</view></view></view>
     <view class="pop-list effort-list" :class="{ open: effortMenuOpen }"><view class="menu-caption">思考强度</view><view v-for="option in effortOptions" :key="option" class="effort-item" :class="{ active: (profile?.effort || 'auto') === option }" @tap="chooseEffort(option)">{{ effortLabel(option) }}</view></view>
@@ -20,7 +20,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, getCurrentInstance, nextTick, onUnmounted, ref, watch } from 'vue'
 import AssistantGlyph from './AssistantGlyph.vue'
 import { bookContext } from '../src/services/assistant.js'
 import { contextUsage, formatTokenCount } from '../src/utils/context-usage.js'
@@ -31,7 +31,8 @@ import { activeAssistantSession, assistantSessions, deleteAssistantSession, newA
 const props = defineProps({ book: Object, articleId: String, body: String, selectedText: String, systemPrompt: String, fullscreen: Boolean, open: Boolean })
 const emit = defineEmits(['close', 'clear-selection', 'apply', 'toggle-fullscreen'])
 loadAiProfiles()
-const draft = ref(''), scrollTarget = ref(''), scrollAnchor = ref('assistant-end-0'), modelMenuOpen = ref(false), effortMenuOpen = ref(false), contextMenuOpen = ref(false), sessionMenuOpen = ref(false), deletingSession = ref(null)
+const instance = getCurrentInstance()
+const draft = ref(''), scrollTop = ref(0), modelMenuOpen = ref(false), effortMenuOpen = ref(false), contextMenuOpen = ref(false), sessionMenuOpen = ref(false), deletingSession = ref(null)
 const profile = computed(() => activeAiProfile())
 const session = computed(() => props.book?.id ? activeAssistantSession(props.book.id) : null)
 const bookSessions = computed(() => { const bookId = props.book?.id; return bookId ? assistantSessions.sessions.filter(item => item.bookId === bookId).sort((a, b) => b.updatedAt - a.updatedAt) : [] })
@@ -45,11 +46,24 @@ const usage = computed(() => {
 function effortLabel(value) { return ({ auto: '自动', low: '低', medium: '中', high: '高', max: '最高' })[value || 'auto'] || '自动' }
 function closeMenus() { sessionMenuOpen.value = false; modelMenuOpen.value = false; effortMenuOpen.value = false; contextMenuOpen.value = false }
 function toggleMenu(which) { const menus = { session: sessionMenuOpen, model: modelMenuOpen, effort: effortMenuOpen, context: contextMenuOpen }; const next = !menus[which].value; closeMenus(); menus[which].value = next }
-let scrollRevision = 0
-function scrollToBottom() { nextTick(() => { scrollAnchor.value = `assistant-end-${++scrollRevision}`; nextTick(() => { scrollTarget.value = scrollAnchor.value }) }) }
+let scrollRevision = 0, scrollTimer = null
+function scrollToBottom() {
+  if (scrollTimer) return
+  scrollTimer = setTimeout(() => {
+    scrollTimer = null
+    nextTick(() => {
+      const query = uni.createSelectorQuery().in(instance.proxy)
+      query.select('.assistant-scroll-content').boundingClientRect(rect => {
+        if (rect?.height) scrollTop.value = Math.ceil(rect.height) + 100 + ++scrollRevision
+      }).exec()
+    })
+  }, 36)
+}
 watch(() => props.open, open => { if (open) scrollToBottom(); else closeMenus() }, { immediate: true })
+watch(() => props.fullscreen, () => { if (props.open) scrollToBottom() })
 watch(() => [session.value?.id, session.value?.messages.length, session.value?.messages.at(-1)?.content.length, session.value?.messages.at(-1)?.thinking?.length, session.value?.proposals.length], () => { if (props.open) scrollToBottom() })
 watch(() => props.selectedText, value => { if (value && props.open) scrollToBottom() })
+onUnmounted(() => clearTimeout(scrollTimer))
 function createSession() { if (props.book?.id) newAssistantSession(props.book.id); sessionMenuOpen.value = false; scrollToBottom() }
 function switchSession(id) { selectAssistantSession(props.book.id, id); sessionMenuOpen.value = false; scrollToBottom() }
 function chooseModel(item, model) { saveAiProfile({ ...item, model }); selectAiProfile(item.id); closeMenus() }

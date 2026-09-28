@@ -2,9 +2,14 @@ const WIDTH = 1080
 const LEFT = 88
 const TEXT_WIDTH = WIDTH - LEFT * 2
 
-export function layoutImageText(ctx, text, info = '') {
+function setCanvasFont(ctx, size, family) {
+  ctx.setFontSize(size)
+  if (family) ctx.font = `${size}px ${family}`
+}
+
+export function layoutImageText(ctx, text, info = '', fontFamily = '') {
   if (!String(text).trim()) throw new Error('请先选择文字')
-  ctx.setFontSize(34)
+  setCanvasFont(ctx, 34, fontFamily)
   const lines = []
   for (const paragraph of String(text).replace(/\r\n?/g, '\n').split('\n')) {
     if (!paragraph) { lines.push(''); continue }
@@ -18,7 +23,7 @@ export function layoutImageText(ctx, text, info = '') {
   const top = info ? 218 : 150
   const height = Math.max(460, top + lines.length * 62 + 140)
   if (height > 8000) throw new Error('选中文字过长，请缩小范围后导出')
-  return { width: WIDTH, height, top, info, lines }
+  return { width: WIDTH, height, top, info, lines, fontFamily }
 }
 
 export function paintTextImage(ctx, layout, style) {
@@ -28,28 +33,28 @@ export function paintTextImage(ctx, layout, style) {
   ctx.setFillStyle(dark ? '#f0eee8' : '#252a32')
   if (layout.info) {
     ctx.setGlobalAlpha(.62)
-    ctx.setFontSize(24)
+    setCanvasFont(ctx, 24, layout.fontFamily)
     ctx.fillText(layout.info.slice(0, 48), 88, 93)
     ctx.setGlobalAlpha(1)
     ctx.setFillStyle(dark ? '#657d9f' : '#b6c3d4')
     ctx.fillRect(88, 123, 48, 3)
     ctx.setFillStyle(dark ? '#f0eee8' : '#252a32')
   }
-  ctx.setFontSize(34)
+  setCanvasFont(ctx, 34, layout.fontFamily)
   layout.lines.forEach((line, index) => { if (line) ctx.fillText(line, 88, layout.top + index * 62) })
   const foot = layout.height - 67
   ctx.setFillStyle(dark ? '#879fbe' : '#536787')
   ctx.fillRect(88, foot + 10, 40, 2)
-  ctx.setFontSize(24)
+  setCanvasFont(ctx, 24, layout.fontFamily)
   ctx.fillText('纸间', 831, foot)
-  ctx.setFontSize(15)
+  setCanvasFont(ctx, 15, layout.fontFamily)
   ctx.fillText('PAPERWRITER', 895, foot - 2)
 }
 
-export async function createTextPng({ canvasId, instance, text, info = '', style = 'light', resize, nextFrame, settle = () => new Promise(resolve => setTimeout(resolve, 80)), api = uni }) {
+export async function createTextPng({ canvasId, instance, text, info = '', style = 'light', fontFamily = '', resize, nextFrame, settle = () => new Promise(resolve => setTimeout(resolve, 80)), api = uni }) {
   const ctx = api.createCanvasContext(canvasId, instance)
   if (!ctx) throw new Error('无法建立图片画布')
-  const layout = layoutImageText(ctx, text, info)
+  const layout = layoutImageText(ctx, text, info, fontFamily)
   resize(layout)
   await nextFrame()
   await settle()

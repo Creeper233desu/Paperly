@@ -36,6 +36,29 @@ test('a streaming reply remains in the book session while the editor is gone', a
   delete globalThis.plus
 })
 
+test('empty background stream retries as a complete response before showing an error', async () => {
+  const storage = new Map()
+  globalThis.uni = { getStorageSync: key => storage.get(key), setStorageSync: (key, value) => storage.set(key, value) }
+  let calls = 0
+  class FakeXHR {
+    open() {}
+    setRequestHeader() {}
+    send(body) {
+      calls += 1
+      const request = JSON.parse(body)
+      this.status = 200
+      this.responseText = request.stream ? '' : JSON.stringify({ choices: [{ message: { content: '后台恢复后的回答' } }] })
+      this.onload()
+    }
+  }
+  globalThis.plus = { net: { XMLHttpRequest: FakeXHR } }
+  const book = { id: 'recover-book', title: '书', chapters: [{ id: 'chapter', title: '章', articles: [{ id: 'article', title: '篇', paragraphs: ['正文'] }] }] }
+  await sendAssistantMessage({ book, articleId: 'article', draft: '正文', profile: { provider: 'deepseek', apiKey: 'key', model: 'model', effort: 'auto' }, content: '继续写' })
+  assert.equal(calls, 2)
+  assert.equal(activeAssistantSession(book.id).messages.at(-1).content, '后台恢复后的回答')
+  delete globalThis.plus
+})
+
 test('multiple AI edits are planned in order and remaining proposals follow accepted text', async () => {
   const storage = new Map()
   globalThis.uni = { getStorageSync: key => storage.get(key), setStorageSync: (key, value) => storage.set(key, value) }
