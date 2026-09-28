@@ -20,11 +20,20 @@
         ],
         "splashscreen" : {
             "alwaysShowBeforeRender" : true,
-            "waiting" : true,
+            "waiting" : false,
             "autoclose" : true,
             "delay" : 0
         },
         "distribute" : {
+            "splashscreen" : {
+                "androidStyle" : "default",
+                "androidNavigationBarColor" : "#000000",
+                "android" : {
+                    "hdpi" : "static/splash/hdpi.9.png",
+                    "xhdpi" : "static/splash/xhdpi.9.png",
+                    "xxhdpi" : "static/splash/xxhdpi.9.png"
+                }
+            },
             "android" : {
                 "minSdkVersion" : 21
             },
