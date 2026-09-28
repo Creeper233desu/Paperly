@@ -2,7 +2,7 @@
   <view class="assistant-panel" :class="{ fullscreen }">
     <view class="assistant-head"><view><text class="assistant-kicker">纸间 · 写作助手</text><view class="assistant-title">和你的文字聊聊</view></view><view class="head-actions"><view class="head-action" :aria-label="fullscreen ? '退出全屏' : '全屏显示'" @tap="$emit('toggle-fullscreen')"><AssistantGlyph name="window" :expanded="fullscreen" /></view><view class="head-action" aria-label="关闭助手" @tap="$emit('close')"><AssistantGlyph name="close" /></view></view></view>
     <view class="assistant-bar"><view class="bar-choice" :class="{ selected: sessionMenuOpen }" @tap="toggleMenu('session')"><text>{{ session?.title || '新对话' }}</text><AssistantGlyph name="chevron" :open="sessionMenuOpen" /></view><view class="bar-new" @tap="createSession"><AssistantGlyph name="plus" /><text>新对话</text></view></view>
-    <view class="menu-scrim" :class="{ visible: sessionMenuOpen || modelMenuOpen || effortMenuOpen || contextMenuOpen }" @tap="closeMenus" />
+    <view class="menu-scrim" :class="{ visible: sessionMenuOpen || modelMenuOpen || effortMenuOpen || contextMenuOpen || approvalMenuOpen }" @tap="closeMenus" />
     <view class="pop-list session-list" :class="{ open: sessionMenuOpen }"><view class="menu-caption">当前书籍的会话</view><view v-for="item in bookSessions" :key="item.id" class="session-option" :class="{ active: item.id === session?.id }" @tap="switchSession(item.id)"><view class="session-label"><text>{{ item.title }}</text><small>{{ item.pending ? '回复中' : `${item.messages.length} 条消息` }}</small></view><view class="session-delete" aria-label="删除会话" @tap.stop="askDelete(item)"><AssistantGlyph name="close" /></view></view></view>
     <view v-if="selectedText" class="assistant-selection"><text>正在讨论的文字</text><view>{{ selectedText }}</view><text class="selection-clear" @tap="$emit('clear-selection')">清除选区</text></view>
     <scroll-view class="assistant-messages" scroll-y :scroll-top="scrollTop"><view class="assistant-scroll-content">
@@ -11,10 +11,12 @@
       <view v-for="(proposal, index) in session?.proposals || []" :key="index" class="proposal-card" :class="{ resolved: proposal.status && proposal.status !== 'pending' }"><view class="proposal-label">{{ proposal.status === 'accepted' ? '✓ 已接受' : proposal.status === 'rejected' ? '× 已拒绝' : proposal.kind === 'structure' ? '待确认的篇章修改' : '待确认的正文修改' }}</view><view class="proposal-title">{{ proposal.title }} · {{ proposal.description }}</view><view class="proposal-diff"><text>{{ proposal.contextBefore }}</text><text v-if="proposal.removed" class="diff-removed">− {{ proposal.removed }}</text><text v-if="proposal.added" class="diff-added">＋ {{ proposal.added }}</text><text>{{ proposal.contextAfter }}</text></view><view v-if="proposal.error && (!proposal.status || proposal.status === 'pending')" class="proposal-error">{{ proposal.error }}</view><view v-if="!proposal.status || proposal.status === 'pending'" class="proposal-actions"><view @tap="rejectProposal(index)">拒绝</view><view v-if="!proposal.error" @tap="$emit('apply', index)">接受修改</view></view></view>
       <view class="scroll-anchor"></view>
     </view></scroll-view>
-    <view class="assistant-composer"><textarea v-model="draft" auto-height maxlength="4000" placeholder="描述想讨论的内容，或需要修改的地方…" /><view class="composer-foot"><view class="composer-selectors"><view class="model-trigger" :class="{ selected: modelMenuOpen }" @tap="toggleMenu('model')"><text>{{ profile?.model || '选择模型' }}</text><AssistantGlyph name="chevron" :open="modelMenuOpen" /></view><view v-if="supportsReasoning(profile)" class="effort-trigger" :class="{ selected: effortMenuOpen }" @tap="toggleMenu('effort')"><text>{{ effortLabel(profile?.effort) }}</text><AssistantGlyph name="chevron" :open="effortMenuOpen" /></view></view><view class="send-button" :class="{ disabled: session?.pending || !draft.trim(), pending: session?.pending }" :aria-label="session?.pending ? '回复中' : '发送消息'" @tap="send"><view v-if="session?.pending" class="send-pulse" /><AssistantGlyph v-else name="send" /></view></view><view class="context-trigger" :class="{ selected: contextMenuOpen }" @tap="toggleMenu('context')"><view class="context-ring" :style="{ '--context-fill': `${usage.percent}%` }"><view /></view><text>上下文约 {{ formatTokenCount(usage.total) }}{{ usage.window ? ` / ${formatTokenCount(usage.window)}` : '' }} tokens</text><AssistantGlyph name="chevron" :open="contextMenuOpen" /></view></view>
+    <view class="assistant-composer"><textarea v-model="draft" auto-height maxlength="4000" placeholder="描述想讨论的内容，或需要修改的地方…" /><view class="composer-foot"><view class="composer-selectors"><view class="model-trigger" :class="{ selected: modelMenuOpen }" @tap="toggleMenu('model')"><text>{{ profile?.model || '选择模型' }}</text><AssistantGlyph name="chevron" :open="modelMenuOpen" /></view><view v-if="supportsReasoning(profile)" class="effort-trigger" :class="{ selected: effortMenuOpen }" @tap="toggleMenu('effort')"><text>{{ effortLabel(profile?.effort) }}</text><AssistantGlyph name="chevron" :open="effortMenuOpen" /></view></view><view class="send-button" :class="{ disabled: session?.pending || !draft.trim(), pending: session?.pending }" :aria-label="session?.pending ? '回复中' : '发送消息'" @tap="send"><view v-if="session?.pending" class="send-pulse" /><AssistantGlyph v-else name="send" /></view></view><view class="composer-meta"><view class="approval-trigger" :class="{ selected: approvalMenuOpen || prefs.aiApprovalMode === 'full' }" @tap="toggleMenu('approval')"><text>{{ prefs.aiApprovalMode === 'full' ? '完全访问' : '修改需确认' }}</text><AssistantGlyph name="chevron" :open="approvalMenuOpen" /></view><view class="context-trigger" :class="{ selected: contextMenuOpen }" @tap="toggleMenu('context')"><view class="context-ring" :style="{ '--context-fill': `${usage.percent}%` }"><view /></view><text>上下文约 {{ formatTokenCount(usage.total) }}{{ usage.window ? ` / ${formatTokenCount(usage.window)}` : '' }} tokens</text><AssistantGlyph name="chevron" :open="contextMenuOpen" /></view></view></view>
     <view class="pop-list model-list" :class="{ open: modelMenuOpen }"><view class="menu-caption">选择模型</view><view v-if="!aiProfiles.profiles.length" class="empty-model" @tap="openSettings">先到设置添加模型配置</view><view v-for="item in aiProfiles.profiles" :key="item.id" class="profile-group"><text>{{ item.name }} · {{ providerInfo(item.provider).name }}</text><view v-for="model in item.models" :key="model" :class="{ active: profile?.id === item.id && profile?.model === model }" @tap="chooseModel(item, model)">{{ model }}</view><view v-if="!item.models.length" class="empty-model" @tap="openSettings">在设置中获取模型列表</view></view></view>
     <view class="pop-list effort-list" :class="{ open: effortMenuOpen }"><view class="menu-caption">思考强度</view><view v-for="option in effortOptions" :key="option" class="effort-item" :class="{ active: (profile?.effort || 'auto') === option }" @tap="chooseEffort(option)">{{ effortLabel(option) }}</view></view>
     <view class="pop-list context-list" :class="{ open: contextMenuOpen }"><view class="menu-caption">下次请求的上下文估算</view><view class="context-row"><text>书本内容与提示词</text><text>{{ formatTokenCount(usage.book) }}</text></view><view class="context-row"><text>较早对话摘要</text><text>{{ formatTokenCount(usage.older) }}</text></view><view class="context-row"><text>近期对话</text><text>{{ formatTokenCount(usage.recent) }}</text></view><view class="context-row"><text>正在输入</text><text>{{ formatTokenCount(usage.question) }}</text></view><view class="context-total"><text>预计使用</text><text>≈ {{ formatTokenCount(usage.total) }} tokens</text></view><view class="context-note">依据文字长度估算，实际用量由模型分词和服务商计算。{{ usage.window ? '比例基于设置中的窗口上限。' : '可在模型配置中填写窗口上限。' }}</view></view>
+    <view class="pop-list approval-list" :class="{ open: approvalMenuOpen }"><view class="menu-caption">AI 修改权限</view><view class="approval-option" :class="{ active: prefs.aiApprovalMode !== 'full' }" @tap="chooseApproval('review')"><strong>修改需确认</strong><text>先看差异，再决定是否写入</text></view><view class="approval-option" :class="{ active: prefs.aiApprovalMode === 'full' }" @tap="chooseApproval('full')"><strong>完全访问</strong><text>自动修改当前书本，包括删除内容</text></view></view>
+    <view v-if="fullWarningOpen" class="delete-shade" @tap="fullWarningOpen = false"><view class="delete-card" @tap.stop><view class="delete-heading">开启完全访问？</view><view class="delete-message">AI 的增删正文和篇章操作会直接写入当前书本，不再逐项等待确认。模型可能理解有误，删除章节或正文也会立即生效。请先备份重要内容；无法安全定位的修改会保留为待处理卡片。</view><view class="delete-actions"><view @tap="fullWarningOpen = false">保持确认</view><view class="destructive" @tap="confirmFullAccess">开启完全访问</view></view></view></view>
     <view v-if="deletingSession" class="delete-shade" @tap="deletingSession = null"><view class="delete-card" @tap.stop><view class="delete-heading">删除这段会话？</view><view class="delete-message">“{{ deletingSession.title }}”的消息和待确认修改将一起删除。</view><view class="delete-actions"><view @tap="deletingSession = null">取消</view><view class="destructive" @tap="confirmDelete">删除会话</view></view></view></view>
   </view>
 </template>
@@ -24,6 +26,7 @@ import { computed, getCurrentInstance, nextTick, onUnmounted, ref, watch } from 
 import AssistantGlyph from './AssistantGlyph.vue'
 import { bookContext } from '../src/services/assistant.js'
 import { contextUsage, formatTokenCount } from '../src/utils/context-usage.js'
+import { loadPreferences, preferences, updatePreferences } from '../src/store/preferences.js'
 import { aiProfiles, activeAiProfile, loadAiProfiles, saveAiProfile, selectAiProfile } from '../src/store/ai-profiles.js'
 import { providerInfo, supportsReasoning } from '../src/services/ai-providers.js'
 import { activeAssistantSession, assistantSessions, deleteAssistantSession, newAssistantSession, setAssistantProposalStatus, selectAssistantSession, sendAssistantMessage } from '../src/store/assistant-sessions.js'
@@ -31,21 +34,25 @@ import { activeAssistantSession, assistantSessions, deleteAssistantSession, newA
 const props = defineProps({ book: Object, articleId: String, body: String, selectedText: String, systemPrompt: String, fullscreen: Boolean, open: Boolean })
 const emit = defineEmits(['close', 'clear-selection', 'apply', 'toggle-fullscreen'])
 loadAiProfiles()
+loadPreferences()
+const prefs = preferences
 const instance = getCurrentInstance()
-const draft = ref(''), scrollTop = ref(0), modelMenuOpen = ref(false), effortMenuOpen = ref(false), contextMenuOpen = ref(false), sessionMenuOpen = ref(false), deletingSession = ref(null)
+const draft = ref(''), scrollTop = ref(0), modelMenuOpen = ref(false), effortMenuOpen = ref(false), contextMenuOpen = ref(false), approvalMenuOpen = ref(false), fullWarningOpen = ref(false), sessionMenuOpen = ref(false), deletingSession = ref(null)
 const profile = computed(() => activeAiProfile())
 const session = computed(() => props.book?.id ? activeAssistantSession(props.book.id) : null)
 const bookSessions = computed(() => { const bookId = props.book?.id; return bookId ? assistantSessions.sessions.filter(item => item.bookId === bookId).sort((a, b) => b.updatedAt - a.updatedAt) : [] })
 const effortOptions = computed(() => profile.value?.provider === 'deepseek' ? ['auto', 'high', 'max'] : ['auto', 'low', 'medium', 'high'])
 const usage = computed(() => {
   if (!props.book) return contextUsage({})
-  const system = bookContext(props.book, props.articleId, props.body || '', props.selectedText || '', props.systemPrompt)
+  const system = bookContext(props.book, props.articleId, props.body || '', props.selectedText || '', props.systemPrompt, prefs.aiApprovalMode)
   const messages = (session.value?.messages || []).filter(item => item.role === 'user' || (item.role === 'assistant' && !item.streaming)).slice(-14)
   return contextUsage({ system, summary: session.value?.summary || '', messages, draft: draft.value, limit: profile.value?.contextWindow })
 })
 function effortLabel(value) { return ({ auto: '自动', low: '低', medium: '中', high: '高', max: '最高' })[value || 'auto'] || '自动' }
-function closeMenus() { sessionMenuOpen.value = false; modelMenuOpen.value = false; effortMenuOpen.value = false; contextMenuOpen.value = false }
-function toggleMenu(which) { const menus = { session: sessionMenuOpen, model: modelMenuOpen, effort: effortMenuOpen, context: contextMenuOpen }; const next = !menus[which].value; closeMenus(); menus[which].value = next }
+function closeMenus() { sessionMenuOpen.value = false; modelMenuOpen.value = false; effortMenuOpen.value = false; contextMenuOpen.value = false; approvalMenuOpen.value = false }
+function toggleMenu(which) { const menus = { session: sessionMenuOpen, model: modelMenuOpen, effort: effortMenuOpen, context: contextMenuOpen, approval: approvalMenuOpen }; const next = !menus[which].value; closeMenus(); menus[which].value = next }
+function chooseApproval(mode) { closeMenus(); if (mode === 'full' && prefs.aiApprovalMode !== 'full') fullWarningOpen.value = true; else updatePreferences({ aiApprovalMode: mode }) }
+function confirmFullAccess() { updatePreferences({ aiApprovalMode: 'full' }); fullWarningOpen.value = false }
 let scrollRevision = 0, scrollTimer = null
 function scrollToBottom() {
   if (scrollTimer) return
@@ -80,7 +87,7 @@ function send() {
   if (!content || session.value?.pending || !props.book) return
   draft.value = ''
   try {
-    sendAssistantMessage({ book: props.book, articleId: props.articleId, draft: props.body, selectedText: props.selectedText, profile: profile.value, systemPrompt: props.systemPrompt, content }).catch(() => {})
+    sendAssistantMessage({ book: props.book, articleId: props.articleId, draft: props.body, selectedText: props.selectedText, profile: profile.value, systemPrompt: props.systemPrompt, approvalMode: prefs.aiApprovalMode, content }).catch(() => {})
     emit('clear-selection')
     scrollToBottom()
   } catch (error) { draft.value = content; uni.showToast({ title: error.message, icon: 'none' }) }
@@ -154,4 +161,15 @@ function send() {
 .proposal-card.resolved .proposal-label { color:var(--muted); }
 .send-button { width:34px; height:34px; padding:0; box-sizing:border-box; border-radius:50%; display:flex; align-items:center; justify-content:center; background:#5276ad; color:#fff; box-shadow:0 3px 10px rgba(60,96,157,.24); transition:transform .2s ease,box-shadow .2s ease; }
 .send-button:active { transform:scale(.9); }
+.composer-meta { display:flex; align-items:center; justify-content:space-between; gap:4px; min-width:0; }
+.approval-trigger { display:flex; align-items:center; gap:4px; padding:4px 6px; border-radius:7px; color:var(--muted); font-size:10px; white-space:nowrap; transition:background .2s ease,color .2s ease; }
+.approval-trigger.selected { background:var(--accent-soft); color:var(--accent); }
+.approval-trigger :deep(.glyph) { width:12px; height:12px; }
+.approval-list { bottom:126px; }
+.approval-option { display:flex; flex-direction:column; gap:4px; margin:2px 0; transition:background .2s ease,transform .2s ease; }
+.approval-option:active { transform:scale(.98); }
+.approval-option strong { font-size:12px; }
+.approval-option text { color:var(--muted); font-size:10px; }
+.approval-option.active { background:var(--accent-soft); color:var(--accent); }
+@media (prefers-reduced-motion:reduce) { .approval-trigger,.approval-option { transition:none; } }
 </style>

@@ -3,14 +3,21 @@ import { applyStructureToSnapshot, bookContext, DEFAULT_AI_PROMPT, planBookEdits
 import { documentFromParagraphs } from '../utils/text.js'
 import { buildChatRequest, createChatAccumulator, requestCompleteChat, streamChat } from '../services/ai-providers.js'
 import { createPacedReveal } from '../utils/paced-reveal.js'
+import { applyAssistantProposal } from '../services/assistant-apply.js'
 
 const KEY = 'paperwriter.assistantSessions.v1'
 export const assistantSessions = reactive({ sessions: [], activeByBook: {} })
 const requests = new Map()
+const editors = new Map()
 let loaded = false, saveTimer = null
 const uid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
 function persist() { clearTimeout(saveTimer); saveTimer = null; uni.setStorageSync(KEY, JSON.stringify({ sessions: assistantSessions.sessions, activeByBook: assistantSessions.activeByBook })) }
 function saveSoon() { clearTimeout(saveTimer); saveTimer = setTimeout(persist, 350) }
+
+export function registerAssistantEditor(bookId, editor) {
+  editors.set(bookId, editor)
+  return () => { if (editors.get(bookId) === editor) editors.delete(bookId) }
+}
 
 export function loadAssistantSessions() {
   if (loaded) return assistantSessions
@@ -100,7 +107,7 @@ export function compactConversation(session) {
   return completed.slice(olderCount).map(item => ({ role: item.role, content: item.content }))
 }
 
-export function sendAssistantMessage({ book, articleId, draft, selectedText = '', profile, systemPrompt = DEFAULT_AI_PROMPT, content }) {
+export function sendAssistantMessage({ book, articleId, draft, selectedText = '', profile, systemPrompt = DEFAULT_AI_PROMPT, approvalMode = 'review', content }) {
   const session = activeAssistantSession(book.id)
   if (session.pending || requests.has(session.id)) throw new Error('当前对话仍在回复中')
   if (!profile?.apiKey || !profile?.model) throw new Error('请先在设置中配置并选择可用模型')
@@ -110,7 +117,7 @@ export function sendAssistantMessage({ book, articleId, draft, selectedText = ''
   session.messages.push({ role: 'user', content: question, at: Date.now() })
   if (session.title === '新对话') session.title = question.slice(0, 22)
   const history = compactConversation(session)
-  const system = bookContext(bookSnapshot, articleId, draft, selectedText, systemPrompt) + (session.summary ? `\n较早对话摘要（节选）：\n${session.summary}` : '')
+  const system = bookContext(bookSnapshot, articleId, draft, selectedText, systemPrompt, approvalMode) + (session.summary ? `\n较早对话摘要（节选）：\n${session.summary}` : '')
   const request = buildChatRequest(profile, system, history)
   session.messages.push({ role: 'assistant', content: '', thinking: '', streaming: true, at: Date.now(), model: profile.model })
   const answer = session.messages[session.messages.length - 1]
@@ -144,7 +151,23 @@ export function sendAssistantMessage({ book, articleId, draft, selectedText = ''
         }
         catch (error) { session.proposals.push({ title: '无法定位正文', description: call.name || '修改', error: error.message }) }
       }
-      if (!answer.content && result.calls.length) answer.content = session.proposals.length > proposalCountBefore ? `已生成 ${session.proposals.length - proposalCountBefore} 项修改提案，请逐项审阅。` : '没有找到需要修改的内容。'
+      if (approvalMode === 'full') {
+        for (let index = proposalCountBefore; index < session.proposals.length; index++) {
+          const proposal = session.proposals[index]
+          if (proposal.error) continue
+          try {
+            applyAssistantProposal(book.id, proposal, editors.get(book.id))
+            proposal.status = 'accepted'; proposal.resolvedAt = Date.now()
+          } catch (error) { proposal.error = error.message || '自动应用失败' }
+        }
+      }
+      if (!answer.content && result.calls.length) {
+        const added = session.proposals.slice(proposalCountBefore)
+        const applied = added.filter(item => item.status === 'accepted').length
+        answer.content = approvalMode === 'full'
+          ? `已自动应用 ${applied} 项修改${added.length > applied ? `；${added.length - applied} 项无法安全应用，请查看卡片` : ''}。`
+          : added.length ? `已生成 ${added.length} 项修改提案，请逐项审阅。` : '没有找到需要修改的内容。'
+      }
       return result
     })
     .catch(async error => {

@@ -14,7 +14,7 @@ export const TEXT_TOOLS = [
   { type: 'function', function: { name: 'rename_article', description: '修改当前书本中指定正文的篇名。', parameters: { type: 'object', properties: { article_id: { type: 'string' }, title: { type: 'string' } }, required: ['article_id', 'title'] } } }
 ]
 
-export function bookContext(book, currentArticleId, currentDraft, selectedText = '', systemPrompt = DEFAULT_AI_PROMPT) {
+export function bookContext(book, currentArticleId, currentDraft, selectedText = '', systemPrompt = DEFAULT_AI_PROMPT, approvalMode = 'review') {
   let remaining = 42000
   const articles = book.chapters.flatMap(chapter => chapter.articles.map(article => ({
     id: article.id, chapter_id: chapter.id, chapter: chapter.title, title: article.title || '无题正文',
@@ -23,7 +23,8 @@ export function bookContext(book, currentArticleId, currentDraft, selectedText =
   articles.sort((a, b) => Number(b.id === currentArticleId) - Number(a.id === currentArticleId))
   articles.forEach(article => { const limit = Math.min(remaining, article.id === currentArticleId ? 18000 : 1600); article.truncated = article.text.length > limit; article.text = article.text.slice(0, limit); remaining -= article.text.length })
   const chapters = book.chapters.map(chapter => ({ id: chapter.id, title: chapter.title, article_ids: chapter.articles.map(article => article.id) }))
-  return `${systemPrompt.trim() || DEFAULT_AI_PROMPT}\n应用规则：工具调用只会生成提案，作者确认后才会执行；不得操作当前书本之外的内容。\n书名：${book.title}\n作者：${book.author || '未设置'}\n当前正文 ID：${currentArticleId}\n章节目录：${JSON.stringify(chapters)}\n用户选中的文字：${selectedText || '无'}\n书本正文：${JSON.stringify(articles)}`
+  const approvalRule = approvalMode === 'full' ? '当前为完全访问模式：有效工具调用会自动应用到当前书本，无需逐项确认；仅在作者明确要求修改时使用工具。' : '当前为确认模式：工具调用只会生成提案，作者确认后才会执行。'
+  return `${systemPrompt.trim() || DEFAULT_AI_PROMPT}\n应用规则：${approvalRule}不得操作当前书本之外的内容。\n书名：${book.title}\n作者：${book.author || '未设置'}\n当前正文 ID：${currentArticleId}\n章节目录：${JSON.stringify(chapters)}\n用户选中的文字：${selectedText || '无'}\n书本正文：${JSON.stringify(articles)}`
 }
 
 export function planBookEdit(book, call, currentArticleId, currentDraft) {

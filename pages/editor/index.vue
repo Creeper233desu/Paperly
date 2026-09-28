@@ -21,7 +21,7 @@ import { fontFamilyFor, loadSelectedFont } from '../../src/services/fonts'
 import DocumentInput from '../../components/DocumentInput.vue'
 import AiAssistant from '../../components/AiAssistant.vue'
 import AssistantGlyph from '../../components/AssistantGlyph.vue'
-import { refreshAssistantProposals } from '../../src/store/assistant-sessions.js'
+import { refreshAssistantProposals, registerAssistantEditor } from '../../src/store/assistant-sessions.js'
 import { rebaseBookEdit, validateStructureProposal } from '../../src/services/assistant.js'
 import { prepareImageExport } from '../../src/store/image-export-draft'
 import { chooseArticleImage } from '../../src/services/article-images'
@@ -53,10 +53,23 @@ function initialize(options) {
     historyIndex = 0
   }
 }
-onLoad(options => { initialize(options) })
+let unregisterAssistantEditor = null
+onLoad(options => {
+  initialize(options)
+  unregisterAssistantEditor = registerAssistantEditor(options.bookId, {
+    articleId: () => ids.value.article,
+    body: () => body.value,
+    applyText: ready => { commitHistory(); body.value = ready.after; focusAt(ready.cursor, undefined, { preserveScroll: true }); commitHistory(); saveNow() },
+    onStructure: proposal => {
+      const { name, args } = proposal.operation
+      if (name === 'rename_article' && args.article_id === ids.value.article) title.value = args.title
+      if ((name === 'delete_chapter' && args.chapter_id === ids.value.chapter) || (name === 'delete_article' && args.article_id === ids.value.article)) uni.navigateBack()
+    }
+  })
+})
 onReady(() => { if (resumeCursor !== null) focusAt(Math.min(resumeCursor, body.value.length)) })
 onShow(() => { loadSelectedFont().catch(() => {}) })
-onUnload(() => { clearTimeout(historyTimer); clearTimeout(timer); clearTimeout(switchTimer); saveNow() })
+onUnload(() => { clearTimeout(historyTimer); clearTimeout(timer); clearTimeout(switchTimer); saveNow(); unregisterAssistantEditor?.() })
 const article = computed(() => getArticle(ids.value.book, ids.value.chapter, ids.value.article))
 const chapter = computed(() => getChapter(ids.value.book, ids.value.chapter))
 const book = computed(() => getBook(ids.value.book))
