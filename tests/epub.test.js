@@ -17,7 +17,11 @@ test('EPUB 3 imports title, author, cover, nested chapters, body and illustratio
     'OEBPS/images/cover.png': png,
     'OEBPS/images/fig.png': png
   })
-  const book = parseEpub(data, 'fallback.epub')
+  const originalAt = Array.prototype.at
+  Array.prototype.at = undefined
+  let book
+  try { book = parseEpub(data, 'fallback.epub') }
+  finally { Array.prototype.at = originalAt }
   assert.equal(book.title, '雨夜书店')
   assert.equal(book.author, '林遥')
   assert.match(book.cover, /^data:image\/png;base64,/) 

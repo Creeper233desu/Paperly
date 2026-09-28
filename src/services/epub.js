@@ -164,7 +164,7 @@ export function parseEpub(input, fileName = '导入的书籍.epub') {
     const splits = entries.filter(entry => entry.fragment && blocks.some(block => block.anchor === entry.fragment))
     const ranges = splits.length > 1 ? splits.map(entry => ({ entry, start: blocks.findIndex(block => block.anchor === entry.fragment) })).sort((a, b) => a.start - b.start) : []
     if (ranges.length && ranges[0].start > 0) ranges.unshift({ entry: entries[0], start: 0 })
-    const slices = ranges.length ? ranges.map((range, index) => ({ entry: range.entry, blocks: blocks.slice(range.start, ranges[index + 1]?.start ?? blocks.length) })) : [{ entry: entries.at(-1), blocks }]
+    const slices = ranges.length ? ranges.map((range, index) => ({ entry: range.entry, blocks: blocks.slice(range.start, ranges[index + 1]?.start ?? blocks.length) })) : [{ entry: entries[entries.length - 1], blocks }]
     for (const part of slices) {
       if (!part.blocks.length) continue
       const entry = part.entry
@@ -177,7 +177,7 @@ export function parseEpub(input, fileName = '导入的书籍.epub') {
   if (!sections.length) throw new Error('EPUB 中没有可阅读的正文')
   const groups = []
   for (const section of sections) {
-    let group = groups.at(-1)
+    let group = groups[groups.length - 1]
     if (!group || group.title !== section.chapterTitle) { group = { title: section.chapterTitle, articles: [] }; groups.push(group) }
     group.articles.push({ id: section.id, title: section.title || section.chapterTitle })
   }

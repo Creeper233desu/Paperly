@@ -70,7 +70,11 @@ function scrollToBottom() {
 }
 watch(() => props.open, open => { if (open) scrollToBottom(); else closeMenus() }, { immediate: true })
 watch(() => props.fullscreen, () => { if (props.open) scrollToBottom() })
-watch(() => [session.value?.id, session.value?.messages.length, session.value?.messages.at(-1)?.content.length, session.value?.messages.at(-1)?.thinking?.length, session.value?.proposals.length], () => { if (props.open) scrollToBottom() })
+watch(() => {
+  const messages = session.value?.messages || []
+  const last = messages[messages.length - 1]
+  return [session.value?.id, messages.length, last?.content.length, last?.thinking?.length, session.value?.proposals.length]
+}, () => { if (props.open) scrollToBottom() })
 watch(() => props.selectedText, value => { if (value && props.open) scrollToBottom() })
 onUnmounted(() => clearTimeout(scrollTimer))
 function createSession() { if (props.book?.id) newAssistantSession(props.book.id); sessionMenuOpen.value = false; scrollToBottom() }

@@ -25,27 +25,25 @@ export function openPdfReader(path) {
   const count = Number(plus.android.invoke(renderer, 'getPageCount'))
   return {
     count,
-    render(index, targetWidth = 1100) {
+    async render(index, targetWidth = 1100) {
       if (closed || index < 0 || index >= count) throw new Error('阅读页码无效')
       const page = plus.android.invoke(renderer, 'openPage', index)
-      let bitmap, output, target
+      let bitmap, output, target, fileName, rasterWidth, rasterHeight
       try {
         const width = Number(plus.android.invoke(page, 'getWidth'))
         const height = Number(plus.android.invoke(page, 'getHeight'))
         if (!width || !height) throw new Error('PDF 页面尺寸无效')
-        const rasterWidth = Math.min(1600, Math.max(480, Math.round(targetWidth)))
-        const rasterHeight = Math.max(1, Math.round(rasterWidth * height / width))
+        rasterWidth = Math.min(1600, Math.max(480, Math.round(targetWidth)))
+        rasterHeight = Math.max(1, Math.round(rasterWidth * height / width))
         bitmap = plus.android.invoke(Bitmap, 'createBitmap', rasterWidth, rasterHeight, Config.ARGB_8888)
         plus.android.invoke(bitmap, 'eraseColor', -1)
         plus.android.invoke(page, 'render', bitmap, null, null, 1)
-        const fileName = `page-${Date.now()}-${++sequence}-${Math.random().toString(36).slice(2, 7)}.jpg`
+        fileName = `page-${Date.now()}-${++sequence}-${Math.random().toString(36).slice(2, 7)}.jpg`
         target = new File(cacheFolder, fileName)
         output = new FileOutputStream(target)
         if (!plus.android.invoke(bitmap, 'compress', CompressFormat.JPEG, 88, output)) throw new Error('PDF 页面绘制失败')
         plus.android.invoke(output, 'flush')
         if (!Number(plus.android.invoke(target, 'length'))) throw new Error('PDF 页面保存失败')
-        cached.push(target)
-        return { src: `_doc/reader-cache/${fileName}`, width: rasterWidth, height: rasterHeight }
       } catch (error) {
         if (target) plus.android.invoke(target, 'delete')
         throw error
@@ -54,6 +52,34 @@ export function openPdfReader(path) {
         if (bitmap) plus.android.invoke(bitmap, 'recycle')
         plus.android.invoke(page, 'close')
       }
+      const localPath = `_doc/reader-cache/${fileName}`
+      try {
+        const urls = await new Promise((resolve, reject) => {
+          plus.io.resolveLocalFileSystemURL(localPath, entry => {
+            const remote = entry.toRemoteURL?.() || ''
+            const local = entry.toLocalURL?.() || ''
+            const finish = data => {
+              const src = data || remote || local
+              if (!src) return reject(new Error('无法获取 PDF 页面图片地址'))
+              resolve({ src, fallbackSrc: data ? remote || local : remote ? local : '' })
+            }
+            if (!plus.io.FileReader) return finish('')
+            entry.file(file => {
+              const reader = new plus.io.FileReader()
+              reader.onloadend = event => {
+                const data = String(event.target?.result || reader.result || '')
+                const encoded = data.match(/^data:[^,]*;base64,([\s\S]+)$/i)
+                finish(encoded ? `data:image/jpeg;base64,${encoded[1]}` : '')
+              }
+              reader.onerror = () => finish('')
+              try { reader.readAsDataURL(file) } catch (_) { finish('') }
+            }, () => finish(''))
+          }, () => reject(new Error('无法读取 PDF 页面图片')))
+        })
+        if (closed) throw new Error('阅读器已关闭')
+        cached.push(target)
+        return { ...urls, width: rasterWidth, height: rasterHeight }
+      } catch (error) { plus.android.invoke(target, 'delete'); throw error }
     },
     close() {
       if (closed) return

@@ -30,7 +30,7 @@ export function loadAssistantSessions() {
   } catch (_) { /* new installation */ }
   for (const session of assistantSessions.sessions) if (session.pending) {
     session.pending = false
-    const last = session.messages?.at(-1)
+    const last = session.messages?.[session.messages.length - 1]
     if (last?.role === 'assistant') last.content += '\n请求因应用进程结束而中断。'
   }
   return assistantSessions

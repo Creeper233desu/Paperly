@@ -5,7 +5,7 @@
     <view v-if="showFontSize" class="font-backdrop" @tap="showFontSize = false"></view>
     <view v-if="showFontSize" class="font-size-panel"><view class="font-size-title"><text>阅读字号</text><text>{{ prefs.fontSize }} px</text></view><slider :value="prefs.fontSize" :min="12" :max="36" :step="1" :show-value="false" activeColor="#5774a0" backgroundColor="#dce2eb" @changing="onFontSlider" @change="onFontSlider" /><view class="font-size-range"><text>小</text><text>大</text></view><view class="font-size-hint">{{ pinchLocked ? '点击顶部的锁图标，解锁双指缩放' : '双指缩放已开启' }}</view></view>
     <view class="reader-layout"><view class="reader-toc" :class="{ open: tocOpen }"><view class="toc-head"><text>书籍目录</text><view @tap="tocOpen = false">×</view></view><scroll-view scroll-y class="toc-scroll"><template v-if="pdf"><view v-for="page in pdfCount" :key="page" class="toc-page" :class="{ current: currentIndex === page - 1 }" @tap="select(page - 1)">第 {{ page }} 页</view></template><template v-else><view v-for="(group, groupIndex) in outline" :key="groupIndex" class="toc-group"><view class="toc-chapter">{{ group.title }}</view><view v-for="article in group.articles" :key="article.id" class="toc-article" :class="{ current: sections[currentIndex]?.id === article.id }" @tap="selectById(article.id)">{{ article.title || group.title }}</view></view></template></scroll-view></view>
-      <scroll-view class="reader-content" scroll-y :scroll-into-view="topAnchor" @touchstart="onTouchStart" @touchmove="onTouchMove" @touchend="onTouchEnd"><view :id="topAnchorId" class="reader-top-anchor"></view><view v-if="loading" class="reader-loading">正在准备阅读内容…</view><view v-else-if="error" class="reader-error">{{ error }}</view><view v-else-if="pdf" class="pdf-stage"><image v-if="pdfImage" class="pdf-page" :src="pdfImage.src" :style="{ aspectRatio: `${pdfImage.width} / ${pdfImage.height}` }" mode="widthFix" /><view v-else class="reader-loading">正在绘制这一页…</view><view class="page-label">{{ currentIndex + 1 }} / {{ pdfCount }}</view></view><view v-else-if="currentSection" class="reading-sheet" :style="{ '--reading-font': fontFamilyFor(prefs.font), '--reading-size': `${prefs.fontSize}px` }"><view v-if="currentIndex === 0 && book?.cover" class="opening-cover"><image :src="book.cover" mode="aspectFit" /><view><strong>{{ book.title }}</strong><text>{{ book.author }}</text></view></view><view class="chapter-kicker">{{ currentSection.chapterTitle }}</view><view v-if="currentSection.title && currentSection.title !== currentSection.chapterTitle" class="section-title">{{ currentSection.title }}</view><view v-for="(block, index) in displayBlocks" :key="index" class="read-block" :class="block.type"><image v-if="block.type === 'image' && block.src" :src="block.src" mode="widthFix" /><text v-else-if="block.type !== 'image'">{{ block.text }}</text></view><view class="section-end">— {{ currentIndex + 1 }} / {{ itemCount }} —</view></view><view v-else class="reader-loading">这本书还没有正文。返回书籍页添加章节后即可阅读。</view></scroll-view>
+      <scroll-view class="reader-content" scroll-y :scroll-into-view="topAnchor" @touchstart="onTouchStart" @touchmove="onTouchMove" @touchend="onTouchEnd"><view :id="topAnchorId" class="reader-top-anchor"></view><view v-if="loading" class="reader-loading">正在准备阅读内容…</view><view v-else-if="error" class="reader-error">{{ error }}</view><view v-else-if="pdf" class="pdf-stage"><image v-if="pdfImage && !pdfImageError" class="pdf-page" :src="pdfImage.src" :style="{ aspectRatio: `${pdfImage.width} / ${pdfImage.height}` }" mode="widthFix" @error="onPdfImageError" /><view v-else-if="pdfImageError" class="reader-error pdf-retry" @tap="renderPdfPage">{{ pdfImageError }}，点击重试</view><view v-else class="reader-loading">正在绘制这一页…</view><view class="page-label">{{ currentIndex + 1 }} / {{ pdfCount }}</view></view><view v-else-if="currentSection" class="reading-sheet" :style="{ '--reading-font': fontFamilyFor(prefs.font), '--reading-size': `${prefs.fontSize}px` }"><view v-if="currentIndex === 0 && book?.cover" class="opening-cover"><image :src="book.cover" mode="aspectFit" /><view><strong>{{ book.title }}</strong><text>{{ book.author }}</text></view></view><view class="chapter-kicker">{{ currentSection.chapterTitle }}</view><view v-if="currentSection.title && currentSection.title !== currentSection.chapterTitle" class="section-title">{{ currentSection.title }}</view><view v-for="(block, index) in displayBlocks" :key="index" class="read-block" :class="block.type"><image v-if="block.type === 'image' && block.src" :src="block.src" mode="widthFix" /><text v-else-if="block.type !== 'image'">{{ block.text }}</text></view><view class="section-end">— {{ currentIndex + 1 }} / {{ itemCount }} —</view></view><view v-else class="reader-loading">这本书还没有正文。返回书籍页添加章节后即可阅读。</view></scroll-view>
     </view>
   </view>
 </template>
@@ -25,7 +25,7 @@ loadPreferences()
 const prefs = preferences
 const bookId = ref(''), book = computed(() => getBook(bookId.value))
 const sections = ref([]), outline = ref([]), currentIndex = ref(0), tocOpen = ref(false), showFontSize = ref(false), pinchLocked = ref(true), loading = ref(true), error = ref('')
-const pdf = ref(false), pdfCount = ref(0), pdfImage = ref(null), topAnchor = ref(''), topAnchorId = ref('reader-top-0')
+const pdf = ref(false), pdfCount = ref(0), pdfImage = ref(null), pdfImageError = ref(''), topAnchor = ref(''), topAnchorId = ref('reader-top-0')
 let epub = null, pdfReader = null, renderRevision = 0, anchorRevision = 0, touchStart = null, pinchDistance = 0
 const itemCount = computed(() => pdf.value ? pdfCount.value : sections.value.length)
 const isEpub = computed(() => book.value?.readOnly?.format === 'epub' && !pdf.value)
@@ -81,7 +81,7 @@ onLoad(async options => {
     }
   } catch (cause) { error.value = cause?.message || '无法打开书籍'; loading.value = false; pdfReader?.close(); pdfReader = null }
 })
-onUnload(() => { pdfReader?.close(); pdfReader = null; epub = null })
+onUnload(() => { renderRevision++; pdfReader?.close(); pdfReader = null; epub = null })
 function back() { uni.navigateBack() }
 function toggleToc() { showFontSize.value = false; tocOpen.value = !tocOpen.value }
 function toggleFontSize() { tocOpen.value = false; showFontSize.value = !showFontSize.value }
@@ -99,11 +99,20 @@ function resetScroll() {
 function renderPdfPage() {
   const revision = ++renderRevision
   pdfImage.value = null
-  setTimeout(() => {
+  pdfImageError.value = ''
+  error.value = ''
+  setTimeout(async () => {
     if (!pdfReader || revision !== renderRevision) return
-    try { pdfImage.value = pdfReader.render(currentIndex.value, Math.min(1300, Math.max(800, uni.getSystemInfoSync().windowWidth * 1.5))) }
-    catch (cause) { error.value = cause?.message || 'PDF 页面绘制失败' }
+    try {
+      const result = await pdfReader.render(currentIndex.value, Math.min(1300, Math.max(800, uni.getSystemInfoSync().windowWidth * 1.5)))
+      if (pdfReader && revision === renderRevision) pdfImage.value = result
+    } catch (cause) { if (revision === renderRevision) error.value = cause?.message || 'PDF 页面绘制失败' }
   }, 0)
+}
+function onPdfImageError() {
+  if (!pdfImage.value) return
+  if (pdfImage.value.fallbackSrc && pdfImage.value.src !== pdfImage.value.fallbackSrc) pdfImage.value = { ...pdfImage.value, src: pdfImage.value.fallbackSrc }
+  else pdfImageError.value = 'PDF 页面图片加载失败'
 }
 function select(index) {
   if (index < 0 || index >= itemCount.value) return
@@ -160,7 +169,7 @@ function onTouchEnd(event) {
 .reader-content { height:100%; min-width:0; }.reader-top-anchor { height:1px; }.reader-loading,.reader-error { padding:80px 25px; text-align:center; color:var(--muted); font-size:14px; }.reader-error { color:var(--danger); }
 .reading-sheet { width:min(100%,780px); min-height:100%; box-sizing:border-box; margin:0 auto; padding:52px clamp(25px,7vw,80px) 90px; background:var(--surface); }.chapter-kicker { color:var(--muted); font-size:13px; text-align:center; letter-spacing:.08em; }.section-title { margin:28px 0 42px; text-align:center; font-size:27px; font-weight:650; }.read-block { color:var(--text); font-family:var(--reading-font); font-size:var(--reading-size); line-height:1.9; }.read-block.paragraph { margin:0 0 12px; text-indent:2em; white-space:pre-wrap; overflow-wrap:anywhere; }.read-block.heading { margin:24px 0 16px; font-weight:700; }.read-block.image { margin:28px 0; text-align:center; }.read-block.image image { display:block; width:100%; max-width:100%; max-height:70vh; margin:auto; object-fit:contain; }.section-end { margin:65px 0 0; text-align:center; font-size:11px; color:var(--muted); }
 .opening-cover { display:flex; align-items:center; justify-content:center; gap:24px; margin:0 0 55px; padding-bottom:45px; border-bottom:1px solid var(--line); }.opening-cover image { width:112px; height:155px; border-radius:8px; box-shadow:0 12px 25px var(--shadow); }.opening-cover>view { display:flex; flex-direction:column; gap:10px; }.opening-cover strong { font-size:22px; }.opening-cover text { color:var(--muted); font-size:12px; }
-.pdf-stage { display:flex; flex-direction:column; align-items:center; padding:22px 18px 50px; }.pdf-page { display:block; width:min(100%,900px); background:#fff; box-shadow:0 12px 38px var(--shadow); }.page-label { margin:20px; color:var(--muted); font-size:12px; }.toc-backdrop { display:none; }
+.pdf-stage { display:flex; flex-direction:column; align-items:center; padding:22px 18px 50px; }.pdf-page { display:block; width:min(100%,900px); background:#fff; box-shadow:0 12px 38px var(--shadow); }.pdf-retry { color:var(--accent); }.page-label { margin:20px; color:var(--muted); font-size:12px; }.toc-backdrop { display:none; }
 @media (max-width:760px) { .reader-header { padding:0 14px; gap:7px; }.back-action { min-width:28px; }.back-action text { display:none; }.header-actions { gap:2px; }.toc-button { padding:7px; }.toc-button text { display:none; }.font-size-panel { right:10px; }.reader-layout { display:block; }.reader-toc { position:fixed; z-index:12; left:0; top:var(--status-bar-height); bottom:0; width:min(330px,86vw); transform:translateX(-110%); box-shadow:14px 0 40px var(--shadow); transition:transform .28s cubic-bezier(.2,.8,.2,1); }.reader-toc.open { transform:translateX(0); }.toc-head>view { display:block; font-size:22px; }.toc-backdrop { display:block; position:fixed; z-index:11; inset:0; background:rgba(7,10,18,.43); }.reader-content { height:calc(100vh - var(--status-bar-height) - 64px); }.reading-sheet { padding:37px 24px 75px; }.opening-cover { flex-direction:column; text-align:center; } }
 @media (prefers-reduced-motion:reduce) { .reader-toc,.toc-article,.toc-page,.page-control,.font-button,.pinch-lock,.lock-icon::before { transition:none; animation:none; }.font-size-panel { animation:none; } }
 </style>
