@@ -34,7 +34,7 @@ export function loadAiProfiles() {
 export function activeAiProfile() { loadAiProfiles(); return aiProfiles.profiles.find(profile => profile.id === aiProfiles.activeId) || null }
 export function saveAiProfile(input) {
   loadAiProfiles()
-  const profile = { id: input.id || makeId(), provider: input.provider || 'openai', name: input.name?.trim() || providerInfo(input.provider).name, apiKey: input.apiKey?.trim() || '', baseUrl: input.baseUrl?.trim() || providerInfo(input.provider).baseUrl, model: input.model || '', models: Array.isArray(input.models) ? input.models : [], effort: input.effort || 'auto' }
+  const profile = { id: input.id || makeId(), provider: input.provider || 'openai', name: input.name?.trim() || providerInfo(input.provider).name, apiKey: input.apiKey?.trim() || '', baseUrl: input.baseUrl?.trim() || providerInfo(input.provider).baseUrl, model: input.model || '', models: Array.isArray(input.models) ? input.models : [], effort: input.effort || 'auto', contextWindow: Math.max(0, Math.min(2000000, Number(input.contextWindow) || 0)) }
   const index = aiProfiles.profiles.findIndex(item => item.id === profile.id)
   if (index < 0) aiProfiles.profiles.push(profile)
   else aiProfiles.profiles.splice(index, 1, profile)

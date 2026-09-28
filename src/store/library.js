@@ -32,6 +32,23 @@ export function addBook(title) {
   const book = { id: uid(), title: title.trim(), author: '', description: '', cover: '', createdAt: now(), updatedAt: now(), chapters: [] }
   state.books.unshift(book); persist(); return book
 }
+export function importBook(content, details = {}) {
+  initStore()
+  const title = String(details.title || content?.title || '').trim()
+  if (!title) throw new Error('请填写书名')
+  if (!Array.isArray(content?.chapters) || !content.chapters.length) throw new Error('文档中没有可导入的章节')
+  const timestamp = now()
+  const chapters = content.chapters.map(group => ({
+    id: uid(), title: String(group.title || '正文').trim(),
+    articles: (group.articles || []).map(item => ({ id: uid(), title: String(item.title || '').trim(), paragraphs: (item.paragraphs || []).map(String), updatedAt: timestamp }))
+  }))
+  const first = chapters.flatMap(group => group.articles.map(item => ({ chapterId: group.id, articleId: item.id })))[0]
+  const book = { id: uid(), title, author: String(details.author ?? content.author ?? '').trim(), description: String(details.description ?? content.description ?? '').trim(), cover: '', createdAt: timestamp, updatedAt: timestamp, chapters, ...(first ? { lastEdited: { ...first, cursor: 0, updatedAt: timestamp } } : {}) }
+  state.books.unshift(book)
+  try { persist() }
+  catch (error) { state.books.shift(); throw new Error(`保存导入书籍失败：${error.message || '请检查存储空间'}`) }
+  return book
+}
 export function updateBook(id, patch) {
   const book = getBook(id); if (!book) return
   for (const key of ['title', 'author', 'description', 'cover']) {

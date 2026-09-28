@@ -31,8 +31,8 @@
             <view class="font-toolbar"><view class="modal-intro">点选字体即可查看效果并应用</view><view class="import-link" @tap="importCustom">＋ 导入 TTF / OTF</view></view>
             <view class="font-grid">
               <view v-for="item in fontChoices" :key="item.id" class="font-choice card" :class="{ selected: prefs.font === item.id }" @tap="chooseFont(item.id)" @longpress="item.custom && askRemove(item.id)">
-                <view class="font-sample" :style="{ fontFamily: fontFamilyFor(item.id) }">春风又绿江南岸</view>
-                <view class="font-verse" :style="{ fontFamily: fontFamilyFor(item.id) }">在纸上，写下属于你的下一句。</view>
+                <view class="font-sample" :style="{ fontFamily: fontFamilyFor(item.id) }">夕阳、某处，花火。</view>
+                <view class="font-verse" :style="{ fontFamily: fontFamilyFor(item.id) }">写下属于你的下一句。</view>
                 <view class="font-bottom"><text>{{ item.label }}</text><text v-if="item.custom" class="remove-font" @tap.stop="askRemove(item.id)">移除</text><text v-else-if="prefs.font === item.id" class="selected-mark">✓</text></view>
                 <view v-if="fontPreviewErrors[item.id]" class="font-error">预览失败，点选重试</view>
               </view>
@@ -64,6 +64,7 @@
             <view class="ai-setting-card card"><view class="option-name">API Key</view><view class="option-note">只保存在本机，多个配置各自保存密钥</view><input class="field" password :value="profileDraft.apiKey" placeholder="填写此服务商的 API Key" @input="profileDraft.apiKey = $event.detail.value; aiTestResult = ''" /><view class="option-name ai-field-label">API 地址</view><input class="field" :value="profileDraft.baseUrl" placeholder="https://.../v1" @input="profileDraft.baseUrl = $event.detail.value" /></view>
             <view class="ai-setting-card card"><view class="model-heading"><view><view class="option-name">可用模型</view><view class="option-note">从当前服务商实时获取</view></view><view @tap="testAi">{{ aiTesting ? '获取中…' : '获取模型 / 测试连接' }}</view></view><view v-if="profileDraft.models.length" class="model-options"><view v-for="id in profileDraft.models" :key="id" class="model-option" :class="{ selected: profileDraft.model === id }" @tap="profileDraft.model = id"><text>{{ id }}</text><text>{{ profileDraft.model === id ? '当前选择' : '点选使用' }}</text></view></view><view v-else class="option-note model-empty">填入密钥后获取模型列表</view></view>
             <view v-if="supportsReasoning(profileDraft)" class="ai-setting-card card"><view class="option-name">思考强度</view><view class="option-note">仅在所选模型支持时传入；思考内容由模型决定是否返回</view><view class="effort-options"><view v-for="level in effortLevels" :key="level" :class="{ selected: profileDraft.effort === level }" @tap="profileDraft.effort = level">{{ { auto:'自动', low:'低', medium:'中', high:'高', max:'最高' }[level] }}</view></view></view>
+            <view class="ai-setting-card card"><view class="option-name">上下文窗口</view><view class="option-note">可选。填写服务商公布的 token 上限后，助手会显示预估使用比例；留空仅显示预估用量。</view><input class="field" type="number" :value="profileDraft.contextWindow || ''" placeholder="例如 128000" @input="profileDraft.contextWindow = $event.detail.value" /></view>
             <view class="ai-setting-card card"><view class="prompt-heading"><view><view class="option-name">系统提示词</view><view class="option-note">定义助手的写作方式和修改边界</view></view><text @tap="promptDraft = DEFAULT_AI_PROMPT">恢复默认</text></view><textarea v-model="promptDraft" class="prompt-input" maxlength="4000" /></view>
             <view class="ai-setting-actions"><view v-if="profileDraft.id" class="ghost-button" @tap="deleteProfile">删除此配置</view><view class="primary-button" @tap="saveAi">保存配置</view></view>
             <view v-if="aiTestResult" class="ai-test-result" :class="{ error: aiTestError }">{{ aiTestResult }}</view>
@@ -101,7 +102,7 @@ defineProps({ embedded: { type: Boolean, default: false } })
 const emit = defineEmits(['modal-change'])
 const prefs = loadPreferences()
 loadAiProfiles()
-const emptyProfile = () => ({ id: '', provider: 'openai', name: '', apiKey: '', baseUrl: providerInfo('openai').baseUrl, model: '', models: [], effort: 'auto' })
+const emptyProfile = () => ({ id: '', provider: 'openai', name: '', apiKey: '', baseUrl: providerInfo('openai').baseUrl, model: '', models: [], effort: 'auto', contextWindow: 0 })
 const profileDraft = ref(emptyProfile()), aiTesting = ref(false), aiTestResult = ref(''), aiTestError = ref(false)
 const effortLevels = computed(() => profileDraft.value.provider === 'deepseek' ? ['auto', 'high', 'max'] : ['auto', 'low', 'medium', 'high'])
 const promptDraft = ref(prefs.aiSystemPrompt || DEFAULT_AI_PROMPT)

@@ -4,6 +4,14 @@
   "private": true,
   "type": "module",
   "description": "Vue 3 uni-app Android writing app for HBuilderX",
-  "scripts": { "test": "node --test tests/*.test.js" },
-  "devDependencies": { "vue": "^3.5.0" }
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  },
+  "devDependencies": {
+    "vue": "^3.5.0"
+  },
+  "dependencies": {
+    "@xmldom/xmldom": "^0.9.12",
+    "fflate": "^0.8.3"
+  }
 }
