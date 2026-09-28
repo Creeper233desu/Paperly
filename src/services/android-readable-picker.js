@@ -40,27 +40,56 @@ export function pickReadableBook() {
   // #endif
 }
 
+export function readEpubBytes(path) {
+  return new Promise((resolve, reject) => {
+    plus.io.resolveLocalFileSystemURL(path, entry => entry.file(file => {
+      if (file.size > 32 * 1024 * 1024) return reject(new Error('EPUB 文件不能超过 32 MB'))
+      const reader = new plus.io.FileReader()
+      reader.onloadend = event => {
+        const data = String(event.target?.result || '')
+        if (!data.startsWith('data:') || !data.includes(',')) return reject(new Error('无法读取 EPUB 文件'))
+        try { resolve(new Uint8Array(uni.base64ToArrayBuffer(data.slice(data.indexOf(',') + 1)))) }
+        catch (_) { reject(new Error('EPUB 文件解码失败')) }
+      }
+      reader.onerror = () => reject(new Error('无法读取 EPUB 文件'))
+      reader.readAsDataURL(file)
+    }, () => reject(new Error('无法打开 EPUB 文件'))), () => reject(new Error('EPUB 文件不存在')))
+  })
+}
+
 async function copyReadableFile(activity, uri) {
   const resolver = activity.getContentResolver()
-  const name = displayName(resolver, uri)
+  const foundName = displayName(resolver, uri)
+  let mime = ''
+  try { mime = String(plus.android.invoke(resolver, 'getType', uri) || '') } catch (_) { /* filename is enough */ }
+  const fallbackFormat = mime === 'application/pdf' ? 'pdf' : mime === 'application/epub+zip' ? 'epub' : ''
+  const name = foundName || (fallbackFormat ? `导入的书籍.${fallbackFormat}` : '')
   const format = name.toLowerCase().match(/\.(pdf|epub)$/)?.[1]
   if (!format) throw new Error('请选择 PDF 或 EPUB 文件')
   const File = plus.android.importClass('java.io.File')
   const FileInputStream = plus.android.importClass('java.io.FileInputStream')
   const FileOutputStream = plus.android.importClass('java.io.FileOutputStream')
+  const Channels = plus.android.importClass('java.nio.channels.Channels')
   const root = plus.io.convertLocalFileSystemURL('_doc/')
   if (!root) throw new Error('无法访问应用文档目录')
   const folder = new File(root, 'reading')
   if (!plus.android.invoke(folder, 'exists') && !plus.android.invoke(folder, 'mkdirs')) throw new Error('无法创建阅读目录')
   const fileName = `book-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${format}`
   const target = new File(folder, fileName)
-  const descriptor = plus.android.invoke(resolver, 'openFileDescriptor', uri, 'r')
-  if (!descriptor) throw new Error('无法打开所选文件')
-  let input, output, inputChannel, outputChannel, copied = 0
+  let descriptor, input, output, inputChannel, outputChannel, copied = 0
   try {
-    input = new FileInputStream(plus.android.invoke(descriptor, 'getFileDescriptor'))
+    try {
+      input = plus.android.invoke(resolver, 'openInputStream', uri)
+      if (input) inputChannel = plus.android.invoke(Channels, 'newChannel', input)
+    } catch (_) { /* Some providers only expose a descriptor. */ }
+    if (!inputChannel) {
+      if (input) plus.android.invoke(input, 'close')
+      descriptor = plus.android.invoke(resolver, 'openFileDescriptor', uri, 'r')
+      if (!descriptor) throw new Error('无法打开所选文件')
+      input = new FileInputStream(plus.android.invoke(descriptor, 'getFileDescriptor'))
+      inputChannel = plus.android.invoke(input, 'getChannel')
+    }
     output = new FileOutputStream(target)
-    inputChannel = plus.android.invoke(input, 'getChannel')
     outputChannel = plus.android.invoke(output, 'getChannel')
     if (!inputChannel || !outputChannel) throw new Error('无法建立文件复制通道')
     while (copied <= MAX_BYTES) {
@@ -78,7 +107,7 @@ async function copyReadableFile(activity, uri) {
     if (input) plus.android.invoke(input, 'close')
     if (outputChannel) plus.android.invoke(outputChannel, 'close')
     if (output) plus.android.invoke(output, 'close')
-    plus.android.invoke(descriptor, 'close')
+    if (descriptor) plus.android.invoke(descriptor, 'close')
   }
   if (!copied || Number(plus.android.invoke(target, 'length')) !== copied) { plus.android.invoke(target, 'delete'); throw new Error('文件复制不完整') }
   return { path: `_doc/reading/${fileName}`, name, format }

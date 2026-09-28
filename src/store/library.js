@@ -55,7 +55,7 @@ export function importReadOnlyBook(file, details = {}) {
   if (!['pdf', 'epub'].includes(file?.format) || !file?.path) throw new Error('只支持 PDF 或 EPUB 文件')
   const title = String(details.title || file.name?.replace(/\.(pdf|epub)$/i, '') || '导入的书籍').trim()
   if (!title) throw new Error('请填写书名')
-  const book = { id: uid(), title, author: String(details.author || '').trim(), description: String(details.description || '').trim(), cover: '', readOnly: { format: file.format, path: file.path, fileName: file.name }, createdAt: now(), updatedAt: now(), chapters: [] }
+  const book = { id: uid(), title, author: String(details.author || '').trim(), description: String(details.description || '').trim(), cover: file.cover || '', readOnly: { format: file.format, path: file.path, fileName: file.name, outline: file.outline || [] }, createdAt: now(), updatedAt: now(), chapters: [] }
   state.books.unshift(book)
   try { persist() } catch (error) { state.books.shift(); throw error }
   return book
@@ -75,6 +75,7 @@ export function deleteBook(id) {
   state.books = state.books.filter(item => item.id !== id); persist()
   removed.forEach(article => recordWordDelta(book.id, book.title, article.id, article.title, -article.words))
   if (book.readOnly?.path && typeof plus !== 'undefined') plus.io.resolveLocalFileSystemURL(book.readOnly.path, entry => entry.remove(() => {}, () => {}), () => {})
+  if (book.readOnly?.format === 'epub' && book.cover?.startsWith('_doc/') && typeof plus !== 'undefined') plus.io.resolveLocalFileSystemURL(book.cover, entry => entry.remove(() => {}, () => {}), () => {})
 }
 export function addChapter(bookId, title, id = uid()) {
   const book = getBook(bookId); if (!book) return null

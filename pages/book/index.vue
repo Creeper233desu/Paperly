@@ -1,8 +1,8 @@
 <template>
   <view class="screen book-screen" :class="themeClass()"><view class="page-wrap">
     <view class="topbar"><text class="back" @tap="back">‹　返回书架</text><view class="book-top-menu" @tap="openBookMenu"><text>更多操作</text><MoreIcon /></view></view>
-    <view v-if="book" class="book-layout"><view class="book-sidebar"><view class="large-cover"><image v-if="book.cover" :src="book.cover" mode="aspectFill" /><view v-else class="large-letter">{{ book.title.slice(0, 1) }}</view><view class="large-spine"></view></view><view class="sidebar-label">当前书籍</view><view class="sidebar-title">{{ book.title }}</view><view class="sidebar-author">{{ book.author || '未设置作者' }}</view><view v-if="book.description" class="sidebar-description">{{ book.description }}</view><view v-if="!book.readOnly" class="sidebar-stats"><view><text class="stat-number">{{ book.chapters.length }}</text><text>章节</text></view><view><text class="stat-number">{{ totalArticles }}</text><text>正文</text></view><view><text class="stat-number">{{ totalWords }}</text><text>字数</text></view></view><view class="sidebar-exports"><view class="sidebar-export" @tap="readBook">{{ readBusy ? '正在打开…' : '阅读整本书　↗' }}</view><view v-if="!book.readOnly" class="sidebar-export" @tap="showExport = true">导出 PDF　↗</view><view v-if="!book.readOnly" class="sidebar-export" @tap="openImageExport">导出图片　↗</view></view></view>
-      <view v-if="book.readOnly" class="book-content read-only-content"><view class="eyebrow">只读资料 · {{ book.readOnly.format.toUpperCase() }}</view><view class="page-title">保留原来的样子。</view><view class="subtle">原文件中的文字、图片和排版会由系统阅读应用呈现。这里不会出现编辑工具、聚焦或写作状态栏。</view><view class="read-only-card card"><view class="read-only-mark">▤</view><view><view class="read-only-name">{{ book.readOnly.fileName }}</view><text>点击下方按钮打开原文件阅读</text></view><view class="primary-button" @tap="readBook">{{ readBusy ? '正在打开…' : '开始阅读' }}</view></view></view>
+    <view v-if="book" class="book-layout"><view class="book-sidebar"><view class="large-cover"><image v-if="book.cover" :src="book.cover" mode="aspectFill" /><view v-else class="large-letter">{{ book.title.slice(0, 1) }}</view><view class="large-spine"></view></view><view class="sidebar-label">当前书籍</view><view class="sidebar-title">{{ book.title }}</view><view class="sidebar-author">{{ book.author || '未设置作者' }}</view><view v-if="book.description" class="sidebar-description">{{ book.description }}</view><view v-if="!book.readOnly" class="sidebar-stats"><view><text class="stat-number">{{ book.chapters.length }}</text><text>章节</text></view><view><text class="stat-number">{{ totalArticles }}</text><text>正文</text></view><view><text class="stat-number">{{ totalWords }}</text><text>字数</text></view></view><view class="sidebar-exports"><view class="sidebar-export" @tap="readBook">{{ book.readOnly ? '阅读原文件' : '阅读整本书' }}　↗</view><view v-if="!book.readOnly" class="sidebar-export" @tap="showExport = true">导出 PDF　↗</view><view v-if="!book.readOnly" class="sidebar-export" @tap="openImageExport">导出图片　↗</view></view></view>
+      <view v-if="book.readOnly" class="book-content read-only-content"><view class="eyebrow">只读资料 · {{ book.readOnly.format.toUpperCase() }}</view><view class="page-title">保留原来的样子。</view><view class="subtle">在纸间阅读原文件内容；阅读页面只保留目录和正文。</view><view class="read-only-card card"><view class="read-only-mark">▤</view><view><view class="read-only-name">{{ book.readOnly.fileName }}</view><text>点击下方按钮进入应用内阅读</text></view><view class="primary-button" @tap="readBook">开始阅读</view></view><view v-if="book.readOnly.outline?.length" class="read-only-outline"><view class="eyebrow">书籍目录</view><view v-for="(group, index) in book.readOnly.outline" :key="index" class="outline-group"><view class="outline-group-title">{{ group.title }}</view><view v-for="item in group.articles" :key="item.id" class="outline-article" @tap="readSection(item.id)">{{ item.title }}</view></view></view></view>
       <view v-else class="book-content"><view class="content-heading"><view><view class="eyebrow">写作目录</view><view class="page-title">章节与正文</view><view class="subtle">继续写下一个片段，或从已有的正文开始。</view></view><view class="new-chapter" @tap="openCreateChapter">＋ 新建章节</view></view><view class="search-box"><text>⌕</text><input v-model="query" placeholder="搜索章节、篇名或正文" confirm-type="search" /></view><view v-if="lastEdited" class="resume-card" @tap="resumeWriting"><view class="resume-mark"><view class="resume-line"></view></view><view class="resume-copy"><text>继续上次写作</text><strong>{{ lastEdited.title }}</strong></view><view class="resume-arrow"></view></view>
       <view v-if="!book.chapters.length" class="empty card">先创建一个章节，再写第一篇正文。</view><view v-for="(chapter, ci) in visibleChapters" :key="chapter.id" class="chapter-card card"><view class="chapter-heading" @tap="toggleChapter(chapter.id)"><view class="chapter-num">{{ String(ci + 1).padStart(2, '0') }}</view><view class="chapter-name">{{ chapter.title }} <text class="chapter-article-count">{{ chapter.articles.length }} 篇</text></view><view class="chapter-caret" :class="{ folded: collapsed[chapter.id] && !query }"></view><MoreIcon class="chapter-action" @tap.stop="openChapterMenu(chapter)" /></view><view v-if="query || !collapsed[chapter.id]" class="chapter-children"><view v-for="article in filteredArticles(chapter)" :key="article.id" class="article-row" @tap="openArticle(chapter.id, article.id)" @longpress="openArticleMenu(chapter, article)"><view class="article-icon"><view></view><view></view></view><view class="article-main"><view class="article-title">{{ article.title || '无题正文' }}</view><view class="article-preview">{{ preview(article) }}</view></view><view class="article-tail"><text>{{ wordCount(article) }} 字</text><MoreIcon class="article-more" @tap.stop="openArticleMenu(chapter, article)" /></view></view><view class="add-article" @tap="startArticle(chapter.id)">＋ 添加正文</view></view></view><view v-if="query && !visibleChapters.length" class="empty">没有找到匹配内容</view></view>
     </view>
@@ -30,7 +30,7 @@ import MoreIcon from '../../components/MoreIcon.vue'
 import ActionMenu from '../../components/ActionMenu.vue'
 import AppDialog from '../../components/AppDialog.vue'
 
-const bookId = ref(''), query = ref(''), menuType = ref(''), dialogType = ref(''), showExport = ref(false), withToc = ref(true), exportResult = ref(null), readBusy = ref(false)
+const bookId = ref(''), query = ref(''), menuType = ref(''), dialogType = ref(''), showExport = ref(false), withToc = ref(true), exportResult = ref(null)
 const collapsed = reactive({})
 const selectedChapter = ref(null), selectedArticle = ref(null), chapterDraftId = ref(''), chapterDraftTitle = ref('')
 const bookDraft = reactive({ title: '', author: '', description: '', cover: '' })
@@ -70,23 +70,8 @@ function confirmDeleteArticle() { deleteArticle(bookId.value, selectedChapter.va
 function startArticle(chapterId) { const a = addArticle(bookId.value, chapterId); openArticle(chapterId, a.id) }
 function resumeWriting() { if (lastEdited.value) openArticle(lastEdited.value.chapterId, lastEdited.value.articleId, lastEdited.value.cursor) }
 function openArticle(chapterId, articleId, cursor = 0) { if (!menuType.value && !book.value?.readOnly) uni.navigateTo({ url: `/pages/editor/index?bookId=${bookId.value}&chapterId=${chapterId}&articleId=${articleId}&cursor=${cursor}` }) }
-function readBook() {
-  if (readBusy.value || !book.value) return
-  readBusy.value = true
-  setTimeout(() => {
-    try {
-      if (book.value.readOnly) {
-        const { path, format } = book.value.readOnly
-        if (format === 'pdf') uni.openDocument({ filePath: path, fileType: 'pdf', fail: error => uni.showToast({ title: error?.errMsg || '无法打开 PDF', icon: 'none' }) })
-        else plus.runtime.openFile(path, {}, error => uni.showToast({ title: error?.message || '设备上没有可用的 EPUB 阅读应用', icon: 'none' }))
-      } else {
-        const path = exportBookPdf(book.value, true)
-        uni.openDocument({ filePath: path, fileType: 'pdf', fail: error => uni.showToast({ title: error?.errMsg || '无法打开阅读文件', icon: 'none' }) })
-      }
-    } catch (error) { uni.showToast({ title: error.message || '阅读文件生成失败', icon: 'none' }) }
-    finally { readBusy.value = false }
-  }, 20)
-}
+function readBook() { if (book.value) uni.navigateTo({ url: `/pages/reader/index?bookId=${encodeURIComponent(bookId.value)}` }) }
+function readSection(sectionId) { if (book.value) uni.navigateTo({ url: `/pages/reader/index?bookId=${encodeURIComponent(bookId.value)}&section=${encodeURIComponent(sectionId)}` }) }
 function openImageExport() { uni.navigateTo({ url: `/pages/export-image/index?bookId=${bookId.value}` }) }
 function doExport() {
   showExport.value = false
@@ -95,7 +80,7 @@ function doExport() {
 }
 function openExport() {
   const result = exportResult.value; exportResult.value = null
-  if (result?.ok) uni.openDocument({ filePath: result.path, fileType: 'pdf', fail: error => { exportResult.value = { ok: false, message: error?.errMsg || '无法打开 PDF 文件' } } })
+  if (result?.ok) uni.navigateTo({ url: `/pages/reader/index?bookId=${encodeURIComponent(bookId.value)}&pdfPath=${encodeURIComponent(result.path)}` })
 }
 </script>
 
@@ -119,6 +104,11 @@ function openExport() {
 .read-only-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:15px; font-weight:650; }
 .read-only-card text { display:block; margin-top:6px; color:var(--muted); font-size:11px; }
 .read-only-card .primary-button { flex:none; padding:12px 16px; border-radius:11px; background:var(--accent); color:#fff; font-size:12px; }
+.read-only-outline { margin-top:34px; }
+.outline-group { margin-top:15px; padding:15px 18px; border:1px solid var(--line); border-radius:15px; background:var(--surface); }
+.outline-group-title { font-size:15px; font-weight:650; }
+.outline-article { margin:11px 0 0 15px; padding:9px 12px; border-left:1px solid var(--line); color:var(--muted); font-size:13px; transition:background .2s ease,color .2s ease; }
+.outline-article:active { color:var(--accent); background:var(--accent-soft); }
 @media (max-width:520px) { .read-only-card { flex-wrap:wrap; gap:12px; padding:18px; }.read-only-card .primary-button { width:100%; text-align:center; box-sizing:border-box; } }
 @media (max-width:700px) { .book-sidebar .sidebar-exports { grid-column:1 / -1; display:flex; }.book-sidebar .sidebar-export { display:block; padding-top:14px; } }
 .chapter-heading { cursor: pointer; }

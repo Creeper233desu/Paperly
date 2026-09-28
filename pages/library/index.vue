@@ -11,7 +11,7 @@
   <AppNav />
   <ActionMenu :visible="showImportOptions" title="选择导入方式" :items="[{ label: 'DOCX · 导入为可编辑书籍' }, { label: 'PDF / EPUB · 保留原文件只读' }]" @close="showImportOptions = false" @select="chooseImport" />
   <ActionMenu :visible="!!actionBook && !showDelete" :title="actionBook?.title" :items="[{ label: '编辑书籍信息' }, { label: '删除书籍', danger: true }]" @close="actionBook = null" @select="onAction" />
-  <AppDialog :visible="showReadOnlyImport" title="导入只读书籍" confirm-text="导入书架" @cancel="cancelReadOnlyImport" @confirm="saveReadOnlyBook"><view class="import-source">{{ readOnlyPreview?.name }}</view><input v-model="readOnlyDraft.title" class="field" maxlength="80" placeholder="书名（必填）" /><input v-model="readOnlyDraft.author" class="field" maxlength="80" placeholder="作者（可选）" /><textarea v-model="readOnlyDraft.description" class="description-field" maxlength="240" placeholder="简介（可选）" /><view class="import-note">PDF / EPUB 保留原有图片与排版，以只读方式交由系统阅读应用打开。</view></AppDialog>
+  <AppDialog :visible="showReadOnlyImport" title="导入只读书籍" confirm-text="导入书架" @cancel="cancelReadOnlyImport" @confirm="saveReadOnlyBook"><view class="import-source">{{ readOnlyPreview?.name }}</view><input v-model="readOnlyDraft.title" class="field" maxlength="80" placeholder="书名（必填）" /><input v-model="readOnlyDraft.author" class="field" maxlength="80" placeholder="作者（可选）" /><textarea v-model="readOnlyDraft.description" class="description-field" maxlength="240" placeholder="简介（可选）" /><view v-if="readOnlyPreview?.outline?.length" class="import-overview">识别到 {{ readOnlyPreview.outline.length }} 章 · {{ readOnlyPreview.outline.reduce((sum, group) => sum + group.articles.length, 0) }} 篇正文</view><view class="import-note">{{ readOnlyPreview?.format === 'epub' ? '已识别 EPUB 的封面、作者、目录、正文及插图。进入书籍后在应用内阅读。' : 'PDF 会在应用内逐页阅读。' }}</view></AppDialog>
   <AppDialog :visible="showEdit" :title="editingId ? '编辑书籍' : '新建书籍'" :confirm-text="editingId ? '保存' : '创建书籍'" @cancel="showEdit = false" @confirm="saveBook"><view class="edit-layout"><view class="cover-picker" @tap="chooseCover"><image v-if="draft.cover" :src="draft.cover" mode="aspectFill" /><view v-else class="cover-placeholder">＋<text>选择封面</text></view></view><view class="edit-fields"><input v-model="draft.title" class="field" maxlength="80" placeholder="书名（必填）" /><input v-model="draft.author" class="field" maxlength="80" placeholder="作者（可选）" /><textarea v-model="draft.description" class="description-field" maxlength="240" placeholder="简介（可选）" /></view></view></AppDialog>
   <AppDialog class="import-dialog" :visible="showImport" title="导入为书籍" confirm-text="导入书架" @cancel="showImport = false" @confirm="saveImportedBook"><view class="import-source">{{ importFileName }}</view><view class="import-field-label">书名</view><input v-model="importDraft.title" class="field" maxlength="80" placeholder="填写书名" /><view class="import-field-label">作者</view><input v-model="importDraft.author" class="field" maxlength="80" placeholder="作者（可选）" /><view class="import-field-label">简介</view><textarea v-model="importDraft.description" class="description-field" maxlength="240" placeholder="简介（可选）" /><view class="import-overview"><text>{{ importSummary.chapters }} 章 · {{ importSummary.articles }} 篇 · {{ importSummary.words }} 字</text><text>识别预览</text></view><scroll-view class="import-outline" scroll-y><view v-for="(group, index) in importPreview?.chapters || []" :key="index" class="import-chapter"><view><text class="import-chapter-number">{{ String(index + 1).padStart(2, '0') }}</text><text>{{ group.title }}</text></view><text class="import-article" v-for="(item, articleIndex) in group.articles" :key="articleIndex">{{ item.title || '无题正文' }} · {{ item.paragraphs.length }} 段</text></view></scroll-view><view class="import-note">标题样式及“第 X 章 / 节”会成为目录；普通段落保留为正文。仅导入文字。</view></AppDialog>
   <AppDialog :visible="showDelete" title="删除书籍" :message="`确定删除《${actionBook?.title || ''}》及其中所有章节和正文？此操作无法撤销。`" confirm-text="删除" :destructive="true" @cancel="cancelDelete" @confirm="confirmDelete" />
@@ -33,7 +33,9 @@ import SettingsPanel from '../settings/index.vue'
 import MoreIcon from '../../components/MoreIcon.vue'
 import { pickAndroidDocx } from '../../src/services/android-docx-picker'
 import { importedBookSummary, parseDocx } from '../../src/services/docx-import'
-import { pickReadableBook } from '../../src/services/android-readable-picker'
+import { pickReadableBook, readEpubBytes } from '../../src/services/android-readable-picker'
+import { parseEpub } from '../../src/services/epub'
+import { saveEpubCover } from '../../src/services/epub-cover'
 
 const store = useLibrary()
 onLoad(options => { if (PRIMARY_TABS.includes(options?.tab)) primaryNavigation.active = options.tab })
@@ -56,12 +58,19 @@ function chooseImport(index) { showImportOptions.value = false; if (index === 0)
 async function openReadOnlyImport() {
   if (importBusy.value) return
   importBusy.value = true
+  let file = null
   try {
-    const file = await pickReadableBook()
-    readOnlyPreview.value = file
-    Object.assign(readOnlyDraft, { title: file.name.replace(/\.(pdf|epub)$/i, ''), author: '', description: '' })
+    file = await pickReadableBook()
+    const parsed = file.format === 'epub' ? parseEpub(await readEpubBytes(file.path), file.name) : null
+    const cover = parsed ? saveEpubCover(parsed) : ''
+    readOnlyPreview.value = { ...file, outline: parsed?.outline || [], cover }
+    Object.assign(readOnlyDraft, { title: parsed?.title || file.name.replace(/\.(pdf|epub)$/i, ''), author: parsed?.author || '', description: parsed?.description || '' })
     showReadOnlyImport.value = true
-  } catch (error) { if (!String(error.message).includes('取消')) uni.showToast({ title: error.message || '导入失败', icon: 'none' }) }
+  } catch (error) {
+    if (file?.path) plus.io.resolveLocalFileSystemURL(file.path, entry => entry.remove(() => {}, () => {}), () => {})
+    if (readOnlyPreview.value?.cover) plus.io.resolveLocalFileSystemURL(readOnlyPreview.value.cover, entry => entry.remove(() => {}, () => {}), () => {})
+    if (!String(error.message).includes('取消')) uni.showToast({ title: error.message || '导入失败', icon: 'none' })
+  }
   finally { importBusy.value = false }
 }
 function saveReadOnlyBook() {
@@ -76,8 +85,10 @@ function saveReadOnlyBook() {
 function cancelReadOnlyImport() {
   showReadOnlyImport.value = false
   const path = readOnlyPreview.value?.path
+  const cover = readOnlyPreview.value?.cover
   readOnlyPreview.value = null
   if (path && typeof plus !== 'undefined') plus.io.resolveLocalFileSystemURL(path, entry => entry.remove(() => {}, () => {}), () => {})
+  if (cover && typeof plus !== 'undefined') plus.io.resolveLocalFileSystemURL(cover, entry => entry.remove(() => {}, () => {}), () => {})
 }
 async function openImport() {
   if (importBusy.value) return
