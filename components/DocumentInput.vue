@@ -13,6 +13,7 @@
 export default {
   props: {
     value: { type: String, default: '' },
+    images: { type: Object, default: () => ({}) },
     documentId: { type: String, default: '' },
     documentRevision: { type: Number, default: 0 },
     fontFamily: { type: String, default: '' },
@@ -25,10 +26,10 @@ export default {
     cursorTrailLength: { type: Number, default: 32 },
     cursorRequest: { type: Object, default: () => ({ seq: 0, start: 0, end: 0 }) }
   },
-  emits: ['input', 'focus', 'blur', 'cursor', 'pinch', 'ask-ai', 'export-image'],
+  emits: ['input', 'focus', 'blur', 'cursor', 'pinch', 'remove-image', 'ask-ai', 'export-image'],
   data() { return { hostId: `paper-editor-${Date.now()}-${Math.random().toString(36).slice(2)}`, bridgeEpoch: 0, focusSnapshot: this.value, renderReady: false, fallbackFocus: false, selectionStart: -1, selectionEnd: -1, menu: { open: false, left: 0, top: 0, start: 0, end: 0 }, menuRequest: null, menuSeq: 0 } },
   computed: {
-    documentPayload() { return JSON.stringify({ id: this.documentId, revision: this.documentRevision, value: this.value, epoch: this.bridgeEpoch }) },
+    documentPayload() { return JSON.stringify({ id: this.documentId, revision: this.documentRevision, value: this.value, images: this.images, epoch: this.bridgeEpoch }) },
     cursorPayload() { return JSON.stringify(this.menuRequest || this.cursorRequest) },
     focusPayload() { return JSON.stringify({ enabled: this.focusMode, ready: this.renderReady, documentId: this.documentId, revision: this.documentRevision, value: this.focusSnapshot, epoch: this.bridgeEpoch }) },
     visualPayload() { return JSON.stringify({ enabled: this.animatedCursor, style: this.cursorStyle, color: this.cursorTrailColor, length: this.cursorTrailLength, pinchEnabled: this.pinchEnabled, ready: this.renderReady, epoch: this.bridgeEpoch }) }
@@ -52,6 +53,7 @@ export default {
     onChange(detail) { this.$emit('input', { detail }) },
     onCursor(position) { this.$emit('cursor', position) },
     onPinch(scale) { this.$emit('pinch', scale) },
+    onRemoveImage(id) { this.$emit('remove-image', id) },
     onFocus() { this.$emit('focus') },
     onBlur() { this.$emit('blur') },
     onFallbackInput(event) { this.$emit('input', { detail: { ...event.detail, documentId: this.documentId, userEdit: true } }); if (Number.isFinite(event.detail?.cursor)) this.$emit('cursor', event.detail.cursor) },
@@ -156,6 +158,7 @@ export default {
       this.editor.addEventListener('blur', () => { this.hideCaret(true); this.$ownerInstance.callMethod('onBlur') })
       this.editor.addEventListener('keydown', event => { this.navigationPending = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key); if (this.navigationPending) this.editingUntil = 0 })
       this.editor.addEventListener('mousedown', () => { this.navigationPending = true; this.editingUntil = 0 })
+      this.editor.addEventListener('click', event => { const button = event.target?.closest?.('.image-remove'); if (button?.dataset?.imageId) { event.preventDefault(); this.$ownerInstance.callMethod('onRemoveImage', button.dataset.imageId) } })
       this.editor.addEventListener('contextmenu', event => { event.preventDefault(); this.openMenu(event.clientX, event.clientY) })
       this.editor.addEventListener('touchstart', event => {
         if (event.touches.length === 2) {
@@ -214,7 +217,8 @@ export default {
       this.$ownerInstance.callMethod('onRenderMounted', this.hostId || host.id)
     },
     blocks() { return Array.from(this.editor.children).filter(node => node.classList.contains('paragraph')) },
-    readValue() { return this.blocks().map(node => node.textContent).join('\n') },
+    blockText(node) { return node.dataset?.imageMarker || node.textContent },
+    readValue() { return this.blocks().map(node => this.blockText(node)).join('\n') },
     renderValue(value) {
       const paragraphs = String(value).replace(/\r\n?/g, '\n').split('\n')
       const blocks = this.blocks()
@@ -225,6 +229,27 @@ export default {
           block.className = 'paragraph'
           this.editor.appendChild(block)
         }
+        const imageId = text.match(/^\uFFFCimage:([a-z0-9-]+)$/i)?.[1]
+        const image = imageId && this.images?.[imageId]
+        if (image) {
+          if (block.dataset.imageMarker !== text || block.dataset.imagePath !== image.path) {
+            while (block.firstChild) block.removeChild(block.firstChild)
+            block.dataset.imageMarker = text
+            block.dataset.imagePath = image.path
+            block.classList.add('image-paragraph')
+            block.contentEditable = 'false'
+            const picture = document.createElement('img')
+            const localPath = image.path.startsWith('_') && typeof plus !== 'undefined' ? plus.io.convertLocalFileSystemURL(image.path) : image.path
+            picture.src = localPath?.startsWith('/') ? `file://${localPath}` : localPath
+            picture.alt = '正文图片'; picture.draggable = false
+            block.appendChild(picture)
+            const remove = document.createElement('span')
+            remove.className = 'image-remove'; remove.dataset.imageId = imageId; remove.textContent = '×'
+            block.appendChild(remove)
+          }
+          return
+        }
+        if (block.dataset?.imageMarker) { delete block.dataset.imageMarker; delete block.dataset.imagePath; block.classList.remove('image-paragraph'); block.contentEditable = 'inherit' }
         if (block.textContent !== text || (!text && !block.querySelector('br'))) {
           while (block.firstChild) block.removeChild(block.firstChild)
           if (text) block.textContent = text
@@ -241,6 +266,8 @@ export default {
       }
       if (!packet || typeof packet.value !== 'string') return
       const value = packet.value, id = packet.id || ''
+      const mediaChanged = JSON.stringify(packet.images || {}) !== JSON.stringify(this.images || {})
+      this.images = packet.images || {}
       const revision = Number(packet.revision) || 0
       if (revision < (this.documentRevision || 0)) return
       this.pendingValue = payload
@@ -272,7 +299,7 @@ export default {
         this.recentInputs = []
       }
       this.lastPropValue = value
-      if (!this.composing && (!this.blocks().length || this.readValue() !== value)) {
+      if (!this.composing && (!this.blocks().length || this.readValue() !== value || mediaChanged)) {
         const scrollRoot = document.scrollingElement || document.documentElement
         const scrollTop = scrollRoot?.scrollTop || 0
         const requestedOffset = this.pendingRequest?.documentId === id && this.pendingRequest?.value === value ? this.pendingRequest.start : null
@@ -367,8 +394,9 @@ export default {
       const blocks = this.blocks()
       let left = Math.max(0, position)
       for (let index = 0; index < blocks.length; index++) {
-        const block = blocks[index], length = block.textContent.length
+        const block = blocks[index], length = this.blockText(block).length
         if (left <= length || index === blocks.length - 1) {
+          if (block.dataset?.imageMarker) return { node: this.editor, offset: index + (left > length / 2 ? 1 : 0) }
           const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT)
           let node
           while ((node = walker.nextNode())) {
@@ -395,11 +423,12 @@ export default {
     },
     offsetForPoint(node, offset) {
       const blocks = this.blocks()
-      if (node === this.editor) return Math.min(this.readValue().length, blocks.slice(0, offset).reduce((sum, block) => sum + block.textContent.length + 1, 0))
+      if (node === this.editor) return Math.min(this.readValue().length, blocks.slice(0, offset).reduce((sum, block) => sum + this.blockText(block).length + 1, 0))
       const element = node.nodeType === 1 ? node : node.parentElement
       const block = element?.closest('.paragraph'), index = blocks.indexOf(block)
       if (index < 0) return 0
-      const prefix = blocks.slice(0, index).reduce((sum, item) => sum + item.textContent.length + 1, 0)
+      const prefix = blocks.slice(0, index).reduce((sum, item) => sum + this.blockText(item).length + 1, 0)
+      if (block.dataset?.imageMarker) return prefix + (offset ? block.dataset.imageMarker.length : 0)
       const range = document.createRange()
       range.setStart(block, 0)
       range.setEnd(node, offset)
@@ -434,6 +463,16 @@ export default {
       const value = this.readValue()
       if (event.inputType === 'deleteContentBackward') {
         if (offsets.start !== offsets.end || offsets.start === 0 || value[offsets.start - 1] !== '\n') return
+        const previousStart = value.lastIndexOf('\n', offsets.start - 2) + 1
+        const previousLine = value.slice(previousStart, offsets.start - 1)
+        if (/^\uFFFCimage:[a-z0-9-]+$/i.test(previousLine)) {
+          event.preventDefault()
+          const next = value.slice(0, previousStart) + value.slice(offsets.start)
+          this.renderValue(next)
+          this.setSelection(previousStart, previousStart)
+          this.reportInput()
+          return
+        }
         event.preventDefault()
         this.renderValue(value.slice(0, offsets.start - 1) + value.slice(offsets.start))
         this.setSelection(offsets.start - 1, offsets.start - 1)
@@ -700,6 +739,9 @@ export default {
 .document-fallback::placeholder { color: var(--muted); -webkit-text-fill-color: var(--muted); }
 .document-input :deep(.paragraph) { min-height: 1.85em; text-indent: 2em; transition: opacity .22s ease; }
 .document-input :deep(.paragraph.dimmed) { opacity: .23; }
+.document-input :deep(.image-paragraph) { position:relative; width:100%; min-height:120px; margin:20px 0; text-indent:0; display:flex; align-items:center; justify-content:center; border-radius:14px; background:var(--surface-alt); overflow:hidden; }
+.document-input :deep(.image-paragraph img) { display:block; width:auto; max-width:100%; max-height:420px; height:auto; object-fit:contain; }
+.document-input :deep(.image-remove) { position:absolute; top:9px; right:9px; width:29px; height:29px; border-radius:50%; background:rgba(22,28,38,.66); color:white; font:22px/29px sans-serif; text-align:center; cursor:pointer; }
 .cursor-glow { position: absolute; z-index: 3; top: 0; left: 0; width: 6px; height: 27px; border-radius: 3px; background: var(--cursor-color); box-shadow: 0 0 10px var(--cursor-color); opacity: 0; pointer-events: none; transition: transform .2s cubic-bezier(.22,.7,.25,1), width .18s ease, height .18s ease, opacity .12s ease; }
 .cursor-glow.neovim { border-radius:3px; box-shadow:0 0 11px var(--cursor-color), inset 0 0 0 1px rgba(255,255,255,.35); }
 .cursor-trail { position:absolute; z-index:2; width:0; height:1em; border-radius:4px; opacity:0; pointer-events:none; transform-origin:left center; transition:opacity .22s ease; box-shadow:0 0 8px var(--cursor-color); }

@@ -1,4 +1,5 @@
 // Android PdfDocument 直接使用系统中文字体，不依赖网络、WebView 打印服务或大体积字库。
+import { imageIdFromParagraph } from '../utils/media.js'
 const WIDTH = 595, HEIGHT = 842, MARGIN = 56, BOTTOM = 770
 
 function wrapLine(text, paint, maxWidth) {
@@ -52,6 +53,28 @@ export function exportBookPdf(book, withToc = true) {
     for (const line of lines) { ensure(lineHeight); drawText(line, MARGIN, y, paint); y += lineHeight }
     y += gap
   }
+  function drawImage(media) {
+    const absolute = media?.path && plus.io.convertLocalFileSystemURL(media.path)
+    if (!absolute) throw new Error('正文图片文件已丢失，无法完整导出 PDF')
+    const BitmapFactory = plus.android.importClass('android.graphics.BitmapFactory')
+    const bitmap = BitmapFactory.decodeFile(absolute)
+    if (!bitmap) throw new Error('正文图片无法读取，无法完整导出 PDF')
+    try {
+      const width = Number(plus.android.invoke(bitmap, 'getWidth'))
+      const height = Number(plus.android.invoke(bitmap, 'getHeight'))
+      if (!width || !height) throw new Error('正文图片尺寸无效')
+      const scale = Math.min((WIDTH - 2 * MARGIN) / width, 470 / height, 1)
+      const drawnHeight = Math.max(1, Math.round(height * scale))
+      ensure(drawnHeight + 18)
+      plus.android.invoke(canvas, 'save')
+      try {
+        plus.android.invoke(canvas, 'translate', MARGIN, y)
+        plus.android.invoke(canvas, 'scale', scale, scale)
+        plus.android.invoke(canvas, 'drawBitmap', bitmap, 0, 0, bodyPaint)
+      } finally { plus.android.invoke(canvas, 'restore') }
+      y += drawnHeight + 18
+    } finally { plus.android.invoke(bitmap, 'recycle') }
+  }
   try {
     newPage(); y = 205
     draw(book.title || '未命名书', titlePaint, 42)
@@ -70,7 +93,11 @@ export function exportBookPdf(book, withToc = true) {
       draw(`${ci + 1}. ${chapter.title}`, headingPaint, 32, 20)
       chapter.articles.forEach((article, ai) => {
         if (article.title) { ensure(45); draw(article.title, headingPaint, 30, 12) }
-        ;(article.paragraphs || []).forEach(paragraph => draw(paragraph || ' ', bodyPaint, 23, 12))
+        ;(article.paragraphs || []).forEach(paragraph => {
+          const imageId = imageIdFromParagraph(paragraph)
+          if (imageId) drawImage(article.images?.[imageId])
+          else draw(paragraph || ' ', bodyPaint, 23, 12)
+        })
         if (ai < chapter.articles.length - 1) y += 22
       })
     })

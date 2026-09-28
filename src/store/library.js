@@ -1,5 +1,6 @@
 import { reactive } from 'vue'
 import { recordWordDelta } from './statistics.js'
+import { textOnlyParagraphs } from '../utils/media.js'
 
 const KEY = 'paperwriter.library.v1'
 const state = reactive({ books: [] })
@@ -40,13 +41,23 @@ export function importBook(content, details = {}) {
   const timestamp = now()
   const chapters = content.chapters.map(group => ({
     id: uid(), title: String(group.title || '正文').trim(),
-    articles: (group.articles || []).map(item => ({ id: uid(), title: String(item.title || '').trim(), paragraphs: (item.paragraphs || []).map(String), updatedAt: timestamp }))
+    articles: (group.articles || []).map(item => ({ id: uid(), title: String(item.title || '').trim(), paragraphs: (item.paragraphs || []).map(String), images: item.images || {}, updatedAt: timestamp }))
   }))
   const first = chapters.flatMap(group => group.articles.map(item => ({ chapterId: group.id, articleId: item.id })))[0]
   const book = { id: uid(), title, author: String(details.author ?? content.author ?? '').trim(), description: String(details.description ?? content.description ?? '').trim(), cover: '', createdAt: timestamp, updatedAt: timestamp, chapters, ...(first ? { lastEdited: { ...first, cursor: 0, updatedAt: timestamp } } : {}) }
   state.books.unshift(book)
   try { persist() }
   catch (error) { state.books.shift(); throw new Error(`保存导入书籍失败：${error.message || '请检查存储空间'}`) }
+  return book
+}
+export function importReadOnlyBook(file, details = {}) {
+  initStore()
+  if (!['pdf', 'epub'].includes(file?.format) || !file?.path) throw new Error('只支持 PDF 或 EPUB 文件')
+  const title = String(details.title || file.name?.replace(/\.(pdf|epub)$/i, '') || '导入的书籍').trim()
+  if (!title) throw new Error('请填写书名')
+  const book = { id: uid(), title, author: String(details.author || '').trim(), description: String(details.description || '').trim(), cover: '', readOnly: { format: file.format, path: file.path, fileName: file.name }, createdAt: now(), updatedAt: now(), chapters: [] }
+  state.books.unshift(book)
+  try { persist() } catch (error) { state.books.shift(); throw error }
   return book
 }
 export function updateBook(id, patch) {
@@ -63,6 +74,7 @@ export function deleteBook(id) {
   const removed = book.chapters.flatMap(chapter => chapter.articles.map(article => ({ id: article.id, title: article.title, words: wordCount(article) })))
   state.books = state.books.filter(item => item.id !== id); persist()
   removed.forEach(article => recordWordDelta(book.id, book.title, article.id, article.title, -article.words))
+  if (book.readOnly?.path && typeof plus !== 'undefined') plus.io.resolveLocalFileSystemURL(book.readOnly.path, entry => entry.remove(() => {}, () => {}), () => {})
 }
 export function addChapter(bookId, title, id = uid()) {
   const book = getBook(bookId); if (!book) return null
@@ -83,7 +95,7 @@ export function deleteChapter(bookId, id) {
 export function addArticle(bookId, chapterId, title = '', id = uid()) {
   const chapter = getChapter(bookId, chapterId); if (!chapter) return null
   if (chapter.articles.some(item => item.id === id)) throw new Error('正文 ID 已存在')
-  const article = { id, title: title.trim(), paragraphs: [''], updatedAt: now() }
+  const article = { id, title: title.trim(), paragraphs: [''], images: {}, updatedAt: now() }
   chapter.articles.push(article)
   const book = getBook(bookId)
   if (book) book.lastEdited = { chapterId, articleId: article.id, cursor: 0, updatedAt: article.updatedAt }
@@ -103,6 +115,7 @@ export function saveArticle(bookId, chapterId, articleId, patch) {
   const previousWords = wordCount(article)
   if (typeof patch.title === 'string') article.title = patch.title
   if (Array.isArray(patch.paragraphs)) article.paragraphs = patch.paragraphs.map(String)
+  if (patch.images && typeof patch.images === 'object') article.images = { ...patch.images }
   article.updatedAt = now(); const book = getBook(bookId); if (book) book.updatedAt = article.updatedAt
   if (book) {
     book.lastEdited = { chapterId, articleId, cursor: Math.max(0, Number(patch.cursor) || 0), updatedAt: article.updatedAt }
@@ -121,7 +134,7 @@ export function deleteArticle(bookId, chapterId, articleId) {
     if (removed) recordWordDelta(book.id, book.title, removed.id, removed.title, -removed.words)
   }
 }
-export function wordCount(article) { return (article?.paragraphs || []).join('').replace(/\s/g, '').length }
+export function wordCount(article) { return textOnlyParagraphs(article?.paragraphs).join('').replace(/\s/g, '').length }
 
 export function getLastEditedArticle(book) {
   if (!book) return null

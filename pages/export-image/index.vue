@@ -45,6 +45,7 @@ import { takeImageExport } from '../../src/store/image-export-draft'
 import { loadPreferences, themeClass } from '../../src/store/preferences'
 import { fontFamilyFor, loadSelectedFont } from '../../src/services/fonts'
 import { createTextPng } from '../../src/services/image-export'
+import { textOnlyParagraphs } from '../../src/utils/media'
 
 const instance = getCurrentInstance()
 const prefs = loadPreferences()
@@ -55,7 +56,7 @@ const canvasWidth = ref(1080), canvasHeight = ref(460)
 const book = computed(() => getBook(bookId.value))
 const entries = computed(() => book.value?.chapters.flatMap(chapter => chapter.articles.map(article => ({ chapter, article }))) || [])
 const currentEntry = computed(() => entries.value[articleIndex.value])
-const articleText = computed(() => currentEntry.value?.article.paragraphs.join('\n') || '')
+const articleText = computed(() => textOnlyParagraphs(currentEntry.value?.article.paragraphs).join('\n'))
 const selectedText = computed(() => articleText.value.slice(start.value, end.value))
 
 onLoad(options => {

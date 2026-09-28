@@ -3,10 +3,10 @@
     <view class="editor-header"><view class="header-left"><text class="header-back" @tap="leave">‹</text><view class="outline-trigger" @tap="showOutline = !showOutline">☰</view><view class="header-titles"><text>{{ book?.title || '纸间' }}</text><text>{{ chapter?.title || '正文' }}</text></view></view><view class="header-right"><text class="save-label">{{ saveState }}</text><view class="header-tool pinch-lock" :class="{ on: !pinchLocked }" :aria-label="pinchLocked ? '解锁双指缩放' : '锁定双指缩放'" @tap="pinchLocked = !pinchLocked"><text class="lock-icon" :class="{ unlocked: !pinchLocked }"></text></view><view class="header-tool more" @tap="openSettings">Aa</view></view></view>
     <view v-if="showOutline" class="outline-backdrop" @tap="showOutline = false"></view>
     <view v-if="article" class="editor-layout" :class="{ switching }"><view class="outline-rail" :class="{ open: showOutline }"><view class="rail-top"><view class="rail-caption">篇章目录</view><text @tap="showOutline = false">×</text></view><view class="outline-scroll"><view v-for="(group, groupIndex) in book?.chapters || []" :key="group.id" class="outline-group"><view class="outline-chapter" :class="{ current: group.id === ids.chapter }" @tap="toggleChapter(group.id)"><text class="outline-caret">{{ collapsedChapters[group.id] ? '›' : '⌄' }}</text><text>{{ groupIndex + 1 }}. {{ group.title }}</text><text class="outline-count">{{ group.articles.length }}</text></view><view v-if="!collapsedChapters[group.id]" class="outline-articles"><view v-for="item in group.articles" :key="item.id" class="outline-item" :class="{ current: item.id === ids.article }" @tap="item.id !== ids.article ? openSibling(group.id, item.id) : showOutline = false">{{ item.title || '无题正文' }}</view></view></view></view><view class="rail-bottom">{{ book?.chapters.length || 0 }} 章 · {{ bookArticleCount }} 篇</view></view>
-      <view class="writing-column"><view class="writing-meta"><text>{{ chapter?.title }}</text><text>{{ wordTotal }} 字 · {{ paragraphCount }} 段</text></view><input class="article-name" :value="title" placeholder="" maxlength="100" @input="onTitle" @blur="saveNow" /><view class="writing-rule"></view><view class="document-wrap"><DocumentInput :value="body" :document-id="ids.article" :document-revision="documentRevision" :font-family="fontFamilyFor(prefs.font)" :font-size="prefs.fontSize" :pinch-enabled="!pinchLocked" :focus-mode="prefs.focus" :animated-cursor="prefs.animatedCursor" :cursor-style="prefs.cursorStyle" :cursor-trail-color="prefs.cursorTrailColor" :cursor-trail-length="prefs.cursorTrailLength" :cursor-request="cursorRequest" @blur="saveNow" @input="onDocumentInput" @cursor="onVisualCursor" @pinch="onPinch" @ask-ai="onAskAi" @export-image="onExportSelection" /></view></view>
+      <view class="writing-column"><view class="writing-meta"><text>{{ chapter?.title }}</text><text>{{ wordTotal }} 字 · {{ paragraphCount }} 段</text></view><input class="article-name" :value="title" placeholder="" maxlength="100" @input="onTitle" @blur="saveNow" /><view class="writing-rule"></view><view class="document-wrap"><DocumentInput :value="body" :images="images" :document-id="ids.article" :document-revision="documentRevision" :font-family="fontFamilyFor(prefs.font)" :font-size="prefs.fontSize" :pinch-enabled="!pinchLocked" :focus-mode="prefs.focus" :animated-cursor="prefs.animatedCursor" :cursor-style="prefs.cursorStyle" :cursor-trail-color="prefs.cursorTrailColor" :cursor-trail-length="prefs.cursorTrailLength" :cursor-request="cursorRequest" @blur="saveNow" @input="onDocumentInput" @cursor="onVisualCursor" @pinch="onPinch" @remove-image="removeImage" @ask-ai="onAskAi" @export-image="onExportSelection" /></view></view>
       <view class="info-rail"><view class="status-summary"><view class="rail-caption">写作状态</view><view class="info-stat"><text class="info-number">{{ wordTotal }}</text><text>当前字数</text></view><view class="info-stat"><text class="info-number">{{ paragraphCount }}</text><text>段落</text></view><view class="info-note">文字会自动保存。目录中可随时切换篇章。</view></view><view class="assistant-slot" :class="{ open: showAi }"><AiAssistant v-if="book" ref="aiRef" :book="book" :article-id="ids.article" :body="body" :selected-text="selectedContext" :system-prompt="prefs.aiSystemPrompt" :fullscreen="aiFullscreen" :open="showAi" @close="closeAi" @toggle-fullscreen="aiFullscreen = !aiFullscreen" @clear-selection="selectedContext = ''" @apply="applyAiProposal" /></view></view>
     </view>
-    <view class="editor-dock"><view class="dock-count">{{ wordTotal }} 字</view><scroll-view class="dock-scroll" scroll-x :show-scrollbar="false"><view class="dock-scroll-content"><view class="dock-group"><view class="dock-icon" @tap="undo">↶</view><view class="dock-icon" @tap="redo">↷</view></view><view class="dock-divider"></view><view class="dock-group symbols"><view class="dock-icon" @tap="insertSymbol('（','）')">（）</view><view class="dock-icon" @tap="insertSymbol('“','”')">“”</view><view class="dock-icon" @tap="insertSymbol('「','」')">「」</view></view><view class="dock-divider"></view><view class="dock-icon" @tap="appendParagraph">↵</view></view></scroll-view><view class="dock-fixed"><view class="dock-icon" aria-label="查找与替换" @tap="showSearch = !showSearch">⌕</view><view class="dock-icon" :class="{ active: prefs.focus }" aria-label="聚焦" @tap="toggleFocus">◎</view><view class="dock-icon font-dock" :class="{ active: showFontSize }" aria-label="调整字号" @tap="showFontSize = !showFontSize">Aa</view><view class="dock-icon ai-dock" :class="{ active: showAi }" aria-label="写作助手" @tap="toggleAi"><AssistantGlyph name="sparkle" /></view><view class="dock-icon" aria-label="沉浸模式" @tap="immersive = !immersive">{{ immersive ? '▣' : '□' }}</view></view></view>
+    <view class="editor-dock"><view class="dock-count">{{ wordTotal }} 字</view><scroll-view class="dock-scroll" scroll-x :show-scrollbar="false"><view class="dock-scroll-content"><view class="dock-group"><view class="dock-icon" @tap="undo">↶</view><view class="dock-icon" @tap="redo">↷</view></view><view class="dock-divider"></view><view class="dock-group symbols"><view class="dock-icon" @tap="insertSymbol('（','）')">（）</view><view class="dock-icon" @tap="insertSymbol('“','”')">“”</view><view class="dock-icon" @tap="insertSymbol('「','」')">「」</view></view><view class="dock-divider"></view><view class="dock-icon" @tap="appendParagraph">↵</view><view class="dock-icon image-dock" aria-label="插入图片" @tap="addImage">▧＋</view></view></scroll-view><view class="dock-fixed"><view class="dock-icon" aria-label="查找与替换" @tap="showSearch = !showSearch">⌕</view><view class="dock-icon" :class="{ active: prefs.focus }" aria-label="聚焦" @tap="toggleFocus">◎</view><view class="dock-icon font-dock" :class="{ active: showFontSize }" aria-label="调整字号" @tap="showFontSize = !showFontSize">Aa</view><view class="dock-icon ai-dock" :class="{ active: showAi }" aria-label="写作助手" @tap="toggleAi"><AssistantGlyph name="sparkle" /></view><view class="dock-icon" aria-label="沉浸模式" @tap="immersive = !immersive">{{ immersive ? '▣' : '□' }}</view></view></view>
     <view v-if="showFontSize" class="font-size-panel"><view class="font-size-title"><text>正文字号</text><text>{{ prefs.fontSize }} px</text></view><slider :value="prefs.fontSize" :min="12" :max="36" :step="1" :show-value="false" activeColor="#5774a0" backgroundColor="#dce2eb" @changing="onFontSlider" @change="onFontSlider" /><view class="font-size-range"><text>小</text><text>大</text></view></view>
     <view v-if="showSearch" class="search-panel"><view class="search-head"><text>查找与替换</text><text @tap="showSearch = false">完成</text></view><view class="search-inputs"><input v-model="searchQuery" class="search-input" placeholder="查找文字" confirm-type="search" @confirm="nextMatch" /><input v-model="replacement" class="search-input" placeholder="替换为" /></view><view class="search-actions"><text class="match-count">{{ matches.length ? `${Math.max(matchIndex + 1, 0)} / ${matches.length} 处` : '无匹配' }}</text><text @tap="previousMatch">上一个</text><text @tap="nextMatch">下一个</text><text @tap="replaceCurrent">替换</text><text @tap="replaceEvery">全部替换</text></view></view>
   </view>
@@ -24,11 +24,13 @@ import AssistantGlyph from '../../components/AssistantGlyph.vue'
 import { refreshAssistantProposals } from '../../src/store/assistant-sessions.js'
 import { rebaseBookEdit, validateStructureProposal } from '../../src/services/assistant.js'
 import { prepareImageExport } from '../../src/store/image-export-draft'
+import { chooseArticleImage } from '../../src/services/article-images'
+import { imageIdFromParagraph, insertImageAt, removeImageFromDocument, textOnlyDocument } from '../../src/utils/media'
 import { documentFromParagraphs, editDocument, findMatches, paragraphOffset, paragraphsFromDocument, replaceAt, replaceAll, stepMatchIndex, stripLegacyIndents } from '../../src/utils/text'
 
 const ids = ref({ book: '', chapter: '', article: '' })
 const documentRevision = ref(0)
-const title = ref(''), body = ref(''), cursorRequest = ref({ seq: 0, start: 0, end: 0 }), lastCursor = ref(0)
+const title = ref(''), body = ref(''), images = ref({}), cursorRequest = ref({ seq: 0, start: 0, end: 0 }), lastCursor = ref(0)
 const showSearch = ref(false), showOutline = ref(false), showFontSize = ref(false), pinchLocked = ref(true), searchQuery = ref(''), replacement = ref(''), matchIndex = ref(-1), saveState = ref('已保存'), immersive = ref(false), switching = ref(false)
 const showAi = ref(false), aiFullscreen = ref(false), selectedContext = ref(''), aiRef = ref(null)
 const collapsedChapters = reactive({})
@@ -41,6 +43,7 @@ function initialize(options) {
   const item = getArticle(options.bookId, options.chapterId, options.articleId)
   if (item) {
     title.value = item.title
+    images.value = { ...(item.images || {}) }
     const originalCursor = options.cursor == null ? null : Math.max(0, Number(options.cursor) || 0)
     const normalized = stripLegacyIndents(item.paragraphs, originalCursor)
     body.value = documentFromParagraphs(normalized.paragraphs)
@@ -58,12 +61,12 @@ const article = computed(() => getArticle(ids.value.book, ids.value.chapter, ids
 const chapter = computed(() => getChapter(ids.value.book, ids.value.chapter))
 const book = computed(() => getBook(ids.value.book))
 const paragraphs = computed(() => paragraphsFromDocument(body.value))
-const paragraphCount = computed(() => paragraphs.value.length)
-const wordTotal = computed(() => body.value.replace(/\s/g, '').length)
+const paragraphCount = computed(() => paragraphs.value.filter(item => !imageIdFromParagraph(item)).length)
+const wordTotal = computed(() => textOnlyDocument(body.value).replace(/\s/g, '').length)
 const bookArticleCount = computed(() => book.value?.chapters.reduce((sum, group) => sum + group.articles.length, 0) || 0)
 const matches = computed(() => findMatches(paragraphs.value, searchQuery.value))
 watch(searchQuery, () => { matchIndex.value = -1 })
-function snapshot() { return JSON.stringify({ title: title.value, body: body.value }) }
+function snapshot() { return JSON.stringify({ title: title.value, body: body.value, images: images.value }) }
 function commitHistory() {
   const next = snapshot()
   if (history[historyIndex] === next) return
@@ -75,14 +78,14 @@ function commitHistory() {
 function scheduleHistory() { clearTimeout(historyTimer); historyTimer = setTimeout(commitHistory, 600) }
 function restoreHistory(index) {
   const data = JSON.parse(history[index])
-  title.value = data.title; body.value = data.body
+  title.value = data.title; body.value = data.body; images.value = data.images || {}
   focusAt(Math.min(lastCursor.value, body.value.length), undefined, { preserveScroll: true })
   scheduleSave()
 }
 function undo() { clearTimeout(historyTimer); commitHistory(); if (historyIndex > 0) { historyIndex -= 1; restoreHistory(historyIndex) } }
 function redo() { clearTimeout(historyTimer); if (historyIndex < history.length - 1) { historyIndex += 1; restoreHistory(historyIndex) } }
 function scheduleSave() { saveState.value = '保存中…'; clearTimeout(timer); timer = setTimeout(saveNow, 350) }
-function saveNow() { clearTimeout(timer); if (!ids.value.article) return; try { saveArticle(ids.value.book, ids.value.chapter, ids.value.article, { title: title.value, paragraphs: paragraphs.value, cursor: lastCursor.value }); saveState.value = '已保存' } catch (_) { saveState.value = '保存失败'; uni.showToast({ title: '保存失败，请检查存储空间', icon: 'none' }) } }
+function saveNow() { clearTimeout(timer); if (!ids.value.article) return; try { saveArticle(ids.value.book, ids.value.chapter, ids.value.article, { title: title.value, paragraphs: paragraphs.value, images: images.value, cursor: lastCursor.value }); saveState.value = '已保存' } catch (_) { saveState.value = '保存失败'; uni.showToast({ title: '保存失败，请检查存储空间', icon: 'none' }) } }
 function onTitle(e) { title.value = e.detail.value; scheduleHistory(); scheduleSave() }
 function onVisualCursor(cursor) {
   if (cursor && typeof cursor === 'object') { if (cursor.documentId && cursor.documentId !== ids.value.article) return; cursor = cursor.offset }
@@ -112,6 +115,26 @@ function appendParagraph() {
   body.value = body.value.slice(0, cursor) + '\n' + body.value.slice(cursor)
   focusAt(cursor + 1, undefined, { animate: true }); scheduleHistory(); scheduleSave()
 }
+async function addImage() {
+  try {
+    const image = await chooseArticleImage()
+    const id = `img-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
+    commitHistory()
+    images.value = { ...images.value, [id]: image }
+    const next = insertImageAt(body.value, lastCursor.value, id)
+    body.value = next.text
+    focusAt(next.cursor, undefined, { preserveScroll: true })
+    commitHistory(); scheduleSave()
+  } catch (error) { if (!String(error.message).includes('取消')) uni.showToast({ title: error.message || '插入图片失败', icon: 'none' }) }
+}
+function removeImage(id) {
+  if (!images.value[id]) return
+  commitHistory()
+  body.value = removeImageFromDocument(body.value, id)
+  const copy = { ...images.value }; delete copy[id]; images.value = copy
+  focusAt(Math.min(lastCursor.value, body.value.length), undefined, { preserveScroll: true })
+  commitHistory(); scheduleSave()
+}
 function leave() { clearTimeout(historyTimer); saveNow(); uni.navigateBack() }
 function toggleChapter(id) { collapsedChapters[id] = !collapsedChapters[id] }
 function openSibling(chapterId, articleId) {
@@ -122,6 +145,7 @@ function openSibling(chapterId, articleId) {
   ids.value = { book: ids.value.book, chapter: chapterId, article: articleId }
   documentRevision.value += 1
   title.value = item.title
+  images.value = { ...(item.images || {}) }
   body.value = documentFromParagraphs(normalized.paragraphs)
   lastCursor.value = 0
   history = [snapshot()]; historyIndex = 0
@@ -139,8 +163,10 @@ function closeAi() { showAi.value = false; aiFullscreen.value = false; updatePre
 function onAskAi(selection) { selectedContext.value = selection?.text || ''; immersive.value = false; showOutline.value = false; showAi.value = true; updatePreferences({ aiSidebarOpen: true }) }
 function onExportSelection(selection) {
   if (selection?.documentId !== ids.value.article || !selection.text?.trim()) return
+  if (selection.text.includes('\uFFFCimage:')) return uni.showToast({ title: '图片不能导出到文字卡片', icon: 'none' })
   saveNow()
-  prepareImageExport({ bookId: ids.value.book, chapterId: ids.value.chapter, articleId: ids.value.article, start: selection.start, end: selection.end, text: selection.text })
+  const start = textOnlyDocument(body.value.slice(0, selection.start)).length
+  prepareImageExport({ bookId: ids.value.book, chapterId: ids.value.chapter, articleId: ids.value.article, start, end: start + selection.text.length, text: selection.text })
   uni.navigateTo({ url: `/pages/export-image/index?bookId=${encodeURIComponent(ids.value.book)}&source=selection` })
 }
 function applyAiProposal(index) {
