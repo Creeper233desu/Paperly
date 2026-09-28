@@ -1,5 +1,5 @@
 import { reactive } from 'vue'
-import { bookContext, DEFAULT_AI_PROMPT, planBookEdit, rebaseBookEdit } from '../services/assistant.js'
+import { applyStructureToSnapshot, bookContext, DEFAULT_AI_PROMPT, planBookEdit, rebaseBookEdit } from '../services/assistant.js'
 import { documentFromParagraphs } from '../utils/text.js'
 import { buildChatRequest, createChatAccumulator, streamChat } from '../services/ai-providers.js'
 import { createPacedReveal } from '../utils/paced-reveal.js'
@@ -62,9 +62,21 @@ export function deleteAssistantSession(bookId, sessionId) {
   return true
 }
 export function removeAssistantProposal(bookId, index) { const session = activeAssistantSession(bookId); session.proposals.splice(index, 1); persist() }
+export function setAssistantProposalStatus(bookId, index, status) {
+  if (!['accepted', 'rejected'].includes(status)) throw new Error('无效的提案状态')
+  const session = activeAssistantSession(bookId)
+  const proposal = session.proposals[index]
+  if (!proposal || (proposal.status && proposal.status !== 'pending')) return false
+  proposal.status = status
+  proposal.resolvedAt = Date.now()
+  persist()
+  return true
+}
 export function refreshAssistantProposals(book, currentArticleId, currentDraft) {
   const session = activeAssistantSession(book.id)
   for (const proposal of session.proposals) {
+    if (proposal.status && proposal.status !== 'pending') continue
+    if (proposal.kind === 'structure') continue
     if (!proposal.articleId) continue
     const article = book.chapters.flatMap(chapter => chapter.articles).find(item => item.id === proposal.articleId)
     if (!article) { proposal.error = '目标正文已不存在'; continue }
@@ -120,9 +132,12 @@ export function sendAssistantMessage({ book, articleId, draft, selectedText = ''
         try {
           const proposal = planBookEdit(workingBook, call, articleId, workingDraft)
           session.proposals.push(proposal)
-          const article = workingBook.chapters.flatMap(chapter => chapter.articles).find(item => item.id === proposal.articleId)
-          if (article) article.paragraphs = proposal.paragraphs
-          if (proposal.articleId === articleId) workingDraft = proposal.after
+          if (proposal.kind === 'structure') applyStructureToSnapshot(workingBook, proposal)
+          else {
+            const article = workingBook.chapters.flatMap(chapter => chapter.articles).find(item => item.id === proposal.articleId)
+            if (article) article.paragraphs = proposal.paragraphs
+            if (proposal.articleId === articleId) workingDraft = proposal.after
+          }
         }
         catch (error) { session.proposals.push({ title: '无法定位正文', description: call.name || '修改', error: error.message }) }
       }

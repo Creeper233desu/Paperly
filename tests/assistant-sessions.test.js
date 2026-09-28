@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { effect } from 'vue'
-import { activeAssistantSession, assistantSessions, compactConversation, deleteAssistantSession, newAssistantSession, refreshAssistantProposals, removeAssistantProposal, sendAssistantMessage } from '../src/store/assistant-sessions.js'
+import { activeAssistantSession, assistantSessions, compactConversation, deleteAssistantSession, newAssistantSession, refreshAssistantProposals, removeAssistantProposal, setAssistantProposalStatus, sendAssistantMessage } from '../src/store/assistant-sessions.js'
 
 test('a streaming reply remains in the book session while the editor is gone', async () => {
   const storage = new Map()
@@ -64,6 +64,20 @@ test('multiple AI edits are planned in order and remaining proposals follow acce
   assert.equal(session.proposals[0].before, '序甲乙丙')
   assert.equal(session.proposals[0].after, '序甲丙')
   delete globalThis.plus
+})
+
+test('accepted and rejected proposal cards remain in conversation history', () => {
+  const storage = new Map()
+  globalThis.uni = { getStorageSync: key => storage.get(key), setStorageSync: (key, value) => storage.set(key, value) }
+  const session = newAssistantSession('proposal-history-book')
+  session.proposals.push({ title: '甲', description: '增添', articleId: 'a', before: '旧' }, { title: '乙', description: '删除', articleId: 'b', before: '旧' })
+  assert.equal(setAssistantProposalStatus('proposal-history-book', 0, 'accepted'), true)
+  assert.equal(setAssistantProposalStatus('proposal-history-book', 1, 'rejected'), true)
+  refreshAssistantProposals({ id: 'proposal-history-book', chapters: [] }, '', '')
+  assert.equal(session.proposals.length, 2)
+  assert.deepEqual(session.proposals.map(item => item.status), ['accepted', 'rejected'])
+  assert.equal(session.proposals[0].error, undefined)
+  assert.match(storage.get('paperwriter.assistantSessions.v1'), /"status":"accepted"/)
 })
 
 test('long chats retain a bounded summary and recent turns', () => {

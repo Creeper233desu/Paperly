@@ -25,17 +25,18 @@ test('Anthropic model listing follows pagination cursors', async () => {
   assert.match(urls[1], /after_id=first/)
 })
 
-test('OpenAI-compatible and Anthropic requests preserve only proposed insert/delete tools', () => {
+test('OpenAI-compatible and Anthropic requests include scoped text and structure proposal tools', () => {
   const openai = buildChatRequest({ provider: 'openai', apiKey: 'key', model: 'gpt-5-test', effort: 'high' }, 'system', [{ role: 'user', content: 'hello' }])
   assert.equal(openai.data.stream, true)
   assert.equal(openai.url, 'https://api.openai.com/v1/responses')
   assert.equal(openai.data.reasoning.effort, 'high')
   assert.equal(openai.data.reasoning.summary, 'auto')
-  assert.deepEqual(openai.data.tools.map(item => item.name), ['insert_text', 'delete_text'])
+  const toolNames = ['insert_text', 'delete_text', 'add_chapter', 'delete_chapter', 'rename_chapter', 'add_article', 'delete_article', 'rename_article']
+  assert.deepEqual(openai.data.tools.map(item => item.name), toolNames)
   const anthropic = buildChatRequest({ provider: 'anthropic', apiKey: 'key', model: 'claude-sonnet-4-6', effort: 'medium' }, 'system', [{ role: 'user', content: 'hello' }])
   assert.equal(anthropic.url, 'https://api.anthropic.com/v1/messages')
   assert.equal(anthropic.data.system, 'system')
-  assert.deepEqual(anthropic.data.tools.map(item => item.name), ['insert_text', 'delete_text'])
+  assert.deepEqual(anthropic.data.tools.map(item => item.name), toolNames)
   assert.equal(anthropic.data.output_config.effort, 'medium')
   assert.deepEqual(anthropic.data.thinking, { type: 'adaptive' })
   const deepseek = buildChatRequest({ provider: 'deepseek', apiKey: 'key', model: 'server-listed-model', effort: 'max' }, 'system', [{ role: 'user', content: 'hello' }])

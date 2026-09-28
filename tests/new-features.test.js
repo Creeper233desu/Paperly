@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { editDocument } from '../src/utils/text.js'
-import { bookContext, planBookEdit, rebaseBookEdit } from '../src/services/assistant.js'
+import { applyStructureToSnapshot, bookContext, planBookEdit, rebaseBookEdit, validateStructureProposal } from '../src/services/assistant.js'
 import { createTextPng, layoutImageText, paintTextImage } from '../src/services/image-export.js'
 
 test('corner quotes pair at the caret', () => {
@@ -25,6 +25,25 @@ test('a second independent AI proposal safely rebases after the first is accepte
   const updated = { chapters: [{ id: 'ch', title: '第一章', articles: [{ id: 'a', title: '开篇', paragraphs: first.paragraphs }] }] }
   assert.equal(rebaseBookEdit(updated, second, 'a', first.after).after, '甲新丙')
   assert.throws(() => rebaseBookEdit(updated, second, 'a', '甲新乙乙丙'), /不唯一/)
+})
+
+test('AI chapter and article proposals stay scoped and reject stale destructive changes', () => {
+  const draft = structuredClone(book)
+  const add = planBookEdit(draft, { name: 'add_article', args: { chapter_id: 'ch', title: '续篇' } }, 'a', '甲乙丙')
+  assert.equal(add.kind, 'structure')
+  assert.equal(validateStructureProposal(draft, add), true)
+  applyStructureToSnapshot(draft, add)
+  assert.equal(draft.chapters[0].articles[1].title, '续篇')
+  const rename = planBookEdit(draft, { name: 'rename_article', args: { article_id: add.operation.args.assigned_id, title: '终篇' } }, 'a', '甲乙丙')
+  applyStructureToSnapshot(draft, rename)
+  assert.equal(draft.chapters[0].articles[1].title, '终篇')
+  const remove = planBookEdit(draft, { name: 'delete_chapter', args: { chapter_id: 'ch' } }, 'a', '甲乙丙')
+  draft.chapters[0].articles[0].updatedAt = 'new-save-time'
+  assert.equal(validateStructureProposal(draft, remove), true)
+  draft.chapters[0].articles[0].paragraphs = ['正文已变化']
+  assert.equal(validateStructureProposal(draft, remove), false)
+  assert.throws(() => applyStructureToSnapshot(draft, remove), /已变化/)
+  assert.throws(() => planBookEdit(draft, { name: 'delete_article', args: { article_id: 'outside' } }, 'a', '甲乙丙'), /不属于当前书本/)
 })
 
 test('custom AI prompt is included with current book context', () => {

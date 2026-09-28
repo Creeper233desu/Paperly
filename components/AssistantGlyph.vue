@@ -37,8 +37,8 @@ defineProps({ name: { type: String, required: true }, open: Boolean, expanded: B
 .cross-stroke { position:absolute; left:3px; top:8px; width:12px; height:2px; border-radius:2px; background:currentColor; transition:transform .25s ease; }
 .plus .second { transform:rotate(90deg); }
 .close .first { transform:rotate(45deg); }.close .second { transform:rotate(-45deg); }
-.send-shaft { position:absolute; left:3px; top:10px; width:12px; height:2px; border-radius:2px; background:currentColor; transform:rotate(-38deg); transform-origin:right center; }
-.send-head { position:absolute; right:2px; top:2px; width:7px; height:7px; border-top:2px solid currentColor; border-right:2px solid currentColor; border-radius:1px; }
+.send-shaft { position:absolute; left:8px; top:5px; width:2px; height:12px; border-radius:2px; background:currentColor; }
+.send-head { position:absolute; left:4px; top:4px; width:9px; height:9px; border-top:2px solid currentColor; border-left:2px solid currentColor; border-radius:1px; transform:rotate(45deg); }
 .spark-main { position:absolute; left:3px; top:2px; width:12px; height:14px; background:currentColor; clip-path:polygon(50% 0,65% 35%,100% 50%,65% 65%,50% 100%,35% 65%,0 50%,35% 35%); }
 .spark-small { position:absolute; right:0; top:0; width:4px; height:4px; border-radius:50%; background:currentColor; }
 @media (prefers-reduced-motion:reduce) { .glyph,.glyph view { transition:none !important; } }

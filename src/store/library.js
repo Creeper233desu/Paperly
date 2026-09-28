@@ -64,9 +64,10 @@ export function deleteBook(id) {
   state.books = state.books.filter(item => item.id !== id); persist()
   removed.forEach(article => recordWordDelta(book.id, book.title, article.id, article.title, -article.words))
 }
-export function addChapter(bookId, title) {
+export function addChapter(bookId, title, id = uid()) {
   const book = getBook(bookId); if (!book) return null
-  const chapter = { id: uid(), title: title.trim(), articles: [] }
+  if (book.chapters.some(item => item.id === id)) throw new Error('章节 ID 已存在')
+  const chapter = { id, title: title.trim(), articles: [] }
   book.chapters.push(chapter); book.updatedAt = now(); persist(); return chapter
 }
 export function renameChapter(bookId, id, title) { const ch = getChapter(bookId, id); if (ch) { ch.title = title.trim(); persist() } }
@@ -79,13 +80,23 @@ export function deleteChapter(bookId, id) {
   persist()
   removed.forEach(article => recordWordDelta(book.id, book.title, article.id, article.title, -article.words))
 }
-export function addArticle(bookId, chapterId, title = '') {
+export function addArticle(bookId, chapterId, title = '', id = uid()) {
   const chapter = getChapter(bookId, chapterId); if (!chapter) return null
-  const article = { id: uid(), title: title.trim(), paragraphs: [''], updatedAt: now() }
+  if (chapter.articles.some(item => item.id === id)) throw new Error('正文 ID 已存在')
+  const article = { id, title: title.trim(), paragraphs: [''], updatedAt: now() }
   chapter.articles.push(article)
   const book = getBook(bookId)
   if (book) book.lastEdited = { chapterId, articleId: article.id, cursor: 0, updatedAt: article.updatedAt }
   persist(); return article
+}
+export function renameArticle(bookId, chapterId, articleId, title) {
+  const article = getArticle(bookId, chapterId, articleId)
+  const book = getBook(bookId)
+  if (!article || !book) return
+  article.title = title.trim()
+  article.updatedAt = now()
+  book.updatedAt = article.updatedAt
+  persist()
 }
 export function saveArticle(bookId, chapterId, articleId, patch) {
   const article = getArticle(bookId, chapterId, articleId); if (!article) return
