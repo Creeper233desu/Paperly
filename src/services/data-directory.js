@@ -42,8 +42,12 @@ function legacyStorageAccess() {
   if (targetSdkVersion() > 29) return false
   if (sdkVersion() >= 23 && Number(invoke(activity, 'checkSelfPermission', 'android.permission.WRITE_EXTERNAL_STORAGE')) !== 0) return false
   const documents = invoke(documentRoot(), 'getParentFile')
-  const probe = invoke(documents, 'exists') ? documents : invoke(documents, 'getParentFile')
-  return !!invoke(probe, 'canRead') && !!invoke(probe, 'canWrite')
+  const folder = invoke(documents, 'exists') ? documents : invoke(documents, 'getParentFile')
+  if (!invoke(folder, 'canRead') || !invoke(folder, 'canWrite')) return false
+  const probe = child(folder, `.paperwriter-access-${Date.now()}-${Math.random().toString(36).slice(2)}.tmp`)
+  try { return !!invoke(probe, 'createNewFile') }
+  catch (_) { return false }
+  finally { try { if (invoke(probe, 'exists')) invoke(probe, 'delete') } catch (_) { /* permission is checked again before IO */ } }
 }
 function hasPermission() {
   if (!androidReady()) return false

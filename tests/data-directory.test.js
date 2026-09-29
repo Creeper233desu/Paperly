@@ -135,6 +135,7 @@ test('fixed Documents directory restores books after reinstall without choosing 
     targetVersion = 28
     assert.equal(await service.requestDataAccess(), 'ready')
     assert.equal(permissionRequests, 1)
+    assert.equal(readdirSync(publicDocuments).some(name => name.startsWith('.paperwriter-access-')), false)
     granted = true
 
     writeFileSync(localPath('_doc/export.png'), 'picture')
