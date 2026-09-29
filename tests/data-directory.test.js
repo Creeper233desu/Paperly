@@ -12,6 +12,7 @@ test('fixed Documents directory restores books after reinstall without choosing 
   mkdirSync(localPath('_doc/'), { recursive:true })
   mkdirSync(publicDocuments)
   let granted = false, legacyGranted = false, targetVersion = 35, permissionRequests = 0, settingsOpened = false
+  let publicDirectoryAvailable = true, externalRootAvailable = true
 
   class File {
     constructor(parent, name) { this.path = name === undefined ? (parent.path || parent) : join(parent.path || parent, name) }
@@ -51,13 +52,14 @@ test('fixed Documents directory restores books after reinstall without choosing 
   }
   class Intent { constructor(action, uri) { this.action = action; this.uri = uri } }
   const Environment = {
-    DIRECTORY_DOCUMENTS:'Documents',
-    getExternalStoragePublicDirectory:() => new File(publicDocuments),
+    getExternalStoragePublicDirectory:type => publicDirectoryAvailable && type === 'Documents' ? new File(publicDocuments) : null,
+    getExternalStorageDirectory:() => externalRootAvailable ? new File(workspace) : null,
     isExternalStorageManager:() => granted
   }
   const activity = {
     getPackageName:() => 'app.paperwriter',
     getApplicationInfo:() => ({ targetSdkVersion:targetVersion }),
+    getExternalFilesDir:() => new File(join(workspace, 'Android', 'data', 'app.paperwriter', 'files')),
     checkSelfPermission:() => legacyGranted ? 0 : -1,
     startActivity:() => { settingsOpened = true }
   }
@@ -122,6 +124,7 @@ test('fixed Documents directory restores books after reinstall without choosing 
     rmSync(localPath('_doc/cover.png'))
     service.dataDirectory.ready = false
     granted = false
+    publicDirectoryAvailable = false
     assert.equal(await service.ensureDataDirectory(), 'permission-required')
     granted = true
     assert.equal(await service.ensureDataDirectory(), 'restored')
@@ -132,6 +135,7 @@ test('fixed Documents directory restores books after reinstall without choosing 
     // An APK targeting legacy storage can use its granted write access directly.
     service.dataDirectory.ready = false
     granted = false
+    externalRootAvailable = false
     targetVersion = 28
     assert.equal(await service.requestDataAccess(), 'ready')
     assert.equal(permissionRequests, 1)

@@ -28,7 +28,28 @@ function child(parent, name) { return new (androidClass('java.io.File'))(parent,
 function absolute(file) { return String(invoke(file, 'getAbsolutePath')) }
 function documentRoot() {
   const Environment = androidClass('android.os.Environment')
-  const documents = invoke(Environment, 'getExternalStoragePublicDirectory', Environment.DIRECTORY_DOCUMENTS)
+  const File = androidClass('java.io.File')
+  const attempt = (object, method, ...args) => {
+    try { return object ? invoke(object, method, ...args) : null }
+    catch (_) { return null }
+  }
+  // Native.js does not always expose DIRECTORY_DOCUMENTS as a class field.
+  let documents = attempt(Environment, 'getExternalStoragePublicDirectory', 'Documents')
+  if (!documents) {
+    const externalRoot = attempt(Environment, 'getExternalStorageDirectory')
+    if (externalRoot) documents = child(externalRoot, 'Documents')
+  }
+  if (!documents) {
+    const activity = plus.android.runtimeMainActivity()
+    const appFiles = attempt(activity, 'getExternalFilesDir', null)
+    const appCache = appFiles ? null : attempt(activity, 'getExternalCacheDir')
+    const appPath = appFiles || appCache || plus.io.convertLocalFileSystemURL('_doc/')
+    const path = appPath && (typeof appPath === 'string' ? appPath : absolute(appPath))
+    const normalized = String(path || '').replace(/^file:\/\//, '').replace(/\\/g, '/')
+    const marker = '/Android/data/'
+    const markerAt = normalized.indexOf(marker)
+    if (markerAt > 0) documents = child(new File(normalized.slice(0, markerAt)), 'Documents')
+  }
   if (!documents) throw new Error('无法定位系统 Documents 目录')
   return child(documents, APP_FOLDER)
 }
