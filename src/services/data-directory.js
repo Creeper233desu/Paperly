@@ -15,7 +15,10 @@ let syncTimer = null, syncQueue = Promise.resolve(), syncSuspended = false, conn
 function androidReady() { return typeof plus !== 'undefined' && plus.os?.name === 'Android' }
 function invoke(object, method, ...args) { return plus.android.invoke(object, method, ...args) }
 function androidClass(name) { return plus.android.importClass(name) }
-function sdkVersion() { return Number(androidClass('android.os.Build$VERSION').SDK_INT || 0) }
+function sdkVersion() {
+  const build = androidClass('android.os.Build')
+  return Number(build?.VERSION?.SDK_INT || androidClass('android.os.Build$VERSION').SDK_INT || 0)
+}
 function localFile(path) {
   const File = androidClass('java.io.File')
   const converted = plus.io.convertLocalFileSystemURL(path)
@@ -140,10 +143,9 @@ function discoverAssets(values) {
   })
   return [...paths].map(path => ({ path, name:assetName(path) }))
 }
-function latestSnapshot(root) {
+function completedSnapshots(root) {
   const found = new Set(names(root))
-  const latest = [...found].filter(name => /^snapshot-\d+\.json$/.test(name) && found.has(name.replace(/\.json$/, '.ok'))).sort().pop()
-  return latest ? child(root, latest) : null
+  return [...found].filter(name => /^snapshot-\d+\.json$/.test(name) && found.has(name.replace(/\.json$/, '.ok'))).sort().reverse().map(name => child(root, name))
 }
 async function backupTo(root) {
   ensureFolder(root)
@@ -178,10 +180,20 @@ async function backupTo(root) {
   dataDirectory.error = ''
 }
 async function restoreFrom(root) {
-  const latest = latestSnapshot(root)
-  if (!latest) return false
+  const candidates = completedSnapshots(root)
+  if (!candidates.length) return false
   ensureFolder(localFile('_doc/recovered'))
-  await copyFile(latest, localFile('_doc/recovered/snapshot.json'))
+  let lastError
+  for (const candidate of candidates) {
+    try {
+      await restoreSnapshot(root, candidate)
+      return true
+    } catch (error) { lastError = error }
+  }
+  throw new Error(`无法恢复数据：所有已完成的备份均不可用（${lastError?.message || '未知错误'}）`)
+}
+async function restoreSnapshot(root, candidate) {
+  await copyFile(candidate, localFile('_doc/recovered/snapshot.json'))
   const snapshot = JSON.parse(await readLocalText('_doc/recovered/snapshot.json'))
   if (snapshot.version !== 1 || !snapshot.values || !Array.isArray(snapshot.assets)) throw new Error('备份格式无法识别')
   const assets = child(root, 'assets')
@@ -206,7 +218,6 @@ async function restoreFrom(root) {
     } catch (_) { /* preserve original error */ }
     throw error
   } finally { syncSuspended = false }
-  return true
 }
 
 export function initDataDirectory() {
@@ -236,7 +247,7 @@ export async function ensureDataDirectory() {
       const root = documentRoot()
       const existed = !!invoke(root, 'exists')
       if (existed && !invoke(root, 'isDirectory')) throw new Error('Documents/PaperWriter 已被同名文件占用')
-      const existingSnapshot = existed ? latestSnapshot(root) : null
+      const existingSnapshot = existed ? completedSnapshots(root).length > 0 : false
       // A fresh installation has no app-local data. Existing local books always
       // win during an upgrade; never overwrite them with an older shared backup.
       const localLibrary = uni.getStorageSync('paperwriter.library.v1')

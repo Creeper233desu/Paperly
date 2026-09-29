@@ -59,6 +59,7 @@ test('fixed Documents directory restores books after reinstall without choosing 
     android:{
       runtimeMainActivity:() => activity,
       importClass:name => ({
+        'android.os.Build':{ VERSION:{ SDK_INT:35 } },
         'android.os.Build$VERSION':{ SDK_INT:35 },
         'android.os.Environment':Environment,
         'java.io.File':File,
@@ -105,7 +106,8 @@ test('fixed Documents directory restores books after reinstall without choosing 
     const root = join(publicDocuments, 'PaperWriter')
     assert.equal(existsSync(root), true)
     assert.equal(readdirSync(root).filter(name => /^snapshot-\d+\.ok$/.test(name)).length, 1)
-    writeFileSync(join(root, 'snapshot-9999999999999.json'), '{incomplete')
+    writeFileSync(join(root, 'snapshot-9999999999999.json'), '{corrupt')
+    writeFileSync(join(root, 'snapshot-9999999999999.ok'), '')
 
     // Simulate an uninstall: app-local storage and media disappear, public Documents remains.
     storage.clear()
