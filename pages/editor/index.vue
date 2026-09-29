@@ -1,15 +1,189 @@
 <template>
   <view class="editor-screen" :class="[themeClass(), { immersive, 'ai-open': showAi, 'ai-fullscreen': aiFullscreen }]">
-    <view class="editor-header"><view class="header-left"><text class="header-back" @tap="leave">‹</text><view class="outline-trigger" @tap="showOutline = !showOutline">☰</view><view class="header-titles"><text>{{ book?.title || '纸间' }}</text><text>{{ chapter?.title || '正文' }}</text></view></view><view class="header-right"><text class="save-label">{{ saveState }}</text><view class="header-tool pinch-lock" :class="{ on: !pinchLocked }" :aria-label="pinchLocked ? '解锁双指缩放' : '锁定双指缩放'" @tap="pinchLocked = !pinchLocked"><UiIcon :name="pinchLocked ? 'lock' : 'unlock'" /></view><view class="header-tool more" aria-label="打开设置" @tap="openSettings"><UiIcon name="gear" /></view></view></view>
-    <view v-if="showOutline" class="outline-backdrop" @tap="showOutline = false"></view>
-    <view v-if="article" class="editor-layout" :class="{ switching }"><view class="outline-rail" :class="{ open: showOutline }"><view class="rail-top"><view class="rail-caption">篇章目录</view><text @tap="showOutline = false">×</text></view><view class="outline-scroll"><view v-for="(group, groupIndex) in book?.chapters || []" :key="group.id" class="outline-group"><view class="outline-chapter" :class="{ current: group.id === ids.chapter }" @tap="toggleChapter(group.id)"><text class="outline-caret">{{ collapsedChapters[group.id] ? '›' : '⌄' }}</text><text>{{ groupIndex + 1 }}. {{ group.title }}</text><text class="outline-count">{{ group.articles.length }}</text></view><view v-if="!collapsedChapters[group.id]" class="outline-articles"><view v-for="item in group.articles" :key="item.id" class="outline-item" :class="{ current: item.id === ids.article }" @tap="item.id !== ids.article ? openSibling(group.id, item.id) : showOutline = false">{{ item.title || '无题正文' }}</view></view></view></view><view class="rail-bottom">{{ book?.chapters.length || 0 }} 章 · {{ bookArticleCount }} 篇</view></view>
-      <view class="writing-column"><view class="writing-meta"><text>{{ chapter?.title }}</text><text>{{ wordTotal }} 字 · {{ paragraphCount }} 段</text></view><input class="article-name" :value="title" placeholder="" maxlength="100" @input="onTitle" @blur="saveNow" /><view class="writing-rule"></view><view class="document-wrap"><DocumentInput :value="body" :images="images" :document-id="ids.article" :document-revision="documentRevision" :font-family="fontFamilyFor(prefs.font)" :font-size="prefs.fontSize" :pinch-enabled="!pinchLocked" :focus-mode="prefs.focus" :animated-cursor="prefs.animatedCursor" :cursor-style="prefs.cursorStyle" :cursor-trail-color="prefs.cursorTrailColor" :cursor-trail-length="prefs.cursorTrailLength" :cursor-request="cursorRequest" @blur="saveNow" @input="onDocumentInput" @cursor="onVisualCursor" @pinch="onPinch" @remove-image="removeImage" @ask-ai="onAskAi" @export-image="onExportSelection" /></view></view>
-      <view class="info-rail"><view class="status-summary"><view class="rail-caption">写作状态</view><view class="info-stat"><text class="info-number">{{ wordTotal }}</text><text>当前字数</text></view><view class="info-stat"><text class="info-number">{{ paragraphCount }}</text><text>段落</text></view><view class="info-note">文字会自动保存。目录中可随时切换篇章。</view></view><view class="assistant-slot" :class="{ open: showAi }"><AiAssistant v-if="book" ref="aiRef" :book="book" :article-id="ids.article" :body="body" :selected-text="selectedContext" :system-prompt="prefs.aiSystemPrompt" :fullscreen="aiFullscreen" :open="showAi" @close="closeAi" @toggle-fullscreen="aiFullscreen = !aiFullscreen" @clear-selection="selectedContext = ''" @apply="applyAiProposal" /></view></view>
+    <view class="editor-header">
+      <view class="header-left">
+        <text class="header-back" @tap="leave">‹</text>
+        <view class="outline-trigger" @tap="showOutline = !showOutline">☰</view>
+        <view class="header-titles">
+          <text>{{ book?.title || '纸间' }}</text>
+          <text>{{ chapter?.title || '正文' }}</text>
+        </view>
+      </view>
+      <view class="header-right">
+        <text class="save-label">{{ saveState }}</text>
+      <view
+        class="header-tool pinch-lock"
+        :class="{ on: !pinchLocked }"
+        :aria-label="pinchLocked ? '解锁双指缩放' : '锁定双指缩放'"
+        @tap="pinchLocked = !pinchLocked"
+      >
+        <view class="lock-glyph" :class="{ unlocked: !pinchLocked }">
+          <view class="lock-shackle"></view>
+          <view class="lock-body"></view>
+          <view class="lock-keyhole"></view>
+        </view>
+      </view>
+        <view class="header-tool more" aria-label="打开设置" @tap="openSettings">
+          <view class="gear-glyph">
+            <view class="gear-tooth t1"></view>
+            <view class="gear-tooth t2"></view>
+            <view class="gear-tooth t3"></view>
+            <view class="gear-tooth t4"></view>
+            <view class="gear-tooth t5"></view>
+            <view class="gear-tooth t6"></view>
+            <view class="gear-ring"></view>
+            <view class="gear-hole"></view>
+          </view>
+        </view>
+      </view>
     </view>
-    <view class="editor-dock"><view class="dock-count">{{ wordTotal }} 字</view><scroll-view class="dock-scroll" scroll-x :show-scrollbar="false"><view class="dock-scroll-content"><view class="dock-group"><view class="dock-icon" aria-label="撤销" @tap="undo"><UiIcon name="undo" /></view><view class="dock-icon" aria-label="重做" @tap="redo"><UiIcon name="redo" /></view></view><view class="dock-divider"></view><view class="dock-group symbols"><view class="dock-icon" @tap="insertSymbol('（','）')">（）</view><view class="dock-icon" @tap="insertSymbol('“','”')">“”</view><view class="dock-icon" @tap="insertSymbol('「','」')">「」</view></view><view class="dock-divider"></view><view class="dock-icon" aria-label="换段" @tap="appendParagraph"><UiIcon name="return" /></view><view class="dock-icon image-dock" aria-label="插入图片" @tap="openImageInsert"><UiIcon name="image" /></view></view></scroll-view><view class="dock-fixed"><view class="dock-icon" aria-label="查找与替换" @tap="showSearch = !showSearch"><UiIcon name="search" /></view><view class="dock-icon" :class="{ active: prefs.focus }" aria-label="聚焦" @tap="toggleFocus"><UiIcon name="focus" /></view><view class="dock-icon font-dock" :class="{ active: showFontSize }" aria-label="调整字号" @tap="showFontSize = !showFontSize">Aa</view><view class="dock-icon ai-dock" :class="{ active: showAi }" aria-label="写作助手" @tap="toggleAi"><AssistantGlyph name="sparkle" /></view><view class="dock-icon" aria-label="沉浸模式" @tap="immersive = !immersive"><UiIcon :name="immersive ? 'collapse' : 'expand'" /></view></view></view>
-    <view v-if="showFontSize" class="font-size-panel"><FontSizeControl :value="prefs.fontSize" @change="onFontSlider" /></view>
+
+    <view v-if="showOutline" class="outline-backdrop" @tap="showOutline = false"></view>
+
+    <view v-if="article" class="editor-layout" :class="{ switching }">
+      <view class="outline-rail" :class="{ open: showOutline }">
+        <view class="rail-top">
+          <view class="rail-caption">篇章目录</view>
+          <text @tap="showOutline = false">×</text>
+        </view>
+        <view class="outline-scroll">
+          <view v-for="(group, groupIndex) in book?.chapters || []" :key="group.id" class="outline-group">
+            <view class="outline-chapter" :class="{ current: group.id === ids.chapter }" @tap="toggleChapter(group.id)">
+              <text class="outline-caret">{{ collapsedChapters[group.id] ? '›' : '⌄' }}</text>
+              <text>{{ groupIndex + 1 }}. {{ group.title }}</text>
+              <text class="outline-count">{{ group.articles.length }}</text>
+            </view>
+            <view v-if="!collapsedChapters[group.id]" class="outline-articles">
+              <view
+                v-for="item in group.articles"
+                :key="item.id"
+                class="outline-item"
+                :class="{ current: item.id === ids.article }"
+                @tap="item.id !== ids.article ? openSibling(group.id, item.id) : showOutline = false"
+              >{{ item.title || '无题正文' }}</view>
+            </view>
+          </view>
+        </view>
+        <view class="rail-bottom">{{ book?.chapters.length || 0 }} 章 · {{ bookArticleCount }} 篇</view>
+      </view>
+
+      <view class="writing-column">
+        <view class="writing-meta">
+          <text>{{ chapter?.title }}</text>
+          <text>{{ wordTotal }} 字 · {{ paragraphCount }} 段</text>
+        </view>
+        <input class="article-name" :value="title" placeholder="" maxlength="100" @input="onTitle" @blur="saveNow" />
+        <view class="writing-rule"></view>
+        <view class="document-wrap">
+          <DocumentInput
+            :value="body"
+            :images="images"
+            :document-id="ids.article"
+            :document-revision="documentRevision"
+            :font-family="fontFamilyFor(prefs.font)"
+            :font-size="prefs.fontSize"
+            :pinch-enabled="!pinchLocked"
+            :focus-mode="prefs.focus"
+            :animated-cursor="prefs.animatedCursor"
+            :cursor-style="prefs.cursorStyle"
+            :cursor-trail-color="prefs.cursorTrailColor"
+            :cursor-trail-length="prefs.cursorTrailLength"
+            :cursor-request="cursorRequest"
+            @blur="saveNow"
+            @input="onDocumentInput"
+            @cursor="onVisualCursor"
+            @pinch="onPinch"
+            @remove-image="removeImage"
+            @ask-ai="onAskAi"
+            @export-image="onExportSelection"
+          />
+        </view>
+      </view>
+
+      <view class="info-rail">
+        <view class="status-summary">
+          <view class="rail-caption">写作状态</view>
+          <view class="info-stat">
+            <text class="info-number">{{ wordTotal }}</text>
+            <text>当前字数</text>
+          </view>
+          <view class="info-stat">
+            <text class="info-number">{{ paragraphCount }}</text>
+            <text>段落</text>
+          </view>
+          <view class="info-note">文字会自动保存。目录中可随时切换篇章。</view>
+        </view>
+        <view class="assistant-slot" :class="{ open: showAi }">
+          <AiAssistant
+            v-if="book"
+            ref="aiRef"
+            :book="book"
+            :article-id="ids.article"
+            :body="body"
+            :selected-text="selectedContext"
+            :system-prompt="prefs.aiSystemPrompt"
+            :fullscreen="aiFullscreen"
+            :open="showAi"
+            @close="closeAi"
+            @toggle-fullscreen="aiFullscreen = !aiFullscreen"
+            @clear-selection="selectedContext = ''"
+            @apply="applyAiProposal"
+          />
+        </view>
+      </view>
+    </view>
+
+    <view class="editor-dock">
+      <view class="dock-count">{{ wordTotal }} 字</view>
+      <scroll-view class="dock-scroll" scroll-x :show-scrollbar="false">
+        <view class="dock-scroll-content">
+          <view class="dock-group">
+            <view class="dock-icon" aria-label="撤销" @tap="undo"><UiIcon name="undo" /></view>
+            <view class="dock-icon" aria-label="重做" @tap="redo"><UiIcon name="redo" /></view>
+          </view>
+          <view class="dock-divider"></view>
+          <view class="dock-group symbols">
+            <view class="dock-icon" @tap="insertSymbol('（','）')">（）</view>
+            <view class="dock-icon" @tap="insertSymbol('“','”')">“”</view>
+            <view class="dock-icon" @tap="insertSymbol('「','」')">「」</view>
+          </view>
+          <view class="dock-divider"></view>
+          <view class="dock-icon" aria-label="换段" @tap="appendParagraph"><UiIcon name="return" /></view>
+          <view class="dock-icon image-dock" aria-label="插入图片" @tap="openImageInsert"><UiIcon name="image" /></view>
+        </view>
+      </scroll-view>
+      <view class="dock-fixed">
+        <view class="dock-icon" aria-label="查找与替换" @tap="showSearch = !showSearch"><UiIcon name="search" /></view>
+        <view class="dock-icon" :class="{ active: prefs.focus }" aria-label="聚焦" @tap="toggleFocus"><UiIcon name="focus" /></view>
+        <view class="dock-icon font-dock" :class="{ active: showFontSize }" aria-label="调整字号" @tap="showFontSize = !showFontSize">Aa</view>
+        <view class="dock-icon ai-dock" :class="{ active: showAi }" aria-label="写作助手" @tap="toggleAi"><AssistantGlyph name="sparkle" /></view>
+        <view class="dock-icon" aria-label="沉浸模式" @tap="immersive = !immersive">
+          <UiIcon :name="immersive ? 'collapse' : 'expand'" />
+        </view>
+      </view>
+    </view>
+
+    <view v-if="showFontSize" class="font-size-panel">
+      <FontSizeControl :value="prefs.fontSize" @change="onFontSlider" />
+    </view>
     <ImageInsertSheet :visible="showImageInsert" @close="showImageInsert = false" @insert="addImage" />
-    <view v-if="showSearch" class="search-panel"><view class="search-head"><text>查找与替换</text><text @tap="showSearch = false">完成</text></view><view class="search-inputs"><input v-model="searchQuery" class="search-input" placeholder="查找文字" confirm-type="search" @confirm="nextMatch" /><input v-model="replacement" class="search-input" placeholder="替换为" /></view><view class="search-actions"><text class="match-count">{{ matches.length ? `${Math.max(matchIndex + 1, 0)} / ${matches.length} 处` : '无匹配' }}</text><text @tap="previousMatch">上一个</text><text @tap="nextMatch">下一个</text><text @tap="replaceCurrent">替换</text><text @tap="replaceEvery">全部替换</text></view></view>
+    <view v-if="showSearch" class="search-panel">
+      <view class="search-head">
+        <text>查找与替换</text>
+        <text @tap="showSearch = false">完成</text>
+      </view>
+      <view class="search-inputs">
+        <input v-model="searchQuery" class="search-input" placeholder="查找文字" confirm-type="search" @confirm="nextMatch" />
+        <input v-model="replacement" class="search-input" placeholder="替换为" />
+      </view>
+      <view class="search-actions">
+        <text class="match-count">{{ matches.length ? `${Math.max(matchIndex + 1, 0)} / ${matches.length} 处` : '无匹配' }}</text>
+        <text @tap="previousMatch">上一个</text>
+        <text @tap="nextMatch">下一个</text>
+        <text @tap="replaceCurrent">替换</text>
+        <text @tap="replaceEvery">全部替换</text>
+      </view>
+    </view>
   </view>
 </template>
 
@@ -44,6 +218,7 @@ const prefs = loadPreferences()
 showAi.value = !!prefs.aiSidebarOpen
 let timer = null, historyTimer = null, switchTimer = null, history = [], historyIndex = -1
 let resumeCursor = null
+
 function initialize(options) {
   ids.value = { book: options.bookId, chapter: options.chapterId, article: options.articleId }
   const item = getArticle(options.bookId, options.chapterId, options.articleId)
@@ -59,6 +234,7 @@ function initialize(options) {
     historyIndex = 0
   }
 }
+
 let unregisterAssistantEditor = null
 onLoad(options => {
   initialize(options)
@@ -76,6 +252,7 @@ onLoad(options => {
 onReady(() => { if (resumeCursor !== null) focusAt(Math.min(resumeCursor, body.value.length)) })
 onShow(() => { loadSelectedFont().catch(() => {}) })
 onUnload(() => { clearTimeout(historyTimer); clearTimeout(timer); clearTimeout(switchTimer); saveNow(); unregisterAssistantEditor?.() })
+
 const article = computed(() => getArticle(ids.value.book, ids.value.chapter, ids.value.article))
 const chapter = computed(() => getChapter(ids.value.book, ids.value.chapter))
 const book = computed(() => getBook(ids.value.book))
@@ -85,6 +262,7 @@ const wordTotal = computed(() => textOnlyDocument(body.value).replace(/\s/g, '')
 const bookArticleCount = computed(() => book.value?.chapters.reduce((sum, group) => sum + group.articles.length, 0) || 0)
 const matches = computed(() => findMatches(paragraphs.value, searchQuery.value))
 watch(searchQuery, () => { matchIndex.value = -1 })
+
 function snapshot() { return JSON.stringify({ title: title.value, body: body.value, images: images.value }) }
 function commitHistory() {
   const next = snapshot()
@@ -175,8 +353,8 @@ function openSibling(chapterId, articleId) {
 }
 function openSettings() { saveNow(); uni.navigateTo({ url: '/pages/settings/index' }) }
 function toggleFocus() { updatePreferences({ focus: !prefs.focus }) }
-function onFontSlider(size) { updatePreferences({ fontSize:clampFontSize(size, prefs.fontSize) }) }
-function onPinch(scale) { if (!pinchLocked.value) updatePreferences({ fontSize:scaleFontSize(prefs.fontSize, scale) }) }
+function onFontSlider(size) { updatePreferences({ fontSize: clampFontSize(size, prefs.fontSize) }) }
+function onPinch(scale) { if (!pinchLocked.value) updatePreferences({ fontSize: scaleFontSize(prefs.fontSize, scale) }) }
 function toggleAi() { if (immersive.value) immersive.value = false; showOutline.value = false; showAi.value = !showAi.value; updatePreferences({ aiSidebarOpen: showAi.value }); if (!showAi.value) aiFullscreen.value = false }
 function closeAi() { showAi.value = false; aiFullscreen.value = false; updatePreferences({ aiSidebarOpen: false }) }
 function onAskAi(selection) { selectedContext.value = selection?.text || ''; immersive.value = false; showOutline.value = false; showAi.value = true; updatePreferences({ aiSidebarOpen: true }) }
@@ -236,7 +414,121 @@ function replaceEvery() { if (!searchQuery.value) return; const result = replace
 
 <style scoped>
 .editor-screen { --writer-bg: var(--bg); --writer-text: var(--text); min-height: 100vh; background: var(--writer-bg); color: var(--writer-text); padding: var(--status-bar-height) 24px 120px; transition: background .25s ease; }.editor-screen.theme-dark { --writer-bg: #0d0f13; --writer-text: #f0f0ee; }
-.editor-header { width: 100%; max-width: 1440px; margin: 0 auto; height: 68px; display: flex; align-items: center; justify-content: space-between; gap: 20px; }.header-left, .header-right { display: flex; align-items: center; gap: 13px; }.header-back { font-size: 32px; padding: 0 10px 5px 0; line-height: 1; }.header-titles { display: flex; flex-direction: column; gap: 3px; font-size: 13px; font-weight: 650; }.header-titles text:last-child { color: var(--muted); font-size: 11px; font-weight: 400; }.header-right { font-size: 12px; }.save-label { color: var(--muted); margin-right: 8px; }.header-tool { padding: 9px 12px; border: 1px solid var(--line); border-radius: 11px; color: var(--muted); }.header-tool.on { color: var(--accent); background: var(--accent-soft); }.header-tool.more { font-size: 14px; font-weight: 700; }
+.editor-header { width: 100%; max-width: 1440px; margin: 0 auto; height: 68px; display: flex; align-items: center; justify-content: space-between; gap: 20px; }.header-left, .header-right { display: flex; align-items: center; gap: 13px; }.header-back { font-size: 32px; padding: 0 10px 5px 0; line-height: 1; }.header-titles { display: flex; flex-direction: column; gap: 3px; font-size: 13px; font-weight: 650; }.header-titles text:last-child { color: var(--muted); font-size: 11px; font-weight: 400; }.header-right { font-size: 12px; }.save-label { color: var(--muted); margin-right: 8px; }.header-tool { padding: 9px 12px; border: 1px solid var(--line); border-radius: 11px; color: var(--muted); }.header-tool.on { color: var(--accent); background: var(--accent-soft); }
+
+/* 让 pinch-lock 与设置按钮尺寸一致 */
+.pinch-lock,
+.header-tool.more {
+  width: 39px;
+  height: 39px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+/* 自绘锁图标 */
+.lock-glyph {
+  position: relative;
+  width: 19px;
+  height: 19px;
+  color: currentColor;
+}
+
+/* 锁梁（半圆环） */
+.lock-shackle {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 9px;
+  height: 8px;
+  margin-left: -4.5px;
+  border: 1.8px solid currentColor;
+  border-bottom: none;
+  border-radius: 5px 5px 0 0;
+  box-sizing: border-box;
+  transform-origin: 100% 100%;
+  transition: transform .32s cubic-bezier(.2,.8,.2,1);
+}
+
+/* 解锁时锁梁向右上方掀起 */
+.lock-glyph.unlocked .lock-shackle {
+  transform: translateX(1px) rotate(38deg);
+}
+
+/* 锁体 */
+.lock-body {
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  bottom: 1px;
+  height: 10px;
+  border: 1.8px solid currentColor;
+  border-radius: 2.5px;
+  box-sizing: border-box;
+  background: transparent;
+}
+
+/* 锁孔 */
+.lock-keyhole {
+  position: absolute;
+  left: 50%;
+  bottom: 4.5px;
+  width: 2px;
+  height: 4px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: currentColor;
+}
+/* 自绘齿轮图标 */
+.header-tool.more {
+  transition: color .2s ease, background .2s ease, border-color .2s ease;
+}
+.header-tool.more:active {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.gear-glyph {
+  position: relative;
+  width: 19px;
+  height: 19px;
+  transition: transform .32s cubic-bezier(.2,.8,.2,1);
+}
+.header-tool.more:active .gear-glyph {
+  transform: rotate(60deg);
+}
+.gear-ring {
+  position: absolute;
+  inset: 3.5px;
+  border: 1.8px solid currentColor;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+.gear-hole {
+  position: absolute;
+  inset: 7.5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: .9;
+}
+.gear-tooth {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 3px;
+  height: 4px;
+  margin-left: -1.5px;
+  border-radius: 1px;
+  background: currentColor;
+  transform-origin: 50% 9.5px;
+}
+.gear-tooth.t1 { transform: translateY(-9.5px) rotate(0deg); }
+.gear-tooth.t2 { transform: translateY(-9.5px) rotate(60deg); }
+.gear-tooth.t3 { transform: translateY(-9.5px) rotate(120deg); }
+.gear-tooth.t4 { transform: translateY(-9.5px) rotate(180deg); }
+.gear-tooth.t5 { transform: translateY(-9.5px) rotate(240deg); }
+.gear-tooth.t6 { transform: translateY(-9.5px) rotate(300deg); }
+
 .editor-layout { width: 100%; max-width: 1440px; margin: 20px auto 0; display: grid; grid-template-columns: minmax(0px, 210px) minmax(0px, 760px) minmax(0px, 190px); gap: clamp(20px, 4vw, 66px); justify-content: center; transition: grid-template-columns .38s cubic-bezier(.22,.8,.22,1), gap .38s cubic-bezier(.22,.8,.22,1); }.outline-rail, .info-rail { position: sticky; top: 90px; height: fit-content; padding-top: 70px; min-width: 0; transition: opacity .3s ease, transform .38s cubic-bezier(.22,.8,.22,1); }.rail-caption { color: var(--muted); font-size: 11px; letter-spacing: .1em; margin-bottom: 20px; }.outline-item { color: var(--muted); font-size: 12px; padding: 11px 14px; border-radius: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 5px; }.outline-item.current { color: var(--accent); background: var(--accent-soft); font-weight: 650; }.rail-bottom { color: var(--muted); font-size: 11px; margin: 25px 14px; }.info-stat { margin-bottom: 25px; display: flex; flex-direction: column; gap: 4px; }.info-stat .info-number { font-size: 25px; font-weight: 600; color: var(--text); }.info-stat text { font-size: 11px; color: var(--muted); }.info-note { color: var(--muted); font-size: 11px; line-height: 1.8; padding-top: 15px; border-top: 1px solid var(--line); }
 .ai-open .editor-layout { grid-template-columns:minmax(0,175px) minmax(0,690px) minmax(300px,350px); gap:clamp(16px,2.2vw,34px); }.ai-open .info-rail { padding-top:0; }.status-summary { transition:all .3s ease; }.ai-open .status-summary { display:flex; align-items:center; gap:14px; min-height:58px; padding:0 8px; }.ai-open .status-summary .rail-caption { margin:0 auto 0 0; }.ai-open .status-summary .info-stat { display:flex; flex-direction:row; align-items:baseline; gap:4px; margin:0; white-space:nowrap; }.ai-open .status-summary .info-number { font-size:17px; }.ai-open .status-summary .info-note { display:none; }.assistant-slot { max-height:0; opacity:0; transform:translateX(34px); overflow:hidden; transition:max-height .38s ease,opacity .32s ease,transform .38s cubic-bezier(.22,.8,.22,1); }.assistant-slot.open { max-height:700px; opacity:1; transform:translateX(0); overflow:visible; }.ai-dock { font-size:20px; }
 @media (max-width:1100px) and (min-width:761px) { .ai-open .editor-layout { grid-template-columns:minmax(0,110px) minmax(0,1fr) minmax(280px,320px); gap:14px; }.ai-open .status-summary { gap:8px; } }
@@ -303,7 +595,6 @@ function replaceEvery() { if (!searchQuery.value) return; const result = replace
 .ai-dock.active :deep(.glyph) { transform:rotate(30deg) scale(1.1); }
 @media (prefers-reduced-motion:reduce) { .ai-dock,.ai-dock :deep(.glyph) { transition:none; } }
 .editor-header { position:sticky; top:var(--status-bar-height); z-index:21; box-sizing:border-box; background:var(--writer-bg); border-bottom:1px solid transparent; transition:background .25s ease,opacity .2s ease; }
-.pinch-lock { width:39px; height:39px; box-sizing:border-box; display:flex; align-items:center; justify-content:center; }
 .editor-dock { width:min(650px,calc(100vw - 32px)); box-sizing:border-box; }
 .dock-scroll { min-width:0; flex:1; white-space:nowrap; }
 .dock-scroll-content { width:max-content; display:flex; align-items:center; gap:9px; }

@@ -43,12 +43,12 @@ onUnmounted(() => clearTimeout(animationTimer))
 .nav-item.celebrate :deep(.shelf view:nth-child(1)) { animation:book-hop .6s ease both; }
 .nav-item.celebrate :deep(.shelf view:nth-child(2)) { animation:book-hop .6s .06s ease both; }
 .nav-item.celebrate :deep(.shelf view:nth-child(3)) { animation:book-tilt .65s .1s ease both; }
-.nav-item.celebrate :deep(.chart view:nth-child(1)) { animation:bar-bounce .52s ease-in-out 2; }
-.nav-item.celebrate :deep(.chart view:nth-child(2)) { animation:bar-bounce .52s .08s ease-in-out 2; }
-.nav-item.celebrate :deep(.chart view:nth-child(3)) { animation:bar-bounce .52s .16s ease-in-out 2; }
-.nav-item.celebrate :deep(.sliders view:nth-child(1)::after) { animation:slider-slide .44s ease-in-out 2; }
-.nav-item.celebrate :deep(.sliders view:nth-child(2)::after) { animation:slider-slide .44s .07s ease-in-out 2 reverse; }
-.nav-item.celebrate :deep(.sliders view:nth-child(3)::after) { animation:slider-slide .44s .14s ease-in-out 2; }
+.nav-item.celebrate :deep(.chart view:nth-child(1)) { animation: bar-bounce .3s ease-in-out 1; }
+.nav-item.celebrate :deep(.chart view:nth-child(2)) { animation: bar-bounce .3s .05s ease-in-out 1; }
+.nav-item.celebrate :deep(.chart view:nth-child(3)) { animation: bar-bounce .3s .1s ease-in-out 1; }
+.nav-item.celebrate :deep(.sliders view:nth-child(1)::after) { animation: slider-slide .28s ease-in-out 1; }
+.nav-item.celebrate :deep(.sliders view:nth-child(2)::after) { animation: slider-slide .28s .05s ease-in-out 1 reverse; }
+.nav-item.celebrate :deep(.sliders view:nth-child(3)::after) { animation: slider-slide .28s .1s ease-in-out 1; }
 @keyframes book-hop { 35% { transform:translateY(-6px) rotate(-5deg); } 65% { transform:translateY(1px); } }
 @keyframes book-tilt { 40% { transform:translateY(-6px) rotate(8deg); } 72% { transform:rotate(-14deg); } 100% { transform:rotate(-10deg); } }
 @keyframes bar-bounce { 50% { transform:translateY(-6px) scaleY(1.15); } }
