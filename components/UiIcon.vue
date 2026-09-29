@@ -18,4 +18,10 @@
 .focus::before { inset:1px; border:1.5px solid; border-radius:50%; }.focus::after { inset:6px; border:1.5px solid; border-radius:50%; }
 .expand::before,.collapse::before { inset:2px; border:1.7px solid; border-radius:4px; }.expand::after { inset:6px; background:var(--surface); }.collapse::after { inset:7px; border:1.5px solid; border-radius:1px; }
 .check::before { left:4px; top:4px; width:8px; height:13px; border-right:2px solid; border-bottom:2px solid; transform:rotate(45deg); }
+.gear view:first-child { position:absolute; inset:3px; border:2px solid currentColor; border-radius:5px; transform:rotate(45deg); }
+.gear::before { inset:7px; border:2px solid currentColor; border-radius:50%; }
+.gear::after { left:10px; top:0; width:2px; height:22px; background:linear-gradient(currentColor 0 4px,transparent 4px 18px,currentColor 18px); }
+.lock::before,.unlock::before { left:4px; top:9px; width:14px; height:11px; border:1.8px solid currentColor; border-radius:3px; }
+.lock::after,.unlock::after { left:7px; top:2px; width:8px; height:10px; border:1.8px solid currentColor; border-bottom:0; border-radius:7px 7px 0 0; transition:transform .25s cubic-bezier(.2,.8,.2,1); }
+.unlock::after { transform:translateX(5px) rotate(30deg); transform-origin:left bottom; }
 </style>

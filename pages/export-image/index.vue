@@ -45,6 +45,7 @@ import { takeImageExport } from '../../src/store/image-export-draft'
 import { loadPreferences, themeClass } from '../../src/store/preferences'
 import { fontFamilyFor, loadSelectedFont } from '../../src/services/fonts'
 import { createTextPng } from '../../src/services/image-export'
+import { mirrorExport } from '../../src/services/data-directory.js'
 import { textOnlyParagraphs } from '../../src/utils/media'
 
 const instance = getCurrentInstance()
@@ -107,7 +108,11 @@ async function renderPng() {
 async function generate() {
   if (working.value) return
   working.value = true; errorMessage.value = ''
-  try { generatedPath.value = await renderPng(); savedPath.value = '' }
+  try {
+    generatedPath.value = await renderPng(); savedPath.value = ''
+    try { await mirrorExport(generatedPath.value, 'png') }
+    catch (copyError) { errorMessage.value = `图片已生成，但复制到数据目录失败：${copyError.message || copyError}` }
+  }
   catch (error) { generatedPath.value = ''; errorMessage.value = error.message || '图片生成失败' }
   finally { working.value = false }
 }

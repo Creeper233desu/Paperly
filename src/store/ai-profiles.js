@@ -1,5 +1,6 @@
 import { reactive } from 'vue'
 import { providerInfo } from '../services/ai-providers.js'
+import { queueDirectorySync } from '../services/data-directory.js'
 
 const KEY = 'paperwriter.aiProfiles.v1'
 const OLD_KEY = 'paperwriter.preferences.v1'
@@ -7,7 +8,8 @@ export const aiProfiles = reactive({ profiles: [], activeId: '' })
 let loaded = false
 const makeId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
 
-function persist() { uni.setStorageSync(KEY, JSON.stringify({ profiles: aiProfiles.profiles, activeId: aiProfiles.activeId })) }
+function persist() { uni.setStorageSync(KEY, JSON.stringify({ profiles: aiProfiles.profiles, activeId: aiProfiles.activeId })); queueDirectorySync() }
+export function reloadAiProfiles() { loaded = false; aiProfiles.profiles = []; aiProfiles.activeId = ''; loadAiProfiles() }
 export function loadAiProfiles() {
   if (loaded) return aiProfiles
   loaded = true

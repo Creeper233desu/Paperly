@@ -23,3 +23,22 @@ test('books, chapters and articles survive storage reload', async () => {
   assert.deepEqual(reloaded.getArticle(book.id, chapter.id, article.id).paragraphs, ['第一段', '第二段'])
   assert.equal(reloaded.getLastEditedArticle(reloaded.getBook(book.id)).cursor, 4)
 })
+
+test('imported books never change the writing ledger when edited or deleted', async () => {
+  const storage = new Map()
+  globalThis.uni = { getStorageSync:key => storage.get(key) || '', setStorageSync:(key,value) => storage.set(key,value) }
+  const library = await import('../src/store/library.js?import-stat-test')
+  const { useStatistics } = await import('../src/store/statistics.js')
+  const before = JSON.stringify(useStatistics().days)
+  const book = library.importBook({ title:'外部文稿', chapters:[
+    { title:'第一章', articles:[{ title:'一', paragraphs:['原文'] }] },
+    { title:'第二章', articles:[{ title:'二', paragraphs:['另一段'] }] },
+    { title:'第三章', articles:[{ title:'三', paragraphs:['待删除'] }] }
+  ] })
+  assert.equal(book.origin,'imported')
+  library.saveArticle(book.id, book.chapters[0].id, book.chapters[0].articles[0].id, { paragraphs:['改写后的文字'] })
+  library.deleteArticle(book.id, book.chapters[0].id, book.chapters[0].articles[0].id)
+  library.deleteChapter(book.id, book.chapters[1].id)
+  library.deleteBook(book.id)
+  assert.equal(JSON.stringify(useStatistics().days),before)
+})

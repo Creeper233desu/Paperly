@@ -1,6 +1,7 @@
 import { reactive } from 'vue'
 import { recordWordDelta } from './statistics.js'
 import { textOnlyParagraphs } from '../utils/media.js'
+import { queueDirectorySync } from '../services/data-directory.js'
 
 const KEY = 'paperwriter.library.v1'
 const state = reactive({ books: [] })
@@ -21,7 +22,9 @@ export function initStore() {
 
 function persist() {
   uni.setStorageSync(KEY, JSON.stringify({ version: 1, books: state.books }))
+  queueDirectorySync()
 }
+export function reloadLibrary() { initialized = false; state.books = []; initStore() }
 
 export function useLibrary() { initStore(); return state }
 export function getBook(id) { initStore(); return state.books.find(book => book.id === id) }
@@ -30,7 +33,7 @@ export function getArticle(bookId, chapterId, articleId) { return getChapter(boo
 
 export function addBook(title) {
   initStore()
-  const book = { id: uid(), title: title.trim(), author: '', description: '', cover: '', createdAt: now(), updatedAt: now(), chapters: [] }
+  const book = { id: uid(), origin: 'created', title: title.trim(), author: '', description: '', cover: '', createdAt: now(), updatedAt: now(), chapters: [] }
   state.books.unshift(book); persist(); return book
 }
 function importedBook(content, details = {}) {
@@ -43,7 +46,7 @@ function importedBook(content, details = {}) {
     articles: (group.articles || []).map(item => ({ id: uid(), title: String(item.title || '').trim(), paragraphs: (item.paragraphs || []).map(String), images: item.images || {}, updatedAt: timestamp }))
   }))
   const first = chapters.flatMap(group => group.articles.map(item => ({ chapterId: group.id, articleId: item.id })))[0]
-  return { id: uid(), title, author: String(details.author ?? content.author ?? '').trim(), description: String(details.description ?? content.description ?? '').trim(), cover: '', createdAt: timestamp, updatedAt: timestamp, chapters, ...(first ? { lastEdited: { ...first, cursor: 0, updatedAt: timestamp } } : {}) }
+  return { id: uid(), origin: 'imported', title, author: String(details.author ?? content.author ?? '').trim(), description: String(details.description ?? content.description ?? '').trim(), cover: '', createdAt: timestamp, updatedAt: timestamp, chapters, ...(first ? { lastEdited: { ...first, cursor: 0, updatedAt: timestamp } } : {}) }
 }
 export function importBook(content, details = {}) {
   initStore()
@@ -60,6 +63,7 @@ export function replaceImportedContent(id, content) {
   const snapshot = JSON.parse(JSON.stringify(original))
   const imported = importedBook(content, original)
   original.chapters = imported.chapters
+  original.origin = 'imported'
   original.lastEdited = imported.lastEdited
   original.updatedAt = now()
   delete original.readOnly
@@ -80,7 +84,7 @@ export function deleteBook(id) {
   if (!book) return
   const removed = book.chapters.flatMap(chapter => chapter.articles.map(article => ({ id: article.id, title: article.title, words: wordCount(article) })))
   state.books = state.books.filter(item => item.id !== id); persist()
-  removed.forEach(article => recordWordDelta(book.id, book.title, article.id, article.title, -article.words))
+  if (book.origin !== 'imported') removed.forEach(article => recordWordDelta(book.id, book.title, article.id, article.title, -article.words))
   if (book.readOnly?.path && typeof plus !== 'undefined') plus.io.resolveLocalFileSystemURL(book.readOnly.path, entry => entry.remove(() => {}, () => {}), () => {})
   if (book.readOnly && book.cover?.startsWith('_doc/') && typeof plus !== 'undefined') plus.io.resolveLocalFileSystemURL(book.cover, entry => entry.remove(() => {}, () => {}), () => {})
 }
@@ -98,7 +102,7 @@ export function deleteChapter(bookId, id) {
   book.chapters = book.chapters.filter(item => item.id !== id)
   if (book.lastEdited?.chapterId === id) book.lastEdited = null
   persist()
-  removed.forEach(article => recordWordDelta(book.id, book.title, article.id, article.title, -article.words))
+  if (book.origin !== 'imported') removed.forEach(article => recordWordDelta(book.id, book.title, article.id, article.title, -article.words))
 }
 export function addArticle(bookId, chapterId, title = '', id = uid()) {
   const chapter = getChapter(bookId, chapterId); if (!chapter) return null
@@ -129,7 +133,7 @@ export function saveArticle(bookId, chapterId, articleId, patch) {
     book.lastEdited = { chapterId, articleId, cursor: Math.max(0, Number(patch.cursor) || 0), updatedAt: article.updatedAt }
   }
   persist()
-  if (book) recordWordDelta(book.id, book.title, article.id, article.title, wordCount(article) - previousWords)
+  if (book && book.origin !== 'imported') recordWordDelta(book.id, book.title, article.id, article.title, wordCount(article) - previousWords)
 }
 export function deleteArticle(bookId, chapterId, articleId) {
   const chapter = getChapter(bookId, chapterId), book = getBook(bookId)
@@ -139,7 +143,7 @@ export function deleteArticle(bookId, chapterId, articleId) {
     chapter.articles = chapter.articles.filter(item => item.id !== articleId)
     if (book.lastEdited?.articleId === articleId) book.lastEdited = null
     persist()
-    if (removed) recordWordDelta(book.id, book.title, removed.id, removed.title, -removed.words)
+    if (removed && book.origin !== 'imported') recordWordDelta(book.id, book.title, removed.id, removed.title, -removed.words)
   }
 }
 export function wordCount(article) { return textOnlyParagraphs(article?.paragraphs).join('').replace(/\s/g, '').length }

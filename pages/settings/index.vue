@@ -6,11 +6,12 @@
         <text class="top-action" @tap="goLibrary">回到书架</text>
       </view>
       <view class="settings-heading"><view class="eyebrow">偏好设置</view><view class="page-title">让写作更舒适</view></view>
-      <view class="settings-sections">
+      <view class="settings-sections" :class="{ falling: iconsFalling }">
         <view class="section-tile card" @tap="openPanel('appearance')"><view class="section-symbol appearance-symbol"><view></view></view><text>外观主题</text></view>
         <view class="section-tile card" @tap="openPanel('fonts')"><view class="section-symbol font-symbol">Aa</view><text>文章字体</text></view>
         <view class="section-tile card" @tap="openPanel('editing')"><view class="section-symbol editing-symbol"><view></view><view></view><view></view></view><text>编辑体验</text></view>
         <view class="section-tile card" @tap="openPanel('ai')"><view class="section-symbol ai-symbol">✦</view><text>AI 写作助手</text></view>
+        <view class="section-tile card" @tap="openPanel('app')"><view class="section-symbol app-symbol"><UiIcon name="gear" /></view><text>应用设置</text></view>
       </view>
     </view></view>
     <AppNav v-if="!embedded" active="settings" />
@@ -26,6 +27,8 @@
                 <view class="theme-label"><text>{{ item.label }}</text><text v-if="prefs.theme === item.id" class="selected-mark">✓</text></view>
               </view>
             </view>
+            <view class="accent-heading"><view class="option-name">主题颜色</view><view class="option-note">调整按钮与强调色</view></view>
+            <view class="accent-grid"><view v-for="item in accentChoices" :key="item.id" class="accent-choice" :class="{ selected: prefs.accent === item.id }" @tap="setOption('accent', item.id)"><view class="accent-swatch" :style="{ backgroundColor:item.color }"><UiIcon v-if="prefs.accent === item.id" name="check" /></view><text>{{ item.label }}</text></view></view>
           </view>
           <view v-if="activePanel === 'fonts'">
             <view class="font-toolbar"><view class="modal-intro">点选字体即可查看效果并应用</view><view class="import-link" @tap="importCustom">＋ 导入 TTF / OTF</view></view>
@@ -50,7 +53,7 @@
                 <view class="cursor-option-title">拖尾颜色</view>
                 <view class="cursor-colors"><view v-for="color in cursorColors" :key="color" class="cursor-color" :class="{ selected: prefs.cursorTrailColor.toLowerCase() === color }" :style="{ backgroundColor: color }" @tap="chooseCursorColor(color)"><text v-if="prefs.cursorTrailColor.toLowerCase() === color">✓</text></view><view class="cursor-custom" :class="{ selected: !cursorColors.includes(prefs.cursorTrailColor.toLowerCase()) }" @tap="openColorPicker"><view class="cursor-custom-dot" :style="{ backgroundColor: prefs.cursorTrailColor }"></view><text>自定义</text></view></view>
                 <view class="cursor-length-row"><view class="cursor-option-title">拖尾长度</view><text class="cursor-length-value">{{ trailLengthDraft }} px</text></view>
-                <slider class="cursor-length-slider" :value="trailLengthDraft" :min="0" :max="96" :step="1" :activeColor="prefs.cursorTrailColor" :backgroundColor="themeClass() === 'theme-dark' ? '#404653' : '#dfe4ed'" block-color="#ffffff" :block-size="20" @changing="onTrailLengthChanging" @change="onTrailLengthChange" />
+                <slider class="cursor-length-slider" :value="trailLengthDraft" :min="0" :max="96" :step="1" :activeColor="prefs.cursorTrailColor" :backgroundColor="isDark() ? '#404653' : '#dfe4ed'" block-color="#ffffff" :block-size="20" @changing="onTrailLengthChanging" @change="onTrailLengthChange" />
                 <view class="cursor-demo"><view class="cursor-demo-line" :class="{ block: prefs.cursorStyle === 'neovim' }" :style="{ width: trailLengthDraft + 'px', background: prefs.cursorTrailColor, boxShadow: `0 0 5px ${prefs.cursorTrailColor}` }"></view><view class="cursor-demo-caret" :class="{ block: prefs.cursorStyle === 'neovim' }" :style="{ backgroundColor: prefs.cursorTrailColor, boxShadow: `0 0 12px ${prefs.cursorTrailColor}` }"></view><text>字句之间</text></view>
                 <view class="cursor-live card" :style="{ '--preview-cursor': prefs.cursorTrailColor, '--preview-trail': trailLengthDraft + 'px' }"><text>实时光标预览</text><view class="cursor-live-line">写下每一个动人的瞬间<view class="cursor-live-motion" :class="{ neovim: prefs.cursorStyle === 'neovim' }"><view class="cursor-live-trail"></view><view class="cursor-live-head"></view></view></view></view>
               </view>
@@ -69,6 +72,17 @@
             <view class="ai-setting-actions"><view v-if="profileDraft.id" class="ghost-button" @tap="deleteProfile">删除此配置</view><view class="primary-button" @tap="saveAi">保存配置</view></view>
             <view v-if="aiTestResult" class="ai-test-result" :class="{ error: aiTestError }">{{ aiTestResult }}</view>
           </view>
+          <view v-if="activePanel === 'app'" class="app-settings">
+            <view class="app-setting-card card" @tap="languageOpen = !languageOpen"><view class="app-setting-icon"><UiIcon name="sliders" /></view><view class="app-setting-copy"><view class="option-name">应用语言</view><view class="option-note">简体中文</view></view><UiIcon class="language-chevron" :class="{ open:languageOpen }" name="chevron-right" /></view>
+            <view v-if="languageOpen" class="language-panel card" @tap="setOption('language', 'zh-CN'); languageOpen = false"><text>简体中文</text><UiIcon name="check" /></view>
+            <view class="app-setting-card card"><view class="app-setting-icon"><UiIcon name="file" /></view><view class="app-setting-copy"><view class="option-name">数据目录</view><view class="option-note">{{ dataDirectory.uri ? (dataDirectory.label || '已连接外部目录') : '尚未选择目录' }}</view><view class="option-note">书籍、封面、字体、会话与导出文件存放于 PaperWriter 子目录</view></view></view>
+            <view class="app-action card" @tap="migrateDirectory"><view><view class="option-name">迁移数据目录</view><view class="option-note">选择新的空文件夹，保留旧目录作为备份</view></view><UiIcon name="chevron-right" /></view>
+            <view class="app-action card destructive" @tap="showDeleteData = true"><view><view class="option-name">删除所有应用数据</view><view class="option-note">清空书籍、统计、字体、模型配置和当前数据目录</view></view><UiIcon name="chevron-right" /></view>
+            <view class="app-setting-card card"><view class="app-setting-icon"><UiIcon name="gear" /></view><view class="app-setting-copy"><view class="option-name">软件版本</view><view class="option-note">纸间 · Android</view></view><view class="app-setting-value">{{ appVersion }}</view></view>
+            <view v-if="appActionMessage" class="app-action-message" :class="{ error:appActionError }">{{ appActionMessage }}</view>
+            <view v-if="dataDirectory.error && !appActionMessage" class="app-action-message error">同步提示：{{ dataDirectory.error }}</view>
+            <view v-if="dataDirectory.lastSync" class="app-sync-note">上次备份：{{ dataDirectory.lastSync }}</view>
+          </view>
         </view>
       </view>
     </view>
@@ -83,22 +97,26 @@
     </view>
     <AppDialog :visible="!!errorMessage" title="无法使用该字体" :message="errorMessage" confirm-text="知道了" @cancel="errorMessage = ''" @confirm="errorMessage = ''" />
     <AppDialog :visible="!!removeId" title="移除字体" :message="`确定移除「${fontLabel(removeId)}」？已写的文字不会删除。`" confirm-text="移除" :destructive="true" @cancel="removeId = ''" @confirm="confirmRemove" />
+    <AppDialog :visible="showDeleteData" title="删除所有数据" message="将删除书籍、正文、统计、字体和 AI 配置，并清空所选目录中的 PaperWriter 文件夹。此操作无法撤销。" confirm-text="确认删除" :destructive="true" @cancel="showDeleteData = false" @confirm="confirmDeleteData" />
   </view>
 </template>
 
 <script setup>
-import { computed, getCurrentInstance, onMounted, onUnmounted, ref } from 'vue'
-import { loadPreferences, updatePreferences, themeClass } from '../../src/store/preferences'
+import { computed, getCurrentInstance, onMounted, onUnmounted, ref, watch } from 'vue'
+import { accentChoices, isDark, loadPreferences, updatePreferences, themeClass } from '../../src/store/preferences'
 import { fontFamilyFor, fontLabel, loadBundledFont, loadSelectedFont, loadCustomFont, importFont, removeFont } from '../../src/services/fonts'
 import AppNav from '../../components/AppNav.vue'
 import AppDialog from '../../components/AppDialog.vue'
+import UiIcon from '../../components/UiIcon.vue'
+import { chooseDataDirectory, dataDirectory, deleteAllData } from '../../src/services/data-directory.js'
+import { reloadAppData } from '../../src/services/reload-data.js'
 import { navigatePrimary } from '../../src/store/navigation'
 import { hexToHsv, hsvToHex } from '../../src/utils/color'
 import { DEFAULT_AI_PROMPT } from '../../src/services/assistant'
 import { AI_PROVIDERS, fetchProviderModels, providerInfo, supportsReasoning } from '../../src/services/ai-providers'
 import { aiProfiles, activeAiProfile, loadAiProfiles, removeAiProfile, saveAiProfile, selectAiProfile } from '../../src/store/ai-profiles'
 
-defineProps({ embedded: { type: Boolean, default: false } })
+const props = defineProps({ embedded: { type: Boolean, default: false }, active: { type: Boolean, default: true } })
 const emit = defineEmits(['modal-change'])
 const prefs = loadPreferences()
 loadAiProfiles()
@@ -115,15 +133,20 @@ const pickerHue = ref(0), pickerSaturation = ref(100), pickerValue = ref(100)
 const hueColor = computed(() => hsvToHex(pickerHue.value, 100, 100))
 const pickerColor = computed(() => hsvToHex(pickerHue.value, pickerSaturation.value, pickerValue.value))
 const activePanel = ref(''), closing = ref(false), fontPreviewErrors = ref({})
-const panelTitle = computed(() => ({ appearance: '外观主题', fonts: '文章字体', editing: '编辑体验', ai: 'AI 写作助手' })[activePanel.value] || '')
+const iconsFalling = ref(false)
+let iconTimer
+const panelTitle = computed(() => ({ appearance: '外观主题', fonts: '文章字体', editing: '编辑体验', ai: 'AI 写作助手', app: '应用设置' })[activePanel.value] || '')
+const appVersion = ref('1.3.5'), showDeleteData = ref(false), languageOpen = ref(false), appActionMessage = ref(''), appActionError = ref(false)
 const fontChoices = computed(() => [
   { id: 'system', label: '系统默认' }, { id: 'noto', label: '思源宋体' }, { id: 'wenkai', label: '霞鹜文楷' }, { id: 'sans', label: '系统无衬线' },
   ...prefs.customFonts.map(font => ({ id: font.id, label: font.name, custom: true }))
 ])
 const errorMessage = ref(''), removeId = ref('')
 let closeTimer = null, colorPickerTimer = null, pickerPointRequest = 0
-onMounted(() => { loadSelectedFont().catch(() => {}); loadBundledFont('noto').then(() => loadBundledFont('wenkai')).catch(() => {}) })
-onUnmounted(() => { clearTimeout(closeTimer); clearTimeout(colorPickerTimer); emit('modal-change', false) })
+function dropIcons() { clearTimeout(iconTimer); iconsFalling.value = false; setTimeout(() => { iconsFalling.value = true; iconTimer = setTimeout(() => { iconsFalling.value = false }, 1100) }, 20) }
+watch(() => props.active, active => { if (active) dropIcons() })
+onMounted(() => { if (props.active) dropIcons(); if (typeof plus !== 'undefined') appVersion.value = plus.runtime.version || appVersion.value; loadSelectedFont().catch(() => {}); loadBundledFont('noto').then(() => loadBundledFont('wenkai')).catch(() => {}) })
+onUnmounted(() => { clearTimeout(closeTimer); clearTimeout(colorPickerTimer); clearTimeout(iconTimer); emit('modal-change', false) })
 function goLibrary() { navigatePrimary('library') }
 function openPanel(id) {
   clearTimeout(closeTimer)
@@ -145,6 +168,17 @@ async function prepareFontPreviews() {
   fontPreviewErrors.value = Object.fromEntries(fonts.filter((_, index) => results[index].status === 'rejected').map(font => [font.id, true]))
 }
 function setTheme(theme) { updatePreferences({ theme }) }
+async function migrateDirectory() {
+  if (dataDirectory.busy) return
+  appActionMessage.value = ''; appActionError.value = false
+  try { const changed = await chooseDataDirectory({ migrate:true }); appActionMessage.value = changed ? '数据已复制到新目录。旧目录保留为备份。' : '目录未更改。' }
+  catch (error) { if (!String(error.message).includes('取消')) { appActionMessage.value = error.message || '迁移失败'; appActionError.value = true } }
+}
+async function confirmDeleteData() {
+  showDeleteData.value = false; appActionMessage.value = ''; appActionError.value = false
+  try { await deleteAllData(); reloadAppData(); appActionMessage.value = '应用数据已清空。' }
+  catch (error) { appActionMessage.value = error.message || '删除失败'; appActionError.value = true }
+}
 function setOption(key, value) { updatePreferences({ [key]: value }) }
 function chooseCursorColor(color) { updatePreferences({ cursorTrailColor: color }) }
 function onTrailLengthChanging(event) { trailLengthDraft.value = event.detail.value }
@@ -215,6 +249,32 @@ function confirmRemove() { removeFont(removeId.value); removeId.value = '' }
 .settings-heading { margin:34px 0; }.eyebrow,.modal-eyebrow { color:var(--accent); font-size:11px; letter-spacing:.12em; }.settings-heading .page-title { margin:13px 0 8px; }
 .settings-sections { max-width:850px; display:grid; gap:15px; }.section-tile { height:116px; padding:23px 28px; display:flex; align-items:center; gap:24px; font-size:19px; font-weight:650; transition:transform .24s ease,border-color .24s ease; }.section-tile:active { transform:scale(.985); border-color:var(--accent); }
 .section-symbol { width:62px; height:62px; flex-shrink:0; border-radius:19px; background:var(--accent-soft); color:var(--accent); display:flex; align-items:center; justify-content:center; }.appearance-symbol view { width:26px; height:26px; border:2px solid currentColor; border-radius:50%; box-shadow:inset 8px 0 0 var(--accent-soft); }.font-symbol { font-family:Georgia,serif; font-size:28px; }.editing-symbol { flex-direction:column; gap:5px; }.editing-symbol view { width:26px; height:2px; border-radius:2px; background:currentColor; }.editing-symbol view:nth-child(2) { width:18px; margin-left:-8px; }
+.settings-sections.falling .section-symbol { animation:section-symbol-drop .8s cubic-bezier(.2,.72,.3,1) both; }
+.settings-sections.falling .section-tile:nth-child(2) .section-symbol { animation-delay:.07s; }
+.settings-sections.falling .section-tile:nth-child(3) .section-symbol { animation-delay:.14s; }
+.settings-sections.falling .section-tile:nth-child(4) .section-symbol { animation-delay:.21s; }
+.settings-sections.falling .section-tile:nth-child(5) .section-symbol { animation-delay:.28s; }
+@keyframes section-symbol-drop { 0% { opacity:0; transform:translateY(-80vh) rotate(-14deg); } 58% { opacity:1; transform:translateY(9px) rotate(5deg); } 77% { transform:translateY(-5px) rotate(-2deg); } 100% { transform:none; } }
+.accent-heading { margin:28px 0 14px; }
+.accent-grid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px; }
+.accent-choice { display:flex; align-items:center; flex-direction:column; gap:8px; padding:10px 4px; border:1px solid var(--line); border-radius:14px; color:var(--muted); font-size:11px; transition:transform .2s ease,border-color .2s ease,background .2s ease; }
+.accent-choice.selected { border-color:var(--accent); background:var(--accent-soft); color:var(--accent); }
+.accent-choice:active { transform:scale(.94); }
+.accent-swatch { width:34px; height:34px; border-radius:12px; display:flex; align-items:center; justify-content:center; color:#fff; box-shadow:0 4px 10px var(--shadow); }
+.accent-swatch .ui-icon { transform:scale(.7); }
+.app-settings { display:flex; flex-direction:column; gap:12px; }
+.app-setting-card,.app-action { display:flex; align-items:center; gap:15px; padding:19px; min-height:78px; }
+.app-setting-icon { display:flex; align-items:center; justify-content:center; flex:none; width:39px; height:39px; border-radius:12px; color:var(--accent); background:var(--accent-soft); }
+.app-setting-copy,.app-action>view:first-child { flex:1; min-width:0; }
+.app-setting-copy .option-note { overflow-wrap:anywhere; }
+.app-setting-value { color:var(--muted); font-size:11px; text-align:right; }
+.language-chevron { color:var(--muted); transition:transform .2s ease; }.language-chevron.open { transform:rotate(90deg); }.language-panel { margin-top:-5px; padding:17px 20px; display:flex; justify-content:space-between; align-items:center; color:var(--accent); font-size:13px; animation:cursor-options-in .2s ease both; }
+.app-action { justify-content:space-between; transition:transform .2s ease,border-color .2s ease; }
+.app-action:active { transform:scale(.985); border-color:var(--accent); }
+.app-action>view:last-child { color:var(--muted); }
+.app-action.destructive .option-name { color:var(--danger); }
+.app-action-message,.app-sync-note { padding:9px 3px; color:var(--accent); font-size:12px; line-height:1.5; }
+.app-action-message.error { color:var(--danger); }.app-sync-note { color:var(--muted); }
 .settings-overlay { position:fixed; z-index:40; inset:0; display:flex; align-items:center; justify-content:center; padding:14px; background:rgba(13,18,28,.54); animation:overlay-in .24s ease both; }.settings-modal { width:min(720px,calc(100vw - 28px)); height:75vh; max-height:calc(100vh - 28px); min-height:320px; border-radius:28px; background:var(--surface); color:var(--text); border:1px solid var(--line); box-shadow:0 30px 90px rgba(0,0,0,.26); display:flex; flex-direction:column; overflow:hidden; animation:modal-in .28s cubic-bezier(.2,.78,.24,1) both; }.settings-overlay.closing { animation:overlay-out .24s ease both; }.settings-overlay.closing .settings-modal { animation:modal-out .24s ease both; }
 .modal-header { flex-shrink:0; padding:26px 30px 20px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; }.modal-title { margin-top:7px; font-size:25px; font-weight:700; }.modal-close { width:34px; height:34px; border-radius:11px; background:var(--surface-alt); color:var(--muted); font-size:25px; line-height:31px; text-align:center; }.modal-body { flex:1; min-height:0; overflow-y:auto; padding:24px 30px 34px; }.modal-intro { color:var(--muted); font-size:13px; margin-bottom:21px; }
 .theme-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }.theme-option { padding:11px; transition:border-color .2s ease,transform .2s ease; }.theme-option:active,.font-choice:active { transform:scale(.98); }.theme-option.selected,.font-choice.selected { border-color:var(--accent); }.theme-preview { height:94px; border-radius:12px; padding:16px; display:flex; flex-direction:column; justify-content:center; gap:8px; }.theme-preview view { height:7px; border-radius:4px; background:currentColor; opacity:.45; }.theme-preview view:nth-child(1) { width:45%; }.theme-preview view:nth-child(2) { width:82%; }.theme-preview view:nth-child(3) { width:65%; }.preview-system { color:#5d6b82; background:linear-gradient(110deg,#e7eaf0 50%,#272d39 50%); }.preview-light { color:#788499; background:#f5f5f2; }.preview-dark { color:#c1c8d4; background:#21252e; }.theme-label { display:flex; justify-content:space-between; padding:11px 3px 3px; font-size:12px; font-weight:600; }.selected-mark { color:var(--accent); }
@@ -234,7 +294,7 @@ function confirmRemove() { removeFont(removeId.value); removeId.value = '' }
 .color-plane { position:relative; width:100%; height:185px; border-radius:14px; overflow:hidden; touch-action:none; }.color-plane-white,.color-plane-black { position:absolute; inset:0; pointer-events:none; }.color-plane-white { background:linear-gradient(90deg,#fff,transparent); }.color-plane-black { background:linear-gradient(0deg,#000,transparent); }.color-plane-knob { position:absolute; z-index:1; width:17px; height:17px; border:3px solid #fff; border-radius:50%; box-shadow:0 1px 6px rgba(0,0,0,.55); transform:translate(-50%,-50%); pointer-events:none; }.hue-caption { display:flex; justify-content:space-between; gap:8px; margin:19px 2px 9px; color:var(--muted); font-size:11px; }.hue-caption text:first-child { color:var(--text); font-weight:650; }.hue-track { height:30px; border-radius:14px; background:linear-gradient(90deg,#f44,#ff0,#0e5,#0ef,#25f,#e4f,#f44); }.hue-track slider { margin:0; }.color-picker-bottom { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:22px; }.color-picker-preview { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:11px; }.color-picker-preview view { width:23px; height:23px; border-radius:8px; box-shadow:0 0 0 1px var(--line); }.color-picker-actions { display:flex; align-items:center; gap:13px; color:var(--muted); font-size:12px; }.color-picker-apply { padding:10px 13px; border-radius:10px; background:var(--accent); color:#fff; font-weight:650; }
 @keyframes cursor-options-in { from { opacity:0; transform:translateY(-7px); } }
 @keyframes overlay-in { from { opacity:0; } } @keyframes overlay-out { to { opacity:0; } } @keyframes modal-in { from { opacity:0; transform:translateY(18px) scale(.96); } } @keyframes modal-out { to { opacity:0; transform:translateY(12px) scale(.97); } }
-@media (max-width:620px) { .section-tile { height:98px; padding:17px 20px; }.section-symbol { width:54px; height:54px; border-radius:16px; }.modal-header { padding:20px 22px 17px; }.modal-body { padding:20px 22px 28px; }.editing-layout { grid-template-columns:1fr; }.preview-column { display:none; } }
+@media (max-width:620px) { .section-tile { height:98px; padding:17px 20px; }.section-symbol { width:54px; height:54px; border-radius:16px; }.modal-header { padding:20px 22px 17px; }.modal-body { padding:20px 22px 28px; }.editing-layout { grid-template-columns:1fr; }.preview-column { display:none; }.app-setting-value { display:none; } }
 @media (max-width:420px) { .theme-grid { gap:7px; }.theme-option { padding:7px; }.theme-label { font-size:11px; }.font-grid { grid-template-columns:1fr; }.font-toolbar { display:block; }.import-link { display:inline-block; margin-bottom:16px; } }
-@media (prefers-reduced-motion:reduce) { .section-tile,.theme-option,.font-choice,.toggle,.toggle view,.cursor-color { transition:none; }.settings-overlay,.settings-modal,.settings-overlay.closing,.settings-overlay.closing .settings-modal,.cursor-options,.color-picker-overlay,.color-picker-overlay.closing,.color-picker-modal,.color-picker-overlay.closing .color-picker-modal { animation:none; } }
+@media (prefers-reduced-motion:reduce) { .section-tile,.theme-option,.font-choice,.toggle,.toggle view,.cursor-color { transition:none; }.settings-sections.falling .section-symbol,.settings-overlay,.settings-modal,.settings-overlay.closing,.settings-overlay.closing .settings-modal,.cursor-options,.color-picker-overlay,.color-picker-overlay.closing,.color-picker-modal,.color-picker-overlay.closing .color-picker-modal { animation:none; } }
 </style>

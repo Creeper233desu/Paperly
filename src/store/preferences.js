@@ -1,8 +1,16 @@
 import { reactive } from 'vue'
 import { DEFAULT_AI_PROMPT } from '../services/assistant.js'
+import { queueDirectorySync } from '../services/data-directory.js'
 
 const KEY = 'paperwriter.preferences.v1'
-const defaults = { theme: 'system', font: 'system', fontSize: 18, focus: false, autoPair: true, animatedCursor: true, cursorStyle: 'beam', cursorTrailColor: '#819bcb', cursorTrailLength: 32, customFonts: [], aiSystemPrompt: DEFAULT_AI_PROMPT, aiSidebarOpen: false, aiApprovalMode: 'review' }
+export const accentChoices = [
+  { id: 'slate', label: '雾蓝', color: '#536787' },
+  { id: 'jade', label: '青玉', color: '#3f806f' },
+  { id: 'plum', label: '紫藤', color: '#8266a1' },
+  { id: 'coral', label: '珊瑚', color: '#ac665c' },
+  { id: 'amber', label: '琥珀', color: '#996e32' }
+]
+const defaults = { theme: 'system', accent: 'slate', language:'zh-CN', font: 'system', fontSize: 18, focus: false, autoPair: true, animatedCursor: true, cursorStyle: 'beam', cursorTrailColor: '#819bcb', cursorTrailLength: 32, customFonts: [], aiSystemPrompt: DEFAULT_AI_PROMPT, aiSidebarOpen: false, aiApprovalMode: 'review' }
 export const preferences = reactive({ ...defaults })
 const appearance = reactive({ dark: false })
 let loaded = false
@@ -12,6 +20,8 @@ export function loadPreferences() {
   loaded = true
   try { Object.assign(preferences, defaults, JSON.parse(uni.getStorageSync(KEY) || '{}')) } catch (_) { /* keep defaults */ }
   if (!Array.isArray(preferences.customFonts)) preferences.customFonts = []
+  if (!accentChoices.some(choice => choice.id === preferences.accent)) preferences.accent = defaults.accent
+  if (preferences.language !== 'zh-CN') preferences.language = defaults.language
   if (!['review', 'full'].includes(preferences.aiApprovalMode)) preferences.aiApprovalMode = 'review'
   if (!['beam', 'neovim'].includes(preferences.cursorStyle)) preferences.cursorStyle = defaults.cursorStyle
   if (!/^#[0-9a-f]{6}$/i.test(preferences.cursorTrailColor)) preferences.cursorTrailColor = defaults.cursorTrailColor
@@ -21,9 +31,11 @@ export function loadPreferences() {
   if (preferences.font === 'kai') preferences.font = 'wenkai'
   return preferences
 }
+export function reloadPreferences() { loaded = false; Object.assign(preferences, defaults); loadPreferences(); applyTheme() }
 export function updatePreferences(patch) {
   loadPreferences(); Object.assign(preferences, patch)
   uni.setStorageSync(KEY, JSON.stringify(preferences))
+  queueDirectorySync()
   applyTheme()
 }
 export function isDark() {
@@ -32,7 +44,7 @@ export function isDark() {
   if (preferences.theme === 'light') return false
   try { return uni.getSystemInfoSync().theme === 'dark' } catch (_) { return false }
 }
-export function themeClass() { return appearance.dark ? 'theme-dark' : 'theme-light' }
+export function themeClass() { return `${appearance.dark ? 'theme-dark' : 'theme-light'} accent-${preferences.accent}` }
 export function applyTheme() {
   loadPreferences()
   appearance.dark = isDark()

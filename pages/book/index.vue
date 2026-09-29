@@ -28,6 +28,7 @@ import { themeClass } from '../../src/store/preferences'
 import { primaryNavigation } from '../../src/store/navigation'
 import { chooseBookCover } from '../../src/services/covers'
 import { exportBookPdf } from '../../src/services/pdf'
+import { mirrorExport } from '../../src/services/data-directory.js'
 import { textOnlyParagraphs } from '../../src/utils/media'
 import PdfImportBridge from '../../components/PdfImportBridge.vue'
 import { buildPdfBook } from '../../src/services/pdf-import'
@@ -81,9 +82,13 @@ function resumeWriting() { if (lastEdited.value) openArticle(lastEdited.value.ch
 function openArticle(chapterId, articleId, cursor = 0) { if (!menuType.value && !book.value?.readOnly) uni.navigateTo({ url: `/pages/editor/index?bookId=${bookId.value}&chapterId=${chapterId}&articleId=${articleId}&cursor=${cursor}` }) }
 function readBook() { if (book.value?.readOnly) return convertPdf(); if (book.value) uni.navigateTo({ url: `/pages/reader/index?bookId=${encodeURIComponent(bookId.value)}` }) }
 function openImageExport() { uni.navigateTo({ url: `/pages/export-image/index?bookId=${bookId.value}` }) }
-function doExport() {
+async function doExport() {
   showExport.value = false
-  try { const path = exportBookPdf(book.value, withToc.value); exportResult.value = { ok: true, path, message: `文件已保存在 ${path}` } }
+  try {
+    const path = exportBookPdf(book.value, withToc.value)
+    try { await mirrorExport(path, 'pdf'); exportResult.value = { ok:true, path, message:'PDF 已保存在所选数据目录的 PaperWriter/exports 中。' } }
+    catch (copyError) { exportResult.value = { ok:true, path, message:`PDF 已生成，但复制到数据目录失败：${copyError.message || copyError}` } }
+  }
   catch (error) { exportResult.value = { ok: false, message: error.message || String(error) } }
 }
 function openExport() {

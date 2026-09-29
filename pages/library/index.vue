@@ -7,8 +7,9 @@
     <view class="book-grid"><view v-for="(book, index) in books" :key="book.id" class="book-card card" :class="{ 'new-book': freshId === book.id, removing: removingId === book.id }" @tap="openBook(book.id)" @longpress="openActions(book)"><view class="book-art" :class="'cover-' + index % 4"><image v-if="book.cover" :src="book.cover" mode="aspectFill" class="cover-image" /><view v-else class="cover-letter">{{ book.title.slice(0, 1) }}</view><view class="book-spine"></view></view><view class="book-info"><view class="book-title-row"><view class="book-title">{{ book.title }}</view><MoreIcon class="more-button" @tap.stop="openActions(book)" /></view><view class="book-author">{{ book.author || '未设置作者' }}</view><view class="book-description">{{ book.description || (book.readOnly ? '旧版导入文件，可转换为可编辑书籍。' : '打开这本书，继续写下去。') }}</view><view class="book-meta"><text>{{ book.readOnly ? `${book.readOnly.format.toUpperCase()} · 只读` : `${book.chapters.length} 章 · ${articleCount(book)} 篇` }}</text><text>{{ formatDate(book.updatedAt) }}</text></view></view></view></view>
   </view></view></view>
   <view class="home-panel" :class="{ active: tabIndex === 1 }" :style="panelStyle(1)"><StatisticsPanel /></view>
-  <view class="home-panel" :class="{ active: tabIndex === 2 }" :style="panelStyle(2)"><SettingsPanel :embedded="true" @modal-change="settingsModalOpen = $event" /></view>
+  <view class="home-panel" :class="{ active: tabIndex === 2 }" :style="panelStyle(2)"><SettingsPanel :embedded="true" :active="tabIndex === 2" @modal-change="settingsModalOpen = $event" /></view>
   <AppNav />
+  <DataDirectoryGate v-if="needsDataDirectory()" />
   <PdfImportBridge ref="pdfBridge" @progress="pdfProgress" />
   <AppSheet :visible="showImportOptions" title="导入文稿" subtitle="把已有文字整理成书，导入后可继续编辑。" @close="showImportOptions = false">
     <view class="import-option" @tap="chooseImport('docx')"><view class="format-badge docx"><UiIcon name="file" /><text>DOCX</text></view><view class="option-copy"><strong>Word 文档</strong><text>识别标题层级，保留正文段落</text></view><UiIcon name="chevron-right" /></view>
@@ -33,6 +34,8 @@ import { PRIMARY_TABS, primaryNavigation } from '../../src/store/navigation'
 import { themeClass } from '../../src/store/preferences'
 import { chooseBookCover } from '../../src/services/covers'
 import AppNav from '../../components/AppNav.vue'
+import DataDirectoryGate from '../../components/DataDirectoryGate.vue'
+import { needsDataDirectory } from '../../src/services/data-directory.js'
 import ActionMenu from '../../components/ActionMenu.vue'
 import AppDialog from '../../components/AppDialog.vue'
 import StatisticsPanel from '../../components/StatisticsPanel.vue'

@@ -4,6 +4,7 @@ import { documentFromParagraphs } from '../utils/text.js'
 import { buildChatRequest, createChatAccumulator, requestCompleteChat, streamChat } from '../services/ai-providers.js'
 import { createPacedReveal } from '../utils/paced-reveal.js'
 import { applyAssistantProposal } from '../services/assistant-apply.js'
+import { queueDirectorySync } from '../services/data-directory.js'
 
 const KEY = 'paperwriter.assistantSessions.v1'
 export const assistantSessions = reactive({ sessions: [], activeByBook: {} })
@@ -11,8 +12,10 @@ const requests = new Map()
 const editors = new Map()
 let loaded = false, saveTimer = null
 const uid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
-function persist() { clearTimeout(saveTimer); saveTimer = null; uni.setStorageSync(KEY, JSON.stringify({ sessions: assistantSessions.sessions, activeByBook: assistantSessions.activeByBook })) }
+function persist() { clearTimeout(saveTimer); saveTimer = null; uni.setStorageSync(KEY, JSON.stringify({ sessions: assistantSessions.sessions, activeByBook: assistantSessions.activeByBook })); queueDirectorySync() }
+export function reloadAssistantSessions() { clearTimeout(saveTimer); loaded = false; assistantSessions.sessions = []; assistantSessions.activeByBook = {}; loadAssistantSessions() }
 function saveSoon() { clearTimeout(saveTimer); saveTimer = setTimeout(persist, 350) }
+export function flushAssistantSessions() { if (saveTimer) persist() }
 
 export function registerAssistantEditor(bookId, editor) {
   editors.set(bookId, editor)

@@ -1,4 +1,5 @@
 import { reactive } from 'vue'
+import { queueDirectorySync } from '../services/data-directory.js'
 
 const KEY = 'paperwriter.statistics.v1'
 const state = reactive({ days: {} })
@@ -20,6 +21,7 @@ export function useStatistics() {
   }
   return state
 }
+export function reloadStatistics() { loaded = false; state.days = {}; useStatistics() }
 
 export function recordWordDelta(bookId, bookTitle, articleId, articleTitle, delta, date = new Date()) {
   if (!Number.isFinite(delta) || delta === 0) return
@@ -38,6 +40,7 @@ export function recordWordDelta(bookId, bookTitle, articleId, articleTitle, delt
   state.days[key] = day
   try {
     uni.setStorageSync(KEY, JSON.stringify({ version: 1, days: state.days }))
+    queueDirectorySync()
   } catch (error) { console.warn('保存字数统计失败', error) }
 }
 
