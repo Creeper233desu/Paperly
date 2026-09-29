@@ -11,13 +11,15 @@ test('fixed Documents directory restores books after reinstall without choosing 
   const publicDocuments = join(workspace, 'Documents')
   mkdirSync(localPath('_doc/'), { recursive:true })
   mkdirSync(publicDocuments)
-  let granted = false, settingsOpened = false
+  let granted = false, legacyGranted = false, targetVersion = 35, permissionRequests = 0, settingsOpened = false
 
   class File {
     constructor(parent, name) { this.path = name === undefined ? (parent.path || parent) : join(parent.path || parent, name) }
     exists() { return existsSync(this.path) }
     isFile() { return this.exists() && statSync(this.path).isFile() }
     isDirectory() { return this.exists() && statSync(this.path).isDirectory() }
+    canRead() { return this.isDirectory() && (granted || legacyGranted) }
+    canWrite() { return this.isDirectory() && (granted || legacyGranted) }
     mkdirs() { mkdirSync(this.path, { recursive:true }); return true }
     list() { return this.isDirectory() ? readdirSync(this.path) : null }
     length() { return statSync(this.path).size }
@@ -53,12 +55,17 @@ test('fixed Documents directory restores books after reinstall without choosing 
     getExternalStoragePublicDirectory:() => new File(publicDocuments),
     isExternalStorageManager:() => granted
   }
-  const activity = { getPackageName:() => 'app.paperwriter', startActivity:() => { settingsOpened = true } }
+  const activity = {
+    getPackageName:() => 'app.paperwriter',
+    getApplicationInfo:() => ({ targetSdkVersion:targetVersion }),
+    checkSelfPermission:() => legacyGranted ? 0 : -1,
+    startActivity:() => { settingsOpened = true }
+  }
   globalThis.plus = {
     os:{ name:'Android' },
     android:{
       runtimeMainActivity:() => activity,
-      importClass:name => ({
+      importClass:name => typeof name !== 'string' ? name : ({
         'android.os.Build':{ VERSION:{ SDK_INT:35 } },
         'android.os.Build$VERSION':{ SDK_INT:35 },
         'android.os.Environment':Environment,
@@ -93,6 +100,7 @@ test('fixed Documents directory restores books after reinstall without choosing 
       FileReader:class { readAsText(file) { this.result = readFileSync(file.path, 'utf8'); setTimeout(() => this.onloadend?.(), 0) } }
     }
   }
+  globalThis.plus.android.requestPermissions = (_, success) => { permissionRequests++; legacyGranted = true; success({ granted:['android.permission.WRITE_EXTERNAL_STORAGE'] }) }
   globalThis.uni = { getStorageSync:key => storage.get(key) || '', setStorageSync:(key,value) => storage.set(key,value), removeStorageSync:key => storage.delete(key) }
   try {
     writeFileSync(localPath('_doc/cover.png'), 'cover bytes')
@@ -120,6 +128,14 @@ test('fixed Documents directory restores books after reinstall without choosing 
     const book = JSON.parse(storage.get('paperwriter.library.v1')).books[0]
     assert.equal(readFileSync(localPath(book.cover), 'utf8'), 'cover bytes')
     assert.equal(service.dataDirectory.uri, root)
+
+    // An APK targeting legacy storage can use its granted write access directly.
+    service.dataDirectory.ready = false
+    granted = false
+    targetVersion = 28
+    assert.equal(await service.requestDataAccess(), 'ready')
+    assert.equal(permissionRequests, 1)
+    granted = true
 
     writeFileSync(localPath('_doc/export.png'), 'picture')
     const exportPath = await service.mirrorExport('_doc/export.png', 'png')

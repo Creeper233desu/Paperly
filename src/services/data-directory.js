@@ -32,9 +32,25 @@ function documentRoot() {
   if (!documents) throw new Error('无法定位系统 Documents 目录')
   return child(documents, APP_FOLDER)
 }
+function targetSdkVersion() {
+  const info = invoke(plus.android.runtimeMainActivity(), 'getApplicationInfo')
+  androidClass(info)
+  return Number(info.targetSdkVersion || 0)
+}
+function legacyStorageAccess() {
+  const activity = plus.android.runtimeMainActivity()
+  if (targetSdkVersion() > 29) return false
+  if (sdkVersion() >= 23 && Number(invoke(activity, 'checkSelfPermission', 'android.permission.WRITE_EXTERNAL_STORAGE')) !== 0) return false
+  const documents = invoke(documentRoot(), 'getParentFile')
+  const probe = invoke(documents, 'exists') ? documents : invoke(documents, 'getParentFile')
+  return !!invoke(probe, 'canRead') && !!invoke(probe, 'canWrite')
+}
 function hasPermission() {
   if (!androidReady()) return false
-  if (sdkVersion() >= 30) return !!invoke(androidClass('android.os.Environment'), 'isExternalStorageManager')
+  if (sdkVersion() >= 30) {
+    try { if (invoke(androidClass('android.os.Environment'), 'isExternalStorageManager')) return true } catch (_) { /* test direct legacy access */ }
+    return legacyStorageAccess()
+  }
   if (sdkVersion() < 23) return true
   return Number(invoke(plus.android.runtimeMainActivity(), 'checkSelfPermission', 'android.permission.WRITE_EXTERNAL_STORAGE')) === 0
 }
@@ -272,8 +288,15 @@ export async function ensureDataDirectory() {
 export async function requestDataAccess() {
   if (!androidReady()) throw new Error('请在 Android 应用中开启数据目录')
   if (hasPermission()) return ensureDataDirectory()
+  const activity = plus.android.runtimeMainActivity()
+  const targetSdk = targetSdkVersion()
+  if (targetSdk <= 29 && sdkVersion() >= 23) {
+    await new Promise(resolve => plus.android.requestPermissions([
+      'android.permission.READ_EXTERNAL_STORAGE', 'android.permission.WRITE_EXTERNAL_STORAGE'
+    ], resolve, resolve))
+    if (hasPermission()) return ensureDataDirectory()
+  }
   if (sdkVersion() >= 30) {
-    const activity = plus.android.runtimeMainActivity()
     const Intent = androidClass('android.content.Intent')
     const Settings = androidClass('android.provider.Settings')
     const Uri = androidClass('android.net.Uri')
