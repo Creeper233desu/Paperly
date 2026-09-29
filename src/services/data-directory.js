@@ -246,13 +246,21 @@ async function restoreFrom(uriString) {
 }
 
 export function initDataDirectory() {
-  if (!androidReady()) return dataDirectory
   const value = uni.getStorageSync(URI_KEY)
   dataDirectory.uri = typeof value === 'string' ? value : ''
   dataDirectory.label = dataDirectory.uri ? decodeURIComponent(dataDirectory.uri.split('%3A').pop().split('/').pop()) : ''
   return dataDirectory
 }
-export function needsDataDirectory() { return androidReady() && !dataDirectory.uri }
+export function needsDataDirectory() {
+  if (dataDirectory.uri) return false
+  // #ifdef APP-PLUS
+  if (androidReady()) return true
+  try { return uni.getSystemInfoSync().platform === 'android' } catch (_) { return false }
+  // #endif
+  // #ifndef APP-PLUS
+  return false
+  // #endif
+}
 function pickTree() {
   return new Promise((resolve, reject) => {
     const { activity, resolver } = native()
