@@ -2,7 +2,8 @@
 import { initStore } from './src/store/library'
 import { applyTheme } from './src/store/preferences'
 import { flushActiveStreams } from './src/services/ai-providers'
-import { flushDirectorySync, initDataDirectory, queueDirectorySync } from './src/services/data-directory'
+import { ensureDataDirectory, flushDirectorySync, initDataDirectory, queueDirectorySync } from './src/services/data-directory'
+import { reloadAppData } from './src/services/reload-data'
 import { flushAssistantSessions } from './src/store/assistant-sessions'
 
 export default {
@@ -16,7 +17,10 @@ export default {
     initDataDirectory()
     applyTheme()
     flushActiveStreams()
-    queueDirectorySync()
+    ensureDataDirectory().then(result => {
+      if (result === 'restored') reloadAppData()
+      queueDirectorySync()
+    }).catch(error => console.warn('数据目录尚未就绪', error))
   },
   onHide() {
     flushAssistantSessions()

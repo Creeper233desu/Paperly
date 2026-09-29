@@ -86,7 +86,7 @@ async function doExport() {
   showExport.value = false
   try {
     const path = exportBookPdf(book.value, withToc.value)
-    try { await mirrorExport(path, 'pdf'); exportResult.value = { ok:true, path, message:'PDF 已保存在所选数据目录的 PaperWriter/exports 中。' } }
+    try { await mirrorExport(path, 'pdf'); exportResult.value = { ok:true, path, message:'PDF 已保存在 Documents/PaperWriter/exports 中。' } }
     catch (copyError) { exportResult.value = { ok:true, path, message:`PDF 已生成，但复制到数据目录失败：${copyError.message || copyError}` } }
   }
   catch (error) { exportResult.value = { ok: false, message: error.message || String(error) } }

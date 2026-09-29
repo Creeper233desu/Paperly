@@ -75,8 +75,8 @@
           <view v-if="activePanel === 'app'" class="app-settings">
             <view class="app-setting-card card" @tap="languageOpen = !languageOpen"><view class="app-setting-icon"><UiIcon name="sliders" /></view><view class="app-setting-copy"><view class="option-name">应用语言</view><view class="option-note">简体中文</view></view><UiIcon class="language-chevron" :class="{ open:languageOpen }" name="chevron-right" /></view>
             <view v-if="languageOpen" class="language-panel card" @tap="setOption('language', 'zh-CN'); languageOpen = false"><text>简体中文</text><UiIcon name="check" /></view>
-            <view class="app-setting-card card"><view class="app-setting-icon"><UiIcon name="file" /></view><view class="app-setting-copy"><view class="option-name">数据目录</view><view class="option-note">{{ dataDirectory.uri ? (dataDirectory.label || '已连接外部目录') : '尚未选择目录' }}</view><view class="option-note">书籍、封面、字体、会话与导出文件存放于 PaperWriter 子目录</view></view></view>
-            <view class="app-action card" @tap="migrateDirectory"><view><view class="option-name">迁移数据目录</view><view class="option-note">选择新的空文件夹，保留旧目录作为备份</view></view><UiIcon name="chevron-right" /></view>
+            <view class="app-setting-card card"><view class="app-setting-icon"><UiIcon name="file" /></view><view class="app-setting-copy"><view class="option-name">数据目录</view><view class="option-note">{{ dataDirectory.ready ? (dataDirectory.uri || dataDirectory.label) : '等待连接 Documents/PaperWriter' }}</view><view class="option-note">书籍、封面、字体、会话与导出文件会自动保存在固定目录</view></view></view>
+            <view class="app-action card" @tap="backupDirectory"><view><view class="option-name">立即备份数据</view><view class="option-note">将当前书架和设置同步到 Documents/PaperWriter</view></view><UiIcon name="chevron-right" /></view>
             <view class="app-action card destructive" @tap="showDeleteData = true"><view><view class="option-name">删除所有应用数据</view><view class="option-note">清空书籍、统计、字体、模型配置和当前数据目录</view></view><UiIcon name="chevron-right" /></view>
             <view class="app-setting-card card"><view class="app-setting-icon"><UiIcon name="gear" /></view><view class="app-setting-copy"><view class="option-name">软件版本</view><view class="option-note">纸间 · Android</view></view><view class="app-setting-value">{{ appVersion }}</view></view>
             <view v-if="appActionMessage" class="app-action-message" :class="{ error:appActionError }">{{ appActionMessage }}</view>
@@ -108,7 +108,7 @@ import { fontFamilyFor, fontLabel, loadBundledFont, loadSelectedFont, loadCustom
 import AppNav from '../../components/AppNav.vue'
 import AppDialog from '../../components/AppDialog.vue'
 import UiIcon from '../../components/UiIcon.vue'
-import { chooseDataDirectory, dataDirectory, deleteAllData } from '../../src/services/data-directory.js'
+import { dataDirectory, deleteAllData, flushDirectorySync } from '../../src/services/data-directory.js'
 import { reloadAppData } from '../../src/services/reload-data.js'
 import { navigatePrimary } from '../../src/store/navigation'
 import { hexToHsv, hsvToHex } from '../../src/utils/color'
@@ -168,11 +168,12 @@ async function prepareFontPreviews() {
   fontPreviewErrors.value = Object.fromEntries(fonts.filter((_, index) => results[index].status === 'rejected').map(font => [font.id, true]))
 }
 function setTheme(theme) { updatePreferences({ theme }) }
-async function migrateDirectory() {
+async function backupDirectory() {
   if (dataDirectory.busy) return
   appActionMessage.value = ''; appActionError.value = false
-  try { const changed = await chooseDataDirectory({ migrate:true }); appActionMessage.value = changed ? '数据已复制到新目录。旧目录保留为备份。' : '目录未更改。' }
-  catch (error) { if (!String(error.message).includes('取消')) { appActionMessage.value = error.message || '迁移失败'; appActionError.value = true } }
+  if (!dataDirectory.ready) { appActionMessage.value = '请先在书架页开启文件访问权限。'; appActionError.value = true; return }
+  try { await flushDirectorySync(); appActionMessage.value = '数据已备份到 Documents/PaperWriter。' }
+  catch (error) { appActionMessage.value = error.message || '备份失败'; appActionError.value = true }
 }
 async function confirmDeleteData() {
   showDeleteData.value = false; appActionMessage.value = ''; appActionError.value = false
