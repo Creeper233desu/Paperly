@@ -1,10 +1,10 @@
 <template>
   <view class="nav-shell">
-    <view class="nav-pill" role="tablist" aria-label="主导航">
+    <view class="nav-pill" role="tablist" :aria-label="$t('主导航')">
       <view class="nav-indicator" :style="{ transform: `translateX(${tabIndex * 100}%)` }"></view>
-      <view class="nav-item" :class="{ active: primaryNavigation.active === 'library', celebrate: animating === 'library' }" role="tab" :aria-selected="primaryNavigation.active === 'library'" aria-label="书架" @tap="selectTab('library')"><UiIcon name="shelf" /><text>书架</text></view>
-      <view class="nav-item" :class="{ active: primaryNavigation.active === 'statistics', celebrate: animating === 'statistics' }" role="tab" :aria-selected="primaryNavigation.active === 'statistics'" aria-label="统计" @tap="selectTab('statistics')"><UiIcon name="chart" /><text>统计</text></view>
-      <view class="nav-item" :class="{ active: primaryNavigation.active === 'settings', celebrate: animating === 'settings' }" role="tab" :aria-selected="primaryNavigation.active === 'settings'" aria-label="设置" @tap="selectTab('settings')"><UiIcon name="sliders" /><text>设置</text></view>
+      <view class="nav-item" :class="{ active: primaryNavigation.active === 'library', celebrate: animating === 'library' }" role="tab" :aria-selected="primaryNavigation.active === 'library'" :aria-label="$t('书架')" @tap="selectTab('library')"><UiIcon name="shelf" /><text>{{ $t('书架') }}</text></view>
+      <view class="nav-item" :class="{ active: primaryNavigation.active === 'statistics', celebrate: animating === 'statistics' }" role="tab" :aria-selected="primaryNavigation.active === 'statistics'" :aria-label="$t('统计')" @tap="selectTab('statistics')"><UiIcon name="chart" /><text>{{ $t('统计') }}</text></view>
+      <view class="nav-item" :class="{ active: primaryNavigation.active === 'settings', celebrate: animating === 'settings' }" role="tab" :aria-selected="primaryNavigation.active === 'settings'" :aria-label="$t('设置')" @tap="selectTab('settings')"><UiIcon name="sliders" /><text>{{ $t('设置') }}</text></view>
     </view>
   </view>
 </template>

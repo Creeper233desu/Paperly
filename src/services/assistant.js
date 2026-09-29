@@ -1,6 +1,11 @@
 import { documentFromParagraphs, paragraphsFromDocument } from '../utils/text.js'
+import { localeTag } from '../i18n.js'
 
 export const DEFAULT_AI_PROMPT = '你是「纸间」的写作助手。请用简体中文回答，尊重作者的语气、视角和情节设定。讨论文字时指出具体依据，给出可操作的建议；不要把推测说成书中事实。只有作者明确要求修改时才调用工具。正文文字可用 insert_text、delete_text；清理空白段落使用 remove_blank_lines（支持当前正文或整本书，不要求唯一片段）；篇章结构可用 add_chapter、delete_chapter、rename_chapter、add_article、delete_article、rename_article。操作必须限于当前书本，目标 ID 必须来自提供的目录；普通文字定位片段必须与原文完全一致且唯一。不要宣称改动已经生效。所有提议会先作为差异展示，作者接受后才写入。'
+export const DEFAULT_AI_PROMPT_EN = 'You are PaperWriter’s writing assistant. Reply in English. Respect the author’s voice, viewpoint, and story facts. Cite specific passages when discussing the writing and offer actionable suggestions. Do not present guesses as facts. Call tools only when the author explicitly asks for an edit. Use insert_text and delete_text for article text, remove_blank_lines for empty paragraphs, and add_chapter, delete_chapter, rename_chapter, add_article, delete_article, rename_article for the outline. Work only in the current book. Use IDs from the supplied outline. Text anchors must match the source exactly and uniquely. Never claim an edit has already been applied; proposed changes are shown as diffs until the author accepts them.'
+export const DEFAULT_AI_PROMPT_JA = 'あなたは「紙間」の執筆アシスタントです。日本語で回答してください。著者の文体、視点、物語の設定を尊重し、文章について述べるときは具体的な根拠と実行できる提案を示してください。推測を作品内の事実として扱わないでください。著者が明示的に修正を依頼した場合にのみツールを使用します。本文には insert_text、delete_text、空白段落には remove_blank_lines、章と作品の構成には add_chapter、delete_chapter、rename_chapter、add_article、delete_article、rename_article を使用できます。操作対象は現在の本に限り、ID は提示された目次から選んでください。本文の位置指定は原文と完全一致し、一意である必要があります。変更が適用済みだと断言しないでください。提案は差分として表示され、著者の承認後に反映されます。'
+export function defaultAiPrompt(language = localeTag()) { return language === 'en-US' ? DEFAULT_AI_PROMPT_EN : language === 'ja-JP' ? DEFAULT_AI_PROMPT_JA : DEFAULT_AI_PROMPT }
+export function isDefaultAiPrompt(prompt) { return [DEFAULT_AI_PROMPT, DEFAULT_AI_PROMPT_EN, DEFAULT_AI_PROMPT_JA].includes(prompt) }
 
 export const TEXT_TOOLS = [
   { type: 'function', function: { name: 'insert_text', description: '在当前书本的某篇正文中插入文字。after 必须是正文中唯一存在的原文片段；在正文开头插入时将 after 设为空字符串。', parameters: { type: 'object', properties: { article_id: { type: 'string' }, after: { type: 'string' }, text: { type: 'string' } }, required: ['article_id', 'after', 'text'] } } },
@@ -24,7 +29,8 @@ export function bookContext(book, currentArticleId, currentDraft, selectedText =
   articles.forEach(article => { const limit = Math.min(remaining, article.id === currentArticleId ? 18000 : 1600); article.truncated = article.text.length > limit; article.text = article.text.slice(0, limit); remaining -= article.text.length })
   const chapters = book.chapters.map(chapter => ({ id: chapter.id, title: chapter.title, article_ids: chapter.articles.map(article => article.id) }))
   const approvalRule = approvalMode === 'full' ? '当前为完全访问模式：有效工具调用会自动应用到当前书本，无需逐项确认；仅在作者明确要求修改时使用工具。' : '当前为确认模式：工具调用只会生成提案，作者确认后才会执行。'
-  return `${systemPrompt.trim() || DEFAULT_AI_PROMPT}\n应用规则：${approvalRule}不得操作当前书本之外的内容。\n书名：${book.title}\n作者：${book.author || '未设置'}\n当前正文 ID：${currentArticleId}\n章节目录：${JSON.stringify(chapters)}\n用户选中的文字：${selectedText || '无'}\n书本正文：${JSON.stringify(articles)}`
+  const prompt = isDefaultAiPrompt(systemPrompt) || !systemPrompt?.trim() ? defaultAiPrompt() : systemPrompt
+  return `${prompt}\n应用规则：${approvalRule}不得操作当前书本之外的内容。\n书名：${book.title}\n作者：${book.author || '未设置'}\n当前正文 ID：${currentArticleId}\n章节目录：${JSON.stringify(chapters)}\n用户选中的文字：${selectedText || '无'}\n书本正文：${JSON.stringify(articles)}`
 }
 
 export function planBookEdit(book, call, currentArticleId, currentDraft) {

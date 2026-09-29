@@ -2,102 +2,102 @@
   <view class="settings-root" :class="themeClass()">
     <view class="screen" :class="themeClass()"><view class="page-wrap">
       <view class="topbar">
-        <view class="brand"><image class="brand-mark" src="/static/brand/app-icon.png" mode="aspectFill" /><text>纸间</text></view>
-        <text class="top-action" @tap="goLibrary">回到书架</text>
+        <view class="brand"><image class="brand-mark" src="/static/brand/app-icon.png" mode="aspectFill" /><text>{{ $t('纸间') }}</text></view>
+        <text class="top-action" @tap="goLibrary">{{ $t('回到书架') }}</text>
       </view>
-      <view class="settings-heading"><view class="eyebrow">偏好设置</view><view class="page-title">让写作更舒适</view></view>
+      <view class="settings-heading"><view class="eyebrow">{{ $t('偏好设置') }}</view><view class="page-title">{{ $t('让写作更舒适') }}</view></view>
       <view class="settings-sections" :class="{ falling: iconsFalling }">
-        <view class="section-tile card" @tap="openPanel('appearance')"><view class="section-symbol appearance-symbol"><view></view></view><text>外观主题</text></view>
-        <view class="section-tile card" @tap="openPanel('fonts')"><view class="section-symbol font-symbol">Aa</view><text>文章字体</text></view>
-        <view class="section-tile card" @tap="openPanel('editing')"><view class="section-symbol editing-symbol"><view></view><view></view><view></view></view><text>编辑体验</text></view>
-        <view class="section-tile card" @tap="openPanel('ai')"><view class="section-symbol ai-symbol">✦</view><text>AI 写作助手</text></view>
-        <view class="section-tile card" @tap="openPanel('app')"><view class="section-symbol app-symbol"><UiIcon name="gear" /></view><text>应用设置</text></view>
+        <view class="section-tile card" @tap="openPanel('appearance')"><view class="section-symbol appearance-symbol"><view></view></view><text>{{ $t('外观主题') }}</text></view>
+        <view class="section-tile card" @tap="openPanel('fonts')"><view class="section-symbol font-symbol">Aa</view><text>{{ $t('文章字体') }}</text></view>
+        <view class="section-tile card" @tap="openPanel('editing')"><view class="section-symbol editing-symbol"><view></view><view></view><view></view></view><text>{{ $t('编辑体验') }}</text></view>
+        <view class="section-tile card" @tap="openPanel('ai')"><view class="section-symbol ai-symbol">✦</view><text>{{ $t('AI 写作助手') }}</text></view>
+        <view class="section-tile card" @tap="openPanel('app')"><view class="section-symbol app-symbol"><UiIcon name="gear" /></view><text>{{ $t('应用设置') }}</text></view>
       </view>
     </view></view>
     <AppNav v-if="!embedded" active="settings" />
     <view v-if="activePanel" class="settings-overlay" :class="{ closing }" @tap="closePanel">
       <view class="settings-modal" @tap.stop>
-        <view class="modal-header"><view><view class="modal-eyebrow">纸间 · 设置</view><view class="modal-title">{{ panelTitle }}</view></view><view class="modal-close" @tap="closePanel">×</view></view>
+        <view class="modal-header"><view><view class="modal-eyebrow">{{ $t('纸间 · 设置') }}</view><view class="modal-title">{{ panelTitle }}</view></view><view class="modal-close" @tap="closePanel">×</view></view>
         <view class="modal-body">
           <view v-if="activePanel === 'appearance'">
-            <view class="modal-intro">选择适合此刻的光线</view>
+            <view class="modal-intro">{{ $t('选择适合此刻的光线') }}</view>
             <view class="theme-grid">
               <view v-for="item in themes" :key="item.id" class="theme-option card" :class="{ selected: prefs.theme === item.id }" @tap="setTheme(item.id)">
                 <view class="theme-preview" :class="'preview-' + item.id"><view></view><view></view><view></view></view>
                 <view class="theme-label"><text>{{ item.label }}</text><text v-if="prefs.theme === item.id" class="selected-mark">✓</text></view>
               </view>
             </view>
-            <view class="accent-heading"><view class="option-name">主题颜色</view><view class="option-note">调整按钮与强调色</view></view>
-            <view class="accent-grid"><view v-for="item in accentChoices" :key="item.id" class="accent-choice" :class="{ selected: prefs.accent === item.id }" @tap="setOption('accent', item.id)"><view class="accent-swatch" :style="{ backgroundColor:item.color }"><UiIcon v-if="prefs.accent === item.id" name="check" /></view><text>{{ item.label }}</text></view></view>
+            <view class="accent-heading"><view class="option-name">{{ $t('主题颜色') }}</view><view class="option-note">{{ $t('调整按钮与强调色') }}</view></view>
+            <view class="accent-grid"><view v-for="item in accentChoices" :key="item.id" class="accent-choice" :class="{ selected: prefs.accent === item.id }" @tap="setOption('accent', item.id)"><view class="accent-swatch" :style="{ backgroundColor:item.color }"><UiIcon v-if="prefs.accent === item.id" name="check" /></view><text>{{ $t(item.label) }}</text></view></view>
           </view>
           <view v-if="activePanel === 'fonts'">
-            <view class="font-toolbar"><view class="modal-intro">点选字体即可查看效果并应用</view><view class="import-link" @tap="importCustom">＋ 导入 TTF / OTF</view></view>
+            <view class="font-toolbar"><view class="modal-intro">{{ $t('点选字体即可查看效果并应用') }}</view><view class="import-link" @tap="importCustom">{{ $t('＋ 导入 TTF / OTF') }}</view></view>
             <view class="font-grid">
               <view v-for="item in fontChoices" :key="item.id" class="font-choice card" :class="{ selected: prefs.font === item.id }" @tap="chooseFont(item.id)" @longpress="item.custom && askRemove(item.id)">
-                <view class="font-sample" :style="{ fontFamily: fontFamilyFor(item.id) }">夕阳、某处，花火。</view>
-                <view class="font-verse" :style="{ fontFamily: fontFamilyFor(item.id) }">写下属于你的下一句。</view>
-                <view class="font-bottom"><text>{{ item.label }}</text><text v-if="item.custom" class="remove-font" @tap.stop="askRemove(item.id)">移除</text><text v-else-if="prefs.font === item.id" class="selected-mark">✓</text></view>
-                <view v-if="fontPreviewErrors[item.id]" class="font-error">预览失败，点选重试</view>
+                <view class="font-sample" :style="{ fontFamily: fontFamilyFor(item.id) }">{{ $t('夕阳、某处，花火。') }}</view>
+                <view class="font-verse" :style="{ fontFamily: fontFamilyFor(item.id) }">{{ $t('写下属于你的下一句。') }}</view>
+                <view class="font-bottom"><text>{{ item.label }}</text><text v-if="item.custom" class="remove-font" @tap.stop="askRemove(item.id)">{{ $t('移除') }}</text><text v-else-if="prefs.font === item.id" class="selected-mark">✓</text></view>
+                <view v-if="fontPreviewErrors[item.id]" class="font-error">{{ $t('预览失败，点选重试') }}</view>
               </view>
             </view>
           </view>
           <view v-if="activePanel === 'editing'" class="editing-layout">
-            <view><view class="modal-intro">让文字跟随你的节奏</view><view class="option-list card">
-              <view class="option-row"><view><view class="option-name">正文字号</view><view class="option-note">当前 {{ prefs.fontSize }} px</view></view><view class="stepper"><text @tap="changeSize(-1)">−</text><text @tap="changeSize(1)">＋</text></view></view>
-              <view class="option-row" @tap="setOption('focus', !prefs.focus)"><view><view class="option-name">聚焦当前段落</view><view class="option-note">淡化未在编辑的段落</view></view><view class="toggle" :class="{ on: prefs.focus }"><view></view></view></view>
-              <view class="option-row" @tap="setOption('autoPair', !prefs.autoPair)"><view><view class="option-name">自动补全标点</view><view class="option-note">括号、引号与「」</view></view><view class="toggle" :class="{ on: prefs.autoPair }"><view></view></view></view>
-              <view class="option-row" @tap="setOption('animatedCursor', !prefs.animatedCursor)"><view><view class="option-name">动画光标</view><view class="option-note">光标移动时显示柔和轨迹</view></view><view class="toggle" :class="{ on: prefs.animatedCursor }"><view></view></view></view>
+            <view><view class="modal-intro">{{ $t('让文字跟随你的节奏') }}</view><view class="option-list card">
+              <view class="option-row"><view><view class="option-name">{{ $t('正文字号') }}</view><view class="option-note">{{ $t('当前') }} {{ prefs.fontSize }} px</view></view><view class="stepper"><text @tap="changeSize(-1)">−</text><text @tap="changeSize(1)">＋</text></view></view>
+              <view class="option-row" @tap="setOption('focus', !prefs.focus)"><view><view class="option-name">{{ $t('聚焦当前段落') }}</view><view class="option-note">{{ $t('淡化未在编辑的段落') }}</view></view><view class="toggle" :class="{ on: prefs.focus }"><view></view></view></view>
+              <view class="option-row" @tap="setOption('autoPair', !prefs.autoPair)"><view><view class="option-name">{{ $t('自动补全标点') }}</view><view class="option-note">{{ $t('括号、引号与「」') }}</view></view><view class="toggle" :class="{ on: prefs.autoPair }"><view></view></view></view>
+              <view class="option-row" @tap="setOption('animatedCursor', !prefs.animatedCursor)"><view><view class="option-name">{{ $t('动画光标') }}</view><view class="option-note">{{ $t('光标移动时显示柔和轨迹') }}</view></view><view class="toggle" :class="{ on: prefs.animatedCursor }"><view></view></view></view>
               <view v-if="prefs.animatedCursor" class="cursor-options">
-                <view class="cursor-option-title">光标样式</view>
-                <view class="cursor-style-list"><view class="cursor-style-choice" :class="{ selected: prefs.cursorStyle === 'beam' }" @tap="setOption('cursorStyle', 'beam')"><view class="cursor-style-preview beam-preview">字<view></view></view><text>经典竖线</text></view><view class="cursor-style-choice" :class="{ selected: prefs.cursorStyle === 'neovim' }" @tap="setOption('cursorStyle', 'neovim')"><view class="cursor-style-preview block-preview">字<view></view></view><text>Neovim 方块</text></view></view>
-                <view class="cursor-option-title">拖尾颜色</view>
-                <view class="cursor-colors"><view v-for="color in cursorColors" :key="color" class="cursor-color" :class="{ selected: prefs.cursorTrailColor.toLowerCase() === color }" :style="{ backgroundColor: color }" @tap="chooseCursorColor(color)"><text v-if="prefs.cursorTrailColor.toLowerCase() === color">✓</text></view><view class="cursor-custom" :class="{ selected: !cursorColors.includes(prefs.cursorTrailColor.toLowerCase()) }" @tap="openColorPicker"><view class="cursor-custom-dot" :style="{ backgroundColor: prefs.cursorTrailColor }"></view><text>自定义</text></view></view>
-                <view class="cursor-length-row"><view class="cursor-option-title">拖尾长度</view><text class="cursor-length-value">{{ trailLengthDraft }} px</text></view>
+                <view class="cursor-option-title">{{ $t('光标样式') }}</view>
+                <view class="cursor-style-list"><view class="cursor-style-choice" :class="{ selected: prefs.cursorStyle === 'beam' }" @tap="setOption('cursorStyle', 'beam')"><view class="cursor-style-preview beam-preview">{{ $t('字') }}<view></view></view><text>{{ $t('经典竖线') }}</text></view><view class="cursor-style-choice" :class="{ selected: prefs.cursorStyle === 'neovim' }" @tap="setOption('cursorStyle', 'neovim')"><view class="cursor-style-preview block-preview">{{ $t('字') }}<view></view></view><text>{{ $t('Neovim 方块') }}</text></view></view>
+                <view class="cursor-option-title">{{ $t('拖尾颜色') }}</view>
+                <view class="cursor-colors"><view v-for="color in cursorColors" :key="color" class="cursor-color" :class="{ selected: prefs.cursorTrailColor.toLowerCase() === color }" :style="{ backgroundColor: color }" @tap="chooseCursorColor(color)"><text v-if="prefs.cursorTrailColor.toLowerCase() === color">✓</text></view><view class="cursor-custom" :class="{ selected: !cursorColors.includes(prefs.cursorTrailColor.toLowerCase()) }" @tap="openColorPicker"><view class="cursor-custom-dot" :style="{ backgroundColor: prefs.cursorTrailColor }"></view><text>{{ $t('自定义') }}</text></view></view>
+                <view class="cursor-length-row"><view class="cursor-option-title">{{ $t('拖尾长度') }}</view><text class="cursor-length-value">{{ trailLengthDraft }} px</text></view>
                 <slider class="cursor-length-slider" :value="trailLengthDraft" :min="0" :max="96" :step="1" :activeColor="prefs.cursorTrailColor" :backgroundColor="isDark() ? '#404653' : '#dfe4ed'" block-color="#ffffff" :block-size="20" @changing="onTrailLengthChanging" @change="onTrailLengthChange" />
-                <view class="cursor-demo"><view class="cursor-demo-line" :class="{ block: prefs.cursorStyle === 'neovim' }" :style="{ width: trailLengthDraft + 'px', background: prefs.cursorTrailColor, boxShadow: `0 0 5px ${prefs.cursorTrailColor}` }"></view><view class="cursor-demo-caret" :class="{ block: prefs.cursorStyle === 'neovim' }" :style="{ backgroundColor: prefs.cursorTrailColor, boxShadow: `0 0 12px ${prefs.cursorTrailColor}` }"></view><text>字句之间</text></view>
-                <view class="cursor-live card" :style="{ '--preview-cursor': prefs.cursorTrailColor, '--preview-trail': trailLengthDraft + 'px' }"><text>实时光标预览</text><view class="cursor-live-line">写下每一个动人的瞬间<view class="cursor-live-motion" :class="{ neovim: prefs.cursorStyle === 'neovim' }"><view class="cursor-live-trail"></view><view class="cursor-live-head"></view></view></view></view>
+                <view class="cursor-demo"><view class="cursor-demo-line" :class="{ block: prefs.cursorStyle === 'neovim' }" :style="{ width: trailLengthDraft + 'px', background: prefs.cursorTrailColor, boxShadow: `0 0 5px ${prefs.cursorTrailColor}` }"></view><view class="cursor-demo-caret" :class="{ block: prefs.cursorStyle === 'neovim' }" :style="{ backgroundColor: prefs.cursorTrailColor, boxShadow: `0 0 12px ${prefs.cursorTrailColor}` }"></view><text>{{ $t('字句之间') }}</text></view>
+                <view class="cursor-live card" :style="{ '--preview-cursor': prefs.cursorTrailColor, '--preview-trail': trailLengthDraft + 'px' }"><text>{{ $t('实时光标预览') }}</text><view class="cursor-live-line">{{ $t('写下每一个动人的瞬间') }}<view class="cursor-live-motion" :class="{ neovim: prefs.cursorStyle === 'neovim' }"><view class="cursor-live-trail"></view><view class="cursor-live-head"></view></view></view></view>
               </view>
             </view></view>
-            <view class="preview-column"><view class="preview-caption">实时预览</view><view class="type-preview card" :style="{ fontFamily: fontFamilyFor(prefs.font), fontSize: prefs.fontSize + 'px' }"><view>第一章</view><view>写下第一句，接下来的故事就有了开始。</view><view>窗外的风很轻，纸上的字也慢慢有了方向。</view></view></view>
+            <view class="preview-column"><view class="preview-caption">{{ $t('实时预览') }}</view><view class="type-preview card" :style="{ fontFamily: fontFamilyFor(prefs.font), fontSize: prefs.fontSize + 'px' }"><view>{{ $t('第一章') }}</view><view>{{ $t('写下第一句，接下来的故事就有了开始。') }}</view><view>{{ $t('窗外的风很轻，纸上的字也慢慢有了方向。') }}</view></view></view>
           </view>
           <view v-if="activePanel === 'ai'" class="ai-settings">
-            <view class="modal-intro">可以保存多组模型配置，在写作助手中随时切换。正文修改仍需由你确认。</view>
-            <view class="saved-profiles"><view v-for="item in aiProfiles.profiles" :key="item.id" :class="{ selected: profileDraft.id === item.id }" @tap="editProfile(item)"><text>{{ item.name }}</text><small>{{ item.model || '未选择模型' }}</small></view><view class="add-profile" @tap="newProfile">＋ 新配置</view></view>
-            <view class="ai-setting-card card"><view class="option-name">服务商</view><view class="provider-options"><view v-for="item in AI_PROVIDERS" :key="item.id" :class="{ selected: profileDraft.provider === item.id }" @tap="chooseProvider(item.id)">{{ item.name }}</view></view><input class="field" :value="profileDraft.name" placeholder="配置名称" @input="profileDraft.name = $event.detail.value" /></view>
-            <view class="ai-setting-card card"><view class="option-name">API Key</view><view class="option-note">只保存在本机，多个配置各自保存密钥</view><input class="field" password :value="profileDraft.apiKey" placeholder="填写此服务商的 API Key" @input="profileDraft.apiKey = $event.detail.value; aiTestResult = ''" /><view class="option-name ai-field-label">API 地址</view><input class="field" :value="profileDraft.baseUrl" placeholder="https://.../v1" @input="profileDraft.baseUrl = $event.detail.value" /></view>
-            <view class="ai-setting-card card"><view class="model-heading"><view><view class="option-name">可用模型</view><view class="option-note">从当前服务商实时获取</view></view><view @tap="testAi">{{ aiTesting ? '获取中…' : '获取模型 / 测试连接' }}</view></view><view v-if="profileDraft.models.length" class="model-options"><view v-for="id in profileDraft.models" :key="id" class="model-option" :class="{ selected: profileDraft.model === id }" @tap="profileDraft.model = id"><text>{{ id }}</text><text>{{ profileDraft.model === id ? '当前选择' : '点选使用' }}</text></view></view><view v-else class="option-note model-empty">填入密钥后获取模型列表</view></view>
-            <view v-if="supportsReasoning(profileDraft)" class="ai-setting-card card"><view class="option-name">思考强度</view><view class="option-note">仅在所选模型支持时传入；思考内容由模型决定是否返回</view><view class="effort-options"><view v-for="level in effortLevels" :key="level" :class="{ selected: profileDraft.effort === level }" @tap="profileDraft.effort = level">{{ { auto:'自动', low:'低', medium:'中', high:'高', max:'最高' }[level] }}</view></view></view>
-            <view class="ai-setting-card card"><view class="option-name">上下文窗口</view><view class="option-note">可选。填写服务商公布的 token 上限后，助手会显示预估使用比例；留空仅显示预估用量。</view><input class="field" type="number" :value="profileDraft.contextWindow || ''" placeholder="例如 128000" @input="profileDraft.contextWindow = $event.detail.value" /></view>
-            <view class="ai-setting-card card"><view class="prompt-heading"><view><view class="option-name">系统提示词</view><view class="option-note">定义助手的写作方式和修改边界</view></view><text @tap="promptDraft = DEFAULT_AI_PROMPT">恢复默认</text></view><textarea v-model="promptDraft" class="prompt-input" maxlength="4000" /></view>
-            <view class="ai-setting-actions"><view v-if="profileDraft.id" class="ghost-button" @tap="deleteProfile">删除此配置</view><view class="primary-button" @tap="saveAi">保存配置</view></view>
+            <view class="modal-intro">{{ $t('可以保存多组模型配置，在写作助手中随时切换。正文修改仍需由你确认。') }}</view>
+            <view class="saved-profiles"><view v-for="item in aiProfiles.profiles" :key="item.id" :class="{ selected: profileDraft.id === item.id }" @tap="editProfile(item)"><text>{{ item.name }}</text><small>{{ item.model || $t('未选择模型') }}</small></view><view class="add-profile" @tap="newProfile">{{ $t('＋ 新配置') }}</view></view>
+            <view class="ai-setting-card card"><view class="option-name">{{ $t('服务商') }}</view><view class="provider-options"><view v-for="item in AI_PROVIDERS" :key="item.id" :class="{ selected: profileDraft.provider === item.id }" @tap="chooseProvider(item.id)">{{ item.name }}</view></view><input class="field" :value="profileDraft.name" :placeholder="$t('配置名称')" @input="profileDraft.name = $event.detail.value" /></view>
+            <view class="ai-setting-card card"><view class="option-name">API Key</view><view class="option-note">{{ $t('只保存在本机，多个配置各自保存密钥') }}</view><input class="field" password :value="profileDraft.apiKey" :placeholder="$t('填写此服务商的 API Key')" @input="profileDraft.apiKey = $event.detail.value; aiTestResult = ''" /><view class="option-name ai-field-label">{{ $t('API 地址') }}</view><input class="field" :value="profileDraft.baseUrl" placeholder="https://.../v1" @input="profileDraft.baseUrl = $event.detail.value" /></view>
+            <view class="ai-setting-card card"><view class="model-heading"><view><view class="option-name">{{ $t('可用模型') }}</view><view class="option-note">{{ $t('从当前服务商实时获取') }}</view></view><view @tap="testAi">{{ aiTesting ? $t('获取中…') : $t('获取模型 / 测试连接') }}</view></view><view v-if="profileDraft.models.length" class="model-options"><view v-for="id in profileDraft.models" :key="id" class="model-option" :class="{ selected: profileDraft.model === id }" @tap="profileDraft.model = id"><text>{{ id }}</text><text>{{ profileDraft.model === id ? $t('当前选择') : $t('点选使用') }}</text></view></view><view v-else class="option-note model-empty">{{ $t('填入密钥后获取模型列表') }}</view></view>
+            <view v-if="supportsReasoning(profileDraft)" class="ai-setting-card card"><view class="option-name">{{ $t('思考强度') }}</view><view class="option-note">{{ $t('仅在所选模型支持时传入；思考内容由模型决定是否返回') }}</view><view class="effort-options"><view v-for="level in effortLevels" :key="level" :class="{ selected: profileDraft.effort === level }" @tap="profileDraft.effort = level">{{ { auto:$t('自动'), low:$t('低'), medium:$t('中'), high:$t('高'), max:$t('最高') }[level] }}</view></view></view>
+            <view class="ai-setting-card card"><view class="option-name">{{ $t('上下文窗口') }}</view><view class="option-note">{{ $t('可选。填写服务商公布的 token 上限后，助手会显示预估使用比例；留空仅显示预估用量。') }}</view><input class="field" type="number" :value="profileDraft.contextWindow || ''" :placeholder="$t('例如 128000')" @input="profileDraft.contextWindow = $event.detail.value" /></view>
+            <view class="ai-setting-card card"><view class="prompt-heading"><view><view class="option-name">{{ $t('系统提示词') }}</view><view class="option-note">{{ $t('定义助手的写作方式和修改边界') }}</view></view><text @tap="promptDraft = defaultAiPrompt()">{{ $t('恢复默认') }}</text></view><textarea v-model="promptDraft" class="prompt-input" maxlength="4000" /></view>
+            <view class="ai-setting-actions"><view v-if="profileDraft.id" class="ghost-button" @tap="deleteProfile">{{ $t('删除此配置') }}</view><view class="primary-button" @tap="saveAi">{{ $t('保存配置') }}</view></view>
             <view v-if="aiTestResult" class="ai-test-result" :class="{ error: aiTestError }">{{ aiTestResult }}</view>
           </view>
           <view v-if="activePanel === 'app'" class="app-settings">
-            <view class="app-setting-card card" @tap="languageOpen = !languageOpen"><view class="app-setting-icon"><UiIcon name="sliders" /></view><view class="app-setting-copy"><view class="option-name">应用语言</view><view class="option-note">简体中文</view></view><UiIcon class="language-chevron" :class="{ open:languageOpen }" name="chevron-right" /></view>
-            <view v-if="languageOpen" class="language-panel card" @tap="setOption('language', 'zh-CN'); languageOpen = false"><text>简体中文</text><UiIcon name="check" /></view>
-            <view class="app-setting-card card"><view class="app-setting-icon"><UiIcon name="file" /></view><view class="app-setting-copy"><view class="option-name">数据目录</view><view class="option-note">{{ dataDirectory.ready ? (dataDirectory.uri || dataDirectory.label) : '等待连接 Documents/PaperWriter' }}</view><view class="option-note">书籍、封面、字体、会话与导出文件会自动保存在固定目录</view></view></view>
-            <view class="app-action card" @tap="backupDirectory"><view><view class="option-name">立即备份数据</view><view class="option-note">将当前书架和设置同步到 Documents/PaperWriter</view></view><UiIcon name="chevron-right" /></view>
-            <view class="app-action card destructive" @tap="showDeleteData = true"><view><view class="option-name">删除所有应用数据</view><view class="option-note">清空书籍、统计、字体、模型配置和当前数据目录</view></view><UiIcon name="chevron-right" /></view>
-            <view class="app-setting-card card"><view class="app-setting-icon"><UiIcon name="gear" /></view><view class="app-setting-copy"><view class="option-name">软件版本</view><view class="option-note">纸间 · Android</view></view><view class="app-setting-value">{{ appVersion }}</view></view>
-            <view v-if="appActionMessage" class="app-action-message" :class="{ error:appActionError }">{{ appActionMessage }}</view>
-            <view v-if="dataDirectory.error && !appActionMessage" class="app-action-message error">同步提示：{{ dataDirectory.error }}</view>
-            <view v-if="dataDirectory.lastSync" class="app-sync-note">上次备份：{{ dataDirectory.lastSync }}</view>
+            <view class="app-setting-card card" @tap="languageOpen = !languageOpen"><view class="app-setting-icon"><UiIcon name="sliders" /></view><view class="app-setting-copy"><view class="option-name">{{ $t('应用语言') }}</view><view class="option-note">{{ languageChoices.find(item => item.id === prefs.language)?.label }}</view></view><UiIcon class="language-chevron" :class="{ open:languageOpen }" name="chevron-right" /></view>
+            <view v-if="languageOpen" class="language-panel card language-list"><view v-for="item in languageChoices" :key="item.id" class="language-choice" :class="{ selected: prefs.language === item.id }" @tap="setOption('language', item.id); languageOpen = false"><text>{{ item.label }}</text><UiIcon v-if="prefs.language === item.id" name="check" /></view></view>
+            <view class="app-setting-card card"><view class="app-setting-icon"><UiIcon name="file" /></view><view class="app-setting-copy"><view class="option-name">{{ $t('数据目录') }}</view><view class="option-note">{{ dataDirectory.ready ? (dataDirectory.uri || dataDirectory.label) : $t('等待连接 Documents/PaperWriter') }}</view><view class="option-note">{{ $t('书籍、封面、字体、会话与导出文件会自动保存在固定目录') }}</view></view></view>
+            <view class="app-action card" @tap="backupDirectory"><view><view class="option-name">{{ $t('立即备份数据') }}</view><view class="option-note">{{ $t('将当前书架和设置同步到 Documents/PaperWriter') }}</view></view><UiIcon name="chevron-right" /></view>
+            <view class="app-action card destructive" @tap="showDeleteData = true"><view><view class="option-name">{{ $t('删除所有应用数据') }}</view><view class="option-note">{{ $t('清空书籍、统计、字体、模型配置和当前数据目录') }}</view></view><UiIcon name="chevron-right" /></view>
+            <view class="app-setting-card card"><view class="app-setting-icon"><UiIcon name="gear" /></view><view class="app-setting-copy"><view class="option-name">{{ $t('软件版本') }}</view><view class="option-note">{{ $t('纸间 · Android') }}</view></view><view class="app-setting-value">{{ appVersion }}</view></view>
+            <view v-if="appActionMessage" class="app-action-message" :class="{ error:appActionError }">{{ $m(appActionMessage) }}</view>
+            <view v-if="dataDirectory.error && !appActionMessage" class="app-action-message error">{{ $t('同步提示：') }}{{ $m(dataDirectory.error) }}</view>
+            <view v-if="dataDirectory.lastSync" class="app-sync-note">{{ $t('上次备份：') }}{{ dataDirectory.lastSync }}</view>
           </view>
         </view>
       </view>
     </view>
     <view v-if="colorPickerOpen" class="color-picker-overlay" :class="{ closing: colorPickerClosing }" @tap="closeColorPicker">
       <view class="color-picker-modal" @tap.stop>
-        <view class="color-picker-head"><view><view class="modal-eyebrow">光标外观</view><view class="color-picker-title">选择一抹颜色</view></view><view class="modal-close" @tap="closeColorPicker">×</view></view>
+        <view class="color-picker-head"><view><view class="modal-eyebrow">{{ $t('光标外观') }}</view><view class="color-picker-title">{{ $t('选择一抹颜色') }}</view></view><view class="modal-close" @tap="closeColorPicker">×</view></view>
         <view class="color-plane" :style="{ backgroundColor: hueColor }" @touchstart.stop="setPickerPoint" @touchmove.stop="setPickerPoint" @tap.stop="setPickerPoint"><view class="color-plane-white"></view><view class="color-plane-black"></view><view class="color-plane-knob" :style="{ left: pickerSaturation + '%', top: (100 - pickerValue) + '%' }"></view></view>
-        <view class="hue-caption"><text>色相</text><text>轻触色板调整明暗与浓淡</text></view>
+        <view class="hue-caption"><text>{{ $t('色相') }}</text><text>{{ $t('轻触色板调整明暗与浓淡') }}</text></view>
         <view class="hue-track"><slider :value="pickerHue" :min="0" :max="359" :step="1" activeColor="transparent" backgroundColor="transparent" block-color="#ffffff" :block-size="20" @changing="setPickerHue" @change="setPickerHue" /></view>
-        <view class="color-picker-bottom"><view class="color-picker-preview"><view :style="{ backgroundColor: pickerColor }"></view><text>光标预览</text></view><view class="color-picker-actions"><text @tap="closeColorPicker">取消</text><text class="color-picker-apply" @tap="applyPickerColor">应用颜色</text></view></view>
+        <view class="color-picker-bottom"><view class="color-picker-preview"><view :style="{ backgroundColor: pickerColor }"></view><text>{{ $t('光标预览') }}</text></view><view class="color-picker-actions"><text @tap="closeColorPicker">{{ $t('取消') }}</text><text class="color-picker-apply" @tap="applyPickerColor">{{ $t('应用颜色') }}</text></view></view>
       </view>
     </view>
-    <AppDialog :visible="!!errorMessage" title="无法使用该字体" :message="errorMessage" confirm-text="知道了" @cancel="errorMessage = ''" @confirm="errorMessage = ''" />
-    <AppDialog :visible="!!removeId" title="移除字体" :message="`确定移除「${fontLabel(removeId)}」？已写的文字不会删除。`" confirm-text="移除" :destructive="true" @cancel="removeId = ''" @confirm="confirmRemove" />
-    <AppDialog :visible="showDeleteData" title="删除所有数据" message="将删除书籍、正文、统计、字体和 AI 配置，并清空所选目录中的 PaperWriter 文件夹。此操作无法撤销。" confirm-text="确认删除" :destructive="true" @cancel="showDeleteData = false" @confirm="confirmDeleteData" />
+    <AppDialog :visible="!!errorMessage" :title="$t('无法使用该字体')" :message="errorMessage" :confirm-text="$t('知道了')" @cancel="errorMessage = ''" @confirm="errorMessage = ''" />
+    <AppDialog :visible="!!removeId" :title="$t('移除字体')" :message="$t('确定移除「{name}」？已写的文字不会删除。', { name: fontLabel(removeId) })" :confirm-text="$t('移除')" :destructive="true" @cancel="removeId = ''" @confirm="confirmRemove" />
+    <AppDialog :visible="showDeleteData" :title="$t('删除所有数据')" :message="$t('将删除书籍、正文、统计、字体和 AI 配置，并清空所选目录中的 PaperWriter 文件夹。此操作无法撤销。')" :confirm-text="$t('确认删除')" :destructive="true" @cancel="showDeleteData = false" @confirm="confirmDeleteData" />
   </view>
 </template>
 
@@ -112,7 +112,8 @@ import { dataDirectory, deleteAllData, flushDirectorySync } from '../../src/serv
 import { reloadAppData } from '../../src/services/reload-data.js'
 import { navigatePrimary } from '../../src/store/navigation'
 import { hexToHsv, hsvToHex } from '../../src/utils/color'
-import { DEFAULT_AI_PROMPT } from '../../src/services/assistant'
+import { defaultAiPrompt } from '../../src/services/assistant'
+import { t } from '../../src/i18n.js'
 import { AI_PROVIDERS, fetchProviderModels, providerInfo, supportsReasoning } from '../../src/services/ai-providers'
 import { aiProfiles, activeAiProfile, loadAiProfiles, removeAiProfile, saveAiProfile, selectAiProfile } from '../../src/store/ai-profiles'
 
@@ -123,9 +124,10 @@ loadAiProfiles()
 const emptyProfile = () => ({ id: '', provider: 'openai', name: '', apiKey: '', baseUrl: providerInfo('openai').baseUrl, model: '', models: [], effort: 'auto', contextWindow: 0 })
 const profileDraft = ref(emptyProfile()), aiTesting = ref(false), aiTestResult = ref(''), aiTestError = ref(false)
 const effortLevels = computed(() => profileDraft.value.provider === 'deepseek' ? ['auto', 'high', 'max'] : ['auto', 'low', 'medium', 'high'])
-const promptDraft = ref(prefs.aiSystemPrompt || DEFAULT_AI_PROMPT)
+const promptDraft = ref(prefs.aiSystemPrompt || defaultAiPrompt())
 const instance = getCurrentInstance()
-const themes = [{ id: 'system', label: '跟随系统' }, { id: 'light', label: '浅色' }, { id: 'dark', label: '深色' }]
+const themes = computed(() => [{ id: 'system', label: t('跟随系统') }, { id: 'light', label: t('浅色') }, { id: 'dark', label: t('深色') }])
+const languageChoices = [{ id:'zh-CN', label:'简体中文' }, { id:'en-US', label:'English' }, { id:'ja-JP', label:'日本語' }]
 const cursorColors = ['#819bcb', '#a48bc6', '#78aeb1', '#d0a571', '#d98591']
 const trailLengthDraft = ref(prefs.cursorTrailLength)
 const colorPickerOpen = ref(false), colorPickerClosing = ref(false)
@@ -135,10 +137,10 @@ const pickerColor = computed(() => hsvToHex(pickerHue.value, pickerSaturation.va
 const activePanel = ref(''), closing = ref(false), fontPreviewErrors = ref({})
 const iconsFalling = ref(false)
 let iconTimer
-const panelTitle = computed(() => ({ appearance: '外观主题', fonts: '文章字体', editing: '编辑体验', ai: 'AI 写作助手', app: '应用设置' })[activePanel.value] || '')
+const panelTitle = computed(() => t(({ appearance: '外观主题', fonts: '文章字体', editing: '编辑体验', ai: 'AI 写作助手', app: '应用设置' })[activePanel.value] || ''))
 const appVersion = ref('1.3.5'), showDeleteData = ref(false), languageOpen = ref(false), appActionMessage = ref(''), appActionError = ref(false)
 const fontChoices = computed(() => [
-  { id: 'system', label: '系统默认' }, { id: 'noto', label: '思源宋体' }, { id: 'wenkai', label: '霞鹜文楷' }, { id: 'sans', label: '系统无衬线' },
+  { id: 'system', label: t('系统默认') }, { id: 'noto', label: t('思源宋体') }, { id: 'wenkai', label: t('霞鹜文楷') }, { id: 'sans', label: t('系统无衬线') },
   ...prefs.customFonts.map(font => ({ id: font.id, label: font.name, custom: true }))
 ])
 const errorMessage = ref(''), removeId = ref('')
@@ -153,7 +155,7 @@ function openPanel(id) {
   closing.value = false
   activePanel.value = id
   if (id === 'editing') trailLengthDraft.value = prefs.cursorTrailLength
-  if (id === 'ai') { profileDraft.value = { ...(activeAiProfile() || emptyProfile()) }; promptDraft.value = prefs.aiSystemPrompt || DEFAULT_AI_PROMPT; aiTestResult.value = '' }
+  if (id === 'ai') { profileDraft.value = { ...(activeAiProfile() || emptyProfile()) }; promptDraft.value = prefs.aiSystemPrompt || defaultAiPrompt(); aiTestResult.value = '' }
   emit('modal-change', true)
   if (id === 'fonts') prepareFontPreviews()
 }
@@ -171,14 +173,14 @@ function setTheme(theme) { updatePreferences({ theme }) }
 async function backupDirectory() {
   if (dataDirectory.busy) return
   appActionMessage.value = ''; appActionError.value = false
-  if (!dataDirectory.ready) { appActionMessage.value = '请先在书架页开启文件访问权限。'; appActionError.value = true; return }
-  try { await flushDirectorySync(); appActionMessage.value = '数据已备份到 Documents/PaperWriter。' }
-  catch (error) { appActionMessage.value = error.message || '备份失败'; appActionError.value = true }
+  if (!dataDirectory.ready) { appActionMessage.value = t('请先在书架页开启文件访问权限。'); appActionError.value = true; return }
+  try { await flushDirectorySync(); appActionMessage.value = t('数据已备份到 Documents/PaperWriter。') }
+  catch (error) { appActionMessage.value = error.message || t('备份失败'); appActionError.value = true }
 }
 async function confirmDeleteData() {
   showDeleteData.value = false; appActionMessage.value = ''; appActionError.value = false
-  try { await deleteAllData(); reloadAppData(); appActionMessage.value = '应用数据已清空。' }
-  catch (error) { appActionMessage.value = error.message || '删除失败'; appActionError.value = true }
+  try { await deleteAllData(); reloadAppData(); appActionMessage.value = t('应用数据已清空。') }
+  catch (error) { appActionMessage.value = error.message || t('删除失败'); appActionError.value = true }
 }
 function setOption(key, value) { updatePreferences({ [key]: value }) }
 function chooseCursorColor(color) { updatePreferences({ cursorTrailColor: color }) }
@@ -212,22 +214,22 @@ function changeSize(delta) { updatePreferences({ fontSize: Math.min(30, Math.max
 async function testAi() {
   if (aiTesting.value) return
   aiTesting.value = true; aiTestResult.value = ''; aiTestError.value = false
-  try { const models = await fetchProviderModels(profileDraft.value); profileDraft.value.models = models; if (!models.includes(profileDraft.value.model)) profileDraft.value.model = models[0]; aiTestResult.value = `连接成功，获取到 ${models.length} 个模型` }
-  catch (error) { aiTestError.value = true; aiTestResult.value = error.message || '连接失败' }
+  try { const models = await fetchProviderModels(profileDraft.value); profileDraft.value.models = models; if (!models.includes(profileDraft.value.model)) profileDraft.value.model = models[0]; aiTestResult.value = t('连接成功，获取到 {count} 个模型', { count:models.length }) }
+  catch (error) { aiTestError.value = true; aiTestResult.value = error.message || t('连接失败') }
   finally { aiTesting.value = false }
 }
 function editProfile(item) { profileDraft.value = { ...item, models: [...(item.models || [])] }; aiTestResult.value = '' }
 function newProfile() { profileDraft.value = emptyProfile(); aiTestResult.value = '' }
 function chooseProvider(id) { profileDraft.value = { ...emptyProfile(), provider: id, baseUrl: providerInfo(id).baseUrl }; aiTestResult.value = '' }
-function deleteProfile() { if (!profileDraft.value.id) return; removeAiProfile(profileDraft.value.id); profileDraft.value = { ...(activeAiProfile() || emptyProfile()) }; aiTestResult.value = '配置已删除' }
+function deleteProfile() { if (!profileDraft.value.id) return; removeAiProfile(profileDraft.value.id); profileDraft.value = { ...(activeAiProfile() || emptyProfile()) }; aiTestResult.value = t('配置已删除') }
 function saveAi() {
-  if (!profileDraft.value.apiKey?.trim()) return uni.showToast({ title: '请先填写 API Key', icon: 'none' })
-  if (!profileDraft.value.models.includes(profileDraft.value.model)) return uni.showToast({ title: '请先获取并选择模型', icon: 'none' })
+  if (!profileDraft.value.apiKey?.trim()) return uni.showToast({ title: t('请先填写 API Key'), icon: 'none' })
+  if (!profileDraft.value.models.includes(profileDraft.value.model)) return uni.showToast({ title: t('请先获取并选择模型'), icon: 'none' })
   const saved = saveAiProfile(profileDraft.value)
   selectAiProfile(saved.id)
   profileDraft.value = { ...saved, models: [...saved.models] }
-  updatePreferences({ aiSystemPrompt: promptDraft.value.trim() || DEFAULT_AI_PROMPT })
-  aiTestResult.value = '配置已保存，可在编辑器中使用'; aiTestError.value = false
+  updatePreferences({ aiSystemPrompt: promptDraft.value.trim() || defaultAiPrompt() })
+  aiTestResult.value = t('配置已保存，可在编辑器中使用'); aiTestError.value = false
 }
 async function chooseFont(id) {
   try {
@@ -235,11 +237,11 @@ async function chooseFont(id) {
     else if (prefs.customFonts.some(font => font.id === id)) await loadCustomFont(prefs.customFonts.find(font => font.id === id))
     const nextErrors = { ...fontPreviewErrors.value }; delete nextErrors[id]; fontPreviewErrors.value = nextErrors
     updatePreferences({ font: id })
-  } catch (error) { errorMessage.value = error.message || '字体加载失败' }
+  } catch (error) { errorMessage.value = error.message || t('字体加载失败') }
 }
 async function importCustom() {
   try { const font = await importFont(); const nextErrors = { ...fontPreviewErrors.value }; delete nextErrors[font.id]; fontPreviewErrors.value = nextErrors }
-  catch (error) { if (!String(error.message).includes('取消')) errorMessage.value = error.message || '导入失败' }
+  catch (error) { if (!String(error.message).includes('取消')) errorMessage.value = error.message || t('导入失败') }
 }
 function askRemove(id) { removeId.value = id }
 function confirmRemove() { removeFont(removeId.value); removeId.value = '' }
@@ -270,6 +272,7 @@ function confirmRemove() { removeFont(removeId.value); removeId.value = '' }
 .app-setting-copy .option-note { overflow-wrap:anywhere; }
 .app-setting-value { color:var(--muted); font-size:11px; text-align:right; }
 .language-chevron { color:var(--muted); transition:transform .2s ease; }.language-chevron.open { transform:rotate(90deg); }.language-panel { margin-top:-5px; padding:17px 20px; display:flex; justify-content:space-between; align-items:center; color:var(--accent); font-size:13px; animation:cursor-options-in .2s ease both; }
+.language-list { display:block; padding:5px 8px; }.language-choice { min-height:44px; display:flex; align-items:center; justify-content:space-between; padding:8px 12px; border-radius:10px; color:var(--text); }.language-choice + .language-choice { border-top:1px solid var(--line); }.language-choice.selected { color:var(--accent); background:var(--accent-soft); }
 .app-action { justify-content:space-between; transition:transform .2s ease,border-color .2s ease; }
 .app-action:active { transform:scale(.985); border-color:var(--accent); }
 .app-action>view:last-child { color:var(--muted); }

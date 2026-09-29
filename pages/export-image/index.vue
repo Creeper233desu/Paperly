@@ -1,36 +1,36 @@
 <template>
   <view class="image-export" :class="themeClass()">
     <view class="export-shell">
-      <view class="export-top"><view class="back" @tap="back">‹　返回</view><text>纸间 / 图片导出</text></view>
-      <view class="heading"><text class="eyebrow">文字卡片</text><view class="page-title">分享一段好文字。</view><text class="hint">从正文截取连续文字，制成可保存、可分享的 PNG 图片。</text></view>
-      <view v-if="!book" class="empty-card">找不到这本书。请返回书架后重新进入。</view>
+      <view class="export-top"><view class="back" @tap="back">{{ $t('‹　返回') }}</view><text>{{ $t('纸间 / 图片导出') }}</text></view>
+      <view class="heading"><text class="eyebrow">{{ $t('文字卡片') }}</text><view class="page-title">{{ $t('分享一段好文字。') }}</view><text class="hint">{{ $t('从正文截取连续文字，制成可保存、可分享的 PNG 图片。') }}</text></view>
+      <view v-if="!book" class="empty-card">{{ $t('找不到这本书。请返回书架后重新进入。') }}</view>
       <view v-else class="export-grid">
         <view class="controls">
           <view class="step-card">
-            <view class="step-head"><text class="step-number">01</text><view><view class="step-title">选择正文</view><text class="step-detail">{{ source === 'selection' ? '来自编辑器的选区' : '从这本书挑选一篇' }}</text></view></view>
-            <view v-if="!entries.length" class="empty-state">这本书还没有正文，请先创建一篇正文。</view>
-            <view v-else class="article-choice" @tap="articleListOpen = !articleListOpen"><view><text>{{ currentEntry?.article.title || '无题正文' }}</text><small>{{ currentEntry?.chapter.title }}</small></view><text class="choice-chevron" :class="{ open: articleListOpen }">⌄</text></view>
-            <view v-if="articleListOpen" class="article-list"><view v-for="(entry, index) in entries" :key="entry.article.id" class="article-option" :class="{ active: articleIndex === index }" @tap="chooseArticle(index)"><text>{{ entry.chapter.title }}</text><view>{{ entry.article.title || '无题正文' }}</view><small>{{ entry.article.paragraphs.join('').length }} 字</small></view></view>
+            <view class="step-head"><text class="step-number">01</text><view><view class="step-title">{{ $t('选择正文') }}</view><text class="step-detail">{{ source === 'selection' ? $t('来自编辑器的选区') : $t('从这本书挑选一篇') }}</text></view></view>
+            <view v-if="!entries.length" class="empty-state">{{ $t('这本书还没有正文，请先创建一篇正文。') }}</view>
+            <view v-else class="article-choice" @tap="articleListOpen = !articleListOpen"><view><text>{{ currentEntry?.article.title || $t('无题正文') }}</text><small>{{ currentEntry?.chapter.title }}</small></view><text class="choice-chevron" :class="{ open: articleListOpen }">⌄</text></view>
+            <view v-if="articleListOpen" class="article-list"><view v-for="(entry, index) in entries" :key="entry.article.id" class="article-option" :class="{ active: articleIndex === index }" @tap="chooseArticle(index)"><text>{{ entry.chapter.title }}</text><view>{{ entry.article.title || $t('无题正文') }}</view><small>{{ entry.article.paragraphs.join('').length }} {{ $t('字') }}</small></view></view>
           </view>
           <view v-if="currentEntry" class="step-card">
-            <view class="step-head"><text class="step-number">02</text><view><view class="step-title">选取文字</view><text class="step-detail">只导出高亮的连续内容 · {{ selectedText.length }} 字</text></view></view>
-            <view class="selection-help">长按下方正文选择文字；也可调整起点与终点。选区会实时显示在右侧预览中。</view>
+            <view class="step-head"><text class="step-number">02</text><view><view class="step-title">{{ $t('选取文字') }}</view><text class="step-detail">{{ $t('只导出高亮的连续内容 ·') }} {{ selectedText.length }} {{ $t('字') }}</text></view></view>
+            <view class="selection-help">{{ $t('长按下方正文选择文字；也可调整起点与终点。选区会实时显示在右侧预览中。') }}</view>
             <textarea class="source-text" :value="articleText" :maxlength="-1" :auto-height="false" @longpress="captureSelection" @touchend="captureSelection" />
-            <view class="selection-toolbar"><view @touchstart="captureSelection" @tap="captureSelection">使用文字选区</view><text>第 {{ start + 1 }} 至 {{ end }} 字 / 共 {{ articleText.length }} 字</text></view>
-            <view class="range-row"><text>起点</text><slider :value="start" :min="0" :max="Math.max(1, articleText.length)" activeColor="#536787" backgroundColor="#e4e9f1" @changing="setStart" @change="setStart" /><input type="number" :value="start" @blur="inputStart" /></view>
-            <view class="range-row"><text>终点</text><slider :value="end" :min="0" :max="Math.max(1, articleText.length)" activeColor="#536787" backgroundColor="#e4e9f1" @changing="setEnd" @change="setEnd" /><input type="number" :value="end" @blur="inputEnd" /></view>
-            <view class="selected-strip"><text>已选文字</text><view>{{ selectedText || '请先选择一段正文文字' }}</view></view>
+            <view class="selection-toolbar"><view @touchstart="captureSelection" @tap="captureSelection">{{ $t('使用文字选区') }}</view><text>{{ $t('第') }} {{ start + 1 }} {{ $t('至') }} {{ end }} {{ $t('字 / 共') }} {{ articleText.length }} {{ $t('字') }}</text></view>
+            <view class="range-row"><text>{{ $t('起点') }}</text><slider :value="start" :min="0" :max="Math.max(1, articleText.length)" activeColor="#536787" backgroundColor="#e4e9f1" @changing="setStart" @change="setStart" /><input type="number" :value="start" @blur="inputStart" /></view>
+            <view class="range-row"><text>{{ $t('终点') }}</text><slider :value="end" :min="0" :max="Math.max(1, articleText.length)" activeColor="#536787" backgroundColor="#e4e9f1" @changing="setEnd" @change="setEnd" /><input type="number" :value="end" @blur="inputEnd" /></view>
+            <view class="selected-strip"><text>{{ $t('已选文字') }}</text><view>{{ selectedText || $t('请先选择一段正文文字') }}</view></view>
           </view>
           <view v-if="currentEntry" class="step-card">
-            <view class="step-head"><text class="step-number">03</text><view><view class="step-title">图片样式</view><text class="step-detail">书本信息默认不展示</text></view></view>
-            <view class="style-options"><view :class="{ active: style === 'light' }" @tap="style = 'light'">☼　浅色纸张</view><view :class="{ active: style === 'dark' }" @tap="style = 'dark'">☾　深色纸张</view></view>
-            <view class="info-option" @tap="showBookInfo = !showBookInfo"><view><view>左上角添加书本信息</view><text>书名 · 作者 · 篇名</text></view><view class="toggle" :class="{ on: showBookInfo }"><view /></view></view>
+            <view class="step-head"><text class="step-number">03</text><view><view class="step-title">{{ $t('图片样式') }}</view><text class="step-detail">{{ $t('书本信息默认不展示') }}</text></view></view>
+            <view class="style-options"><view :class="{ active: style === 'light' }" @tap="style = 'light'">{{ $t('☼　浅色纸张') }}</view><view :class="{ active: style === 'dark' }" @tap="style = 'dark'">{{ $t('☾　深色纸张') }}</view></view>
+            <view class="info-option" @tap="showBookInfo = !showBookInfo"><view><view>{{ $t('左上角添加书本信息') }}</view><text>{{ $t('书名 · 作者 · 篇名') }}</text></view><view class="toggle" :class="{ on: showBookInfo }"><view /></view></view>
           </view>
-          <view v-if="currentEntry" class="actions"><view class="primary" :class="{ busy: working }" @tap="generate">{{ working ? '正在生成…' : generatedPath ? '重新生成 PNG' : '生成 PNG' }}</view><view :class="{ disabled: !generatedPath }" @tap="saveImage">保存到相册</view><view :class="{ disabled: !generatedPath }" @tap="shareImage">打开并分享 ↗</view></view>
-          <view v-if="errorMessage" class="error-message">{{ errorMessage }}</view>
-          <view class="note">生成后可先检查图片，再保存或分享到系统中可用的应用。</view>
+          <view v-if="currentEntry" class="actions"><view class="primary" :class="{ busy: working }" @tap="generate">{{ working ? $t('正在生成…') : generatedPath ? $t('重新生成 PNG') : $t('生成 PNG') }}</view><view :class="{ disabled: !generatedPath }" @tap="saveImage">{{ $t('保存到相册') }}</view><view :class="{ disabled: !generatedPath }" @tap="shareImage">{{ $t('打开并分享 ↗') }}</view></view>
+          <view v-if="errorMessage" class="error-message">{{ $m(errorMessage) }}</view>
+          <view class="note">{{ $t('生成后可先检查图片，再保存或分享到系统中可用的应用。') }}</view>
         </view>
-        <view v-if="currentEntry" class="preview-column"><view class="preview-label">{{ generatedPath ? '已生成 · PNG' : '实时预览' }}<text>{{ style === 'dark' ? '深色' : '浅色' }}</text></view><image v-if="generatedPath" class="generated-image" :src="generatedPath" mode="widthFix" /><view v-else class="preview-paper" :class="style" :style="{ fontFamily: fontFamilyFor(prefs.font) }"><view v-if="showBookInfo" class="preview-info">{{ book.title }} · {{ book.author || '佚名' }} · {{ currentEntry.article.title || '无题正文' }}</view><view class="preview-copy"><text>{{ articleText.slice(Math.max(0, start - 50), start) }}</text><text class="highlight">{{ selectedText || '你选中的文字，会显示在这里。' }}</text><text>{{ articleText.slice(end, end + 50) }}</text></view><view class="brand">纸间 <text>PAPERWRITER</text></view></view></view>
+        <view v-if="currentEntry" class="preview-column"><view class="preview-label">{{ generatedPath ? $t('已生成 · PNG') : $t('实时预览') }}<text>{{ style === 'dark' ? $t('深色') : $t('浅色') }}</text></view><image v-if="generatedPath" class="generated-image" :src="generatedPath" mode="widthFix" /><view v-else class="preview-paper" :class="style" :style="{ fontFamily: fontFamilyFor(prefs.font) }"><view v-if="showBookInfo" class="preview-info">{{ book.title }} · {{ book.author || $t('佚名') }} · {{ currentEntry.article.title || $t('无题正文') }}</view><view class="preview-copy"><text>{{ articleText.slice(Math.max(0, start - 50), start) }}</text><text class="highlight">{{ selectedText || $t('你选中的文字，会显示在这里。') }}</text><text>{{ articleText.slice(end, end + 50) }}</text></view><view class="brand">{{ $t('纸间') }} <text>PAPERWRITER</text></view></view></view>
       </view>
     </view>
     <canvas canvas-id="writer-image-export" id="writer-image-export" class="export-canvas" :style="{ width: canvasWidth + 'px', height: canvasHeight + 'px' }"></canvas>
@@ -47,6 +47,7 @@ import { fontFamilyFor, loadSelectedFont } from '../../src/services/fonts'
 import { createTextPng } from '../../src/services/image-export'
 import { mirrorExport } from '../../src/services/data-directory.js'
 import { textOnlyParagraphs } from '../../src/utils/media'
+import { t } from '../../src/i18n.js'
 
 const instance = getCurrentInstance()
 const prefs = loadPreferences()
@@ -78,7 +79,7 @@ onLoad(options => {
         if (match >= 0) { start.value = match; end.value = match + draft.text.length; return }
       }
     }
-    errorMessage.value = '原选区已变化，请重新选取文字。'
+    errorMessage.value = t('原选区已变化，请重新选取文字。')
   }
   end.value = 0
 })
@@ -101,7 +102,7 @@ function captureSelection() {
   setTimeout(read, 80)
 }
 async function renderPng() {
-  const info = showBookInfo.value ? `${book.value.title} · ${book.value.author || '佚名'} · ${currentEntry.value.article.title || '无题正文'}` : ''
+  const info = showBookInfo.value ? `${book.value.title} · ${book.value.author || t('佚名')} · ${currentEntry.value.article.title || t('无题正文')}` : ''
   return createTextPng({ canvasId: 'writer-image-export', instance: instance.proxy, text: selectedText.value, info, style: style.value, fontFamily: fontFamilyFor(prefs.font),
     resize: layout => { canvasWidth.value = layout.width; canvasHeight.value = layout.height }, nextFrame: nextTick })
 }
@@ -111,31 +112,31 @@ async function generate() {
   try {
     generatedPath.value = await renderPng(); savedPath.value = ''
     try { await mirrorExport(generatedPath.value, 'png') }
-    catch (copyError) { errorMessage.value = `图片已生成，但复制到数据目录失败：${copyError.message || copyError}` }
+    catch (copyError) { errorMessage.value = t('图片已生成，但复制到数据目录失败：{error}', { error:copyError.message || copyError }) }
   }
-  catch (error) { generatedPath.value = ''; errorMessage.value = error.message || '图片生成失败' }
+  catch (error) { generatedPath.value = ''; errorMessage.value = error.message || t('图片生成失败') }
   finally { working.value = false }
 }
 function ensureAlbumCopy() {
   if (savedPath.value) return Promise.resolve(savedPath.value)
   return new Promise((resolve, reject) => uni.saveImageToPhotosAlbum({ filePath: generatedPath.value,
     success: result => { savedPath.value = result.path || generatedPath.value; resolve(savedPath.value) },
-    fail: error => reject(new Error(error?.errMsg || '无法保存到相册'))
+    fail: error => reject(new Error(error?.errMsg || t('无法保存到相册')))
   }))
 }
 async function saveImage() {
   if (!generatedPath.value) return
-  try { await ensureAlbumCopy(); uni.showToast({ title: '图片已保存到相册', icon: 'none' }) }
+  try { await ensureAlbumCopy(); uni.showToast({ title: t('图片已保存到相册'), icon: 'none' }) }
   catch (error) { errorMessage.value = error.message }
 }
 async function shareImage() {
   if (!generatedPath.value) return
   // #ifdef APP-PLUS
-  try { plus.runtime.openFile(generatedPath.value, {}, error => { errorMessage.value = `${error?.message || '无法打开图片'}。可以先保存到相册再分享。` }) }
-  catch (error) { errorMessage.value = error.message || '无法打开图片' }
+  try { plus.runtime.openFile(generatedPath.value, {}, error => { errorMessage.value = t('{error}。可以先保存到相册再分享。', { error:error?.message || t('无法打开图片') }) }) }
+  catch (error) { errorMessage.value = error.message || t('无法打开图片') }
   // #endif
   // #ifndef APP-PLUS
-  errorMessage.value = '请在 Android App 中打开图片'
+  errorMessage.value = t('请在 Android App 中打开图片')
   // #endif
 }
 </script>

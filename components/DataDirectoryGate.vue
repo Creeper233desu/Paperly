@@ -2,13 +2,13 @@
   <view class="data-gate" :class="themeClass()">
     <view class="gate-card">
       <image class="gate-icon" src="/static/brand/app-icon.png" mode="aspectFit" />
-      <view class="gate-kicker">开始使用纸间</view>
-      <view class="gate-title">为文字选一个家</view>
-      <view class="gate-copy">纸间会在系统文档目录建立固定的 <text>Documents/PaperWriter</text> 文件夹。书籍和导出文件保存在这里；重装后授予文件访问权限即可自动找回，无需重新选择文件夹。</view>
-      <view class="gate-notes"><view><text class="note-number">01</text><text>自动检查已有备份并恢复书架</text></view><view><text class="note-number">02</text><text>封面、插图、字体和会话一并保存</text></view></view>
-      <view class="gate-button" :class="{ busy:dataDirectory.busy }" @tap="connect">{{ dataDirectory.busy ? '正在检查数据…' : dataDirectory.permission === 'required' ? '开启文件访问权限' : '检查数据目录' }}</view>
-      <view v-if="error" class="gate-error">{{ error }}</view>
-      <view class="gate-foot">Android 11 及以上会打开系统的文件访问设置。权限仅需在每次安装后授予一次。</view>
+      <view class="gate-kicker">{{ $t('开始使用纸间') }}</view>
+      <view class="gate-title">{{ $t('为文字选一个家') }}</view>
+      <view class="gate-copy">{{ $t('纸间会在系统文档目录建立固定的') }} <text>Documents/PaperWriter</text> {{ $t('文件夹。书籍和导出文件保存在这里；重装后授予文件访问权限即可自动找回，无需重新选择文件夹。') }}</view>
+      <view class="gate-notes"><view><text class="note-number">01</text><text>{{ $t('自动检查已有备份并恢复书架') }}</text></view><view><text class="note-number">02</text><text>{{ $t('封面、插图、字体和会话一并保存') }}</text></view></view>
+      <view class="gate-button" :class="{ busy:dataDirectory.busy }" @tap="connect">{{ dataDirectory.busy ? $t('正在检查数据…') : dataDirectory.permission === 'required' ? $t('开启文件访问权限') : $t('检查数据目录') }}</view>
+      <view v-if="error" class="gate-error">{{ $m(error) }}</view>
+      <view class="gate-foot">{{ $t('Android 11 及以上会打开系统的文件访问设置。权限仅需在每次安装后授予一次。') }}</view>
     </view>
   </view>
 </template>
@@ -18,13 +18,14 @@ import { onMounted, onUnmounted, ref } from 'vue'
 import { themeClass } from '../src/store/preferences.js'
 import { dataDirectory, ensureDataDirectory, requestDataAccess } from '../src/services/data-directory.js'
 import { reloadAppData } from '../src/services/reload-data.js'
+import { t } from '../src/i18n.js'
 
 const error = ref('')
 let retryTimer
 async function check() {
   if (dataDirectory.busy || dataDirectory.ready || error.value) return
   try { if (await ensureDataDirectory() === 'restored') reloadAppData() }
-  catch (failure) { error.value = failure.message || '无法检查数据目录' }
+  catch (failure) { error.value = failure.message || t('无法检查数据目录') }
 }
 onMounted(() => {
   check()
@@ -35,7 +36,7 @@ async function connect() {
   if (dataDirectory.busy) return
   error.value = ''
   try { if (await requestDataAccess() === 'restored') reloadAppData() }
-  catch (failure) { error.value = failure.message || '无法连接数据目录' }
+  catch (failure) { error.value = failure.message || t('无法连接数据目录') }
 }
 </script>
 

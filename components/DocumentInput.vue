@@ -1,15 +1,16 @@
 <template>
   <view :id="hostId" class="document-input-host" :host-prop="hostId" :change:host-prop="editorRender.onHostChange" :prop="documentPayload" :change:prop="editorRender.onValueChange" :focus-prop="focusPayload" :change:focus-prop="editorRender.onFocusMode" :cursor-prop="cursorPayload" :change:cursor-prop="editorRender.onRequest" :active-prop="renderReady" :change:active-prop="editorRender.onActiveChange" :visual-prop="visualPayload" :change:visual-prop="editorRender.onVisualSettings" :style="{ '--cursor-color': cursorTrailColor }">
     <view v-show="renderReady" class="document-input" contenteditable="true" :style="{ fontFamily, fontSize: fontSize + 'px' }"></view>
-    <textarea v-if="!renderReady" class="document-fallback" :value="value" :maxlength="-1" :auto-height="true" :focus="fallbackFocus" :selection-start="selectionStart" :selection-end="selectionEnd" :style="{ fontFamily, fontSize: fontSize + 'px' }" placeholder="从这里开始写…" @input="onFallbackInput" @focus="onFallbackFocus" @blur="onFallbackBlur" @tap="reportFallbackCursor" @longpress="onFallbackLongPress" />
+    <textarea v-if="!renderReady" class="document-fallback" :value="value" :maxlength="-1" :auto-height="true" :focus="fallbackFocus" :selection-start="selectionStart" :selection-end="selectionEnd" :style="{ fontFamily, fontSize: fontSize + 'px' }" :placeholder="$t('从这里开始写…')" @input="onFallbackInput" @focus="onFallbackFocus" @blur="onFallbackBlur" @tap="reportFallbackCursor" @longpress="onFallbackLongPress" />
     <view class="cursor-glow"></view>
     <view class="cursor-trail"></view>
     <view class="cursor-jelly-layer"></view>
-    <view v-if="menu.open" class="selection-menu-shade"><view class="selection-menu" :class="{ closing: menu.closing }" :style="{ left: menu.left + 'px', top: menu.top + 'px' }" @tap.stop><view class="selection-action" @tap="runMenuAction('copy')">复制</view><view class="selection-action" @tap="runMenuAction('paste')">粘贴</view><view class="selection-action" @tap="runMenuAction('cut')">剪切</view><view class="selection-action" @tap="runMenuAction('all')">全选</view><view class="selection-action ask-action" @tap="runMenuAction('ask')">问 AI</view><view class="selection-action export-action" @tap="runMenuAction('export')">导出图片</view></view></view>
+    <view v-if="menu.open" class="selection-menu-shade"><view class="selection-menu" :class="{ closing: menu.closing }" :style="{ left: menu.left + 'px', top: menu.top + 'px' }" @tap.stop><view class="selection-action" @tap="runMenuAction('copy')">{{ $t('复制') }}</view><view class="selection-action" @tap="runMenuAction('paste')">{{ $t('粘贴') }}</view><view class="selection-action" @tap="runMenuAction('cut')">{{ $t('剪切') }}</view><view class="selection-action" @tap="runMenuAction('all')">{{ $t('全选') }}</view><view class="selection-action ask-action" @tap="runMenuAction('ask')">{{ $t('问 AI') }}</view><view class="selection-action export-action" @tap="runMenuAction('export')">{{ $t('导出图片') }}</view></view></view>
   </view>
 </template>
 
 <script>
+import { t } from '../src/i18n.js'
 export default {
   props: {
     value: { type: String, default: '' },
@@ -101,10 +102,10 @@ export default {
       this.closeMenu()
       if (action === 'all') { this.requestMenuSelection(0, this.value.length); return }
       if (action === 'ask') { if (selected) this.$emit('ask-ai', { text: selected, start, end, documentId: this.documentId }); return }
-      if (action === 'export') { if (selected) this.$emit('export-image', { text: selected, start, end, documentId: this.documentId }); else uni.showToast({ title: '请先选中文字', icon: 'none' }); return }
-      if (action === 'paste') { uni.getClipboardData({ success: result => this.replaceMenuSelection(result.data || '', start, end), fail: () => uni.showToast({ title: '无法读取剪贴板', icon: 'none' }) }); return }
+      if (action === 'export') { if (selected) this.$emit('export-image', { text: selected, start, end, documentId: this.documentId }); else uni.showToast({ title: t('请先选中文字'), icon: 'none' }); return }
+      if (action === 'paste') { uni.getClipboardData({ success: result => this.replaceMenuSelection(result.data || '', start, end), fail: () => uni.showToast({ title: t('无法读取剪贴板'), icon: 'none' }) }); return }
       if (!selected) return
-      uni.setClipboardData({ data: selected, showToast: false, success: () => { if (action === 'cut') this.replaceMenuSelection('', start, end) }, fail: () => uni.showToast({ title: '无法写入剪贴板', icon: 'none' }) })
+      uni.setClipboardData({ data: selected, showToast: false, success: () => { if (action === 'cut') this.replaceMenuSelection('', start, end) }, fail: () => uni.showToast({ title: t('无法写入剪贴板'), icon: 'none' }) })
     },
     reportFallbackCursor() {
       setTimeout(() => {

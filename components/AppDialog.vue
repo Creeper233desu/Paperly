@@ -1,8 +1,8 @@
 <template>
-  <view v-if="visible" class="dialog-backdrop" @tap="$emit('cancel')"><view class="dialog-box" @tap.stop><view class="dialog-heading">{{ title }}</view><view v-if="message" class="dialog-message">{{ message }}</view><slot></slot><view class="dialog-buttons"><view class="dialog-cancel" @tap="$emit('cancel')">取消</view><view class="dialog-confirm" :class="{ danger: destructive }" @tap="$emit('confirm')">{{ confirmText }}</view></view></view></view>
+  <view v-if="visible" class="dialog-backdrop" @tap="$emit('cancel')"><view class="dialog-box" @tap.stop><view class="dialog-heading">{{ $m(title) }}</view><view v-if="message" class="dialog-message">{{ $m(message) }}</view><slot></slot><view class="dialog-buttons"><view class="dialog-cancel" @tap="$emit('cancel')">{{ $t('取消') }}</view><view class="dialog-confirm" :class="{ danger: destructive }" @tap="$emit('confirm')">{{ confirmText || $t('确定') }}</view></view></view></view>
 </template>
 <script setup>
-defineProps({ visible: Boolean, title: String, message: String, confirmText: { type: String, default: '确定' }, destructive: Boolean })
+defineProps({ visible: Boolean, title: String, message: String, confirmText: { type: String, default: '' }, destructive: Boolean })
 defineEmits(['cancel', 'confirm'])
 </script>
 <style scoped>

@@ -7,8 +7,8 @@ const source = readFileSync(new URL('../components/DocumentInput.vue', import.me
 const scripts = [...source.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)]
 
 function optionsFor(index, globals = {}) {
-  const context = { module: { exports: {} }, ...globals }
-  runInNewContext(scripts[index][1].replace('export default', 'module.exports ='), context)
+  const context = { module: { exports: {} }, t: value => value, ...globals }
+  runInNewContext(scripts[index][1].replace(/^import\s+\{\s*t\s*\}\s+from\s+['"][^'"]+['"]\s*;?\s*/m, '').replace('export default', 'module.exports ='), context)
   return context.module.exports
 }
 

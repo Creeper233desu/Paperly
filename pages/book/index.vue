@@ -1,22 +1,22 @@
 <template>
   <view class="screen book-screen" :class="themeClass()"><view class="page-wrap">
-    <view class="topbar"><text class="back" @tap="back">‹　返回书架</text><view class="book-top-menu" @tap="openBookMenu"><text>更多操作</text><MoreIcon /></view></view>
-    <view v-if="book" class="book-layout"><view class="book-sidebar"><view class="large-cover"><image v-if="book.cover" :src="book.cover" mode="aspectFill" /><view v-else class="large-letter">{{ book.title.slice(0, 1) }}</view><view class="large-spine"></view></view><view class="sidebar-label">当前书籍</view><view class="sidebar-title">{{ book.title }}</view><view class="sidebar-author">{{ book.author || '未设置作者' }}</view><view v-if="book.description" class="sidebar-description">{{ book.description }}</view><view v-if="!book.readOnly" class="sidebar-stats"><view><text class="stat-number">{{ book.chapters.length }}</text><text>章节</text></view><view><text class="stat-number">{{ totalArticles }}</text><text>正文</text></view><view><text class="stat-number">{{ totalWords }}</text><text>字数</text></view></view><view class="sidebar-exports"><view v-if="!book.readOnly || book.readOnly.format === 'pdf'" class="sidebar-export" @tap="readBook">{{ book.readOnly ? '转换为可编辑书籍' : '阅读整本书' }}</view><view v-if="!book.readOnly" class="sidebar-export" @tap="showExport = true">导出 PDF　↗</view><view v-if="!book.readOnly" class="sidebar-export" @tap="openImageExport">导出图片　↗</view></view></view>
-      <view v-if="book.readOnly" class="book-content read-only-content"><view class="page-title">继续整理这份文稿</view><view class="subtle">{{ book.readOnly.format === 'pdf' ? '将旧版导入的 PDF 提取为章节和正文，之后即可编辑、缩放字体和阅读。' : '此旧版文件格式已停止支持，可删除这条书架记录后导入 DOCX 或 PDF。' }}</view><view v-if="book.readOnly.format === 'pdf'" class="read-only-card card"><UiIcon name="file" /><view class="read-only-name">{{ book.readOnly.fileName }}</view><view class="primary-button" @tap="convertPdf">转换为可编辑书籍</view></view></view>
-      <view v-else class="book-content"><view class="content-heading"><view><view class="eyebrow">写作目录</view><view class="page-title">章节与正文</view><view class="subtle">继续写下一个片段，或从已有的正文开始。</view></view><view class="new-chapter" @tap="openCreateChapter">＋ 新建章节</view></view><view class="search-box"><text>⌕</text><input v-model="query" placeholder="搜索章节、篇名或正文" confirm-type="search" /></view><view v-if="lastEdited" class="resume-card" @tap="resumeWriting"><view class="resume-mark"><view class="resume-line"></view></view><view class="resume-copy"><text>继续上次写作</text><strong>{{ lastEdited.title }}</strong></view><view class="resume-arrow"></view></view>
-      <view v-if="!book.chapters.length" class="empty card">先创建一个章节，再写第一篇正文。</view><view v-for="(chapter, ci) in visibleChapters" :key="chapter.id" class="chapter-card card"><view class="chapter-heading" @tap="toggleChapter(chapter.id)"><view class="chapter-num">{{ String(ci + 1).padStart(2, '0') }}</view><view class="chapter-name">{{ chapter.title }} <text class="chapter-article-count">{{ chapter.articles.length }} 篇</text></view><view class="chapter-caret" :class="{ folded: collapsed[chapter.id] && !query }"></view><MoreIcon class="chapter-action" @tap.stop="openChapterMenu(chapter)" /></view><view v-if="query || !collapsed[chapter.id]" class="chapter-children"><view v-for="article in filteredArticles(chapter)" :key="article.id" class="article-row" @tap="openArticle(chapter.id, article.id)" @longpress="openArticleMenu(chapter, article)"><view class="article-icon"><view></view><view></view></view><view class="article-main"><view class="article-title">{{ article.title || '无题正文' }}</view><view class="article-preview">{{ preview(article) }}</view></view><view class="article-tail"><text>{{ wordCount(article) }} 字</text><MoreIcon class="article-more" @tap.stop="openArticleMenu(chapter, article)" /></view></view><view class="add-article" @tap="startArticle(chapter.id)">＋ 添加正文</view></view></view><view v-if="query && !visibleChapters.length" class="empty">没有找到匹配内容</view></view>
+    <view class="topbar"><text class="back" @tap="back">{{ $t('‹　返回书架') }}</text><view class="book-top-menu" @tap="openBookMenu"><text>{{ $t('更多操作') }}</text><MoreIcon /></view></view>
+    <view v-if="book" class="book-layout"><view class="book-sidebar"><view class="large-cover"><image v-if="book.cover" :src="book.cover" mode="aspectFill" /><view v-else class="large-letter">{{ book.title.slice(0, 1) }}</view><view class="large-spine"></view></view><view class="sidebar-label">{{ $t('当前书籍') }}</view><view class="sidebar-title">{{ book.title }}</view><view class="sidebar-author">{{ book.author || $t('未设置作者') }}</view><view v-if="book.description" class="sidebar-description">{{ book.description }}</view><view v-if="!book.readOnly" class="sidebar-stats"><view><text class="stat-number">{{ book.chapters.length }}</text><text>{{ $t('章节') }}</text></view><view><text class="stat-number">{{ totalArticles }}</text><text>{{ $t('正文') }}</text></view><view><text class="stat-number">{{ totalWords }}</text><text>{{ $t('字数') }}</text></view></view><view class="sidebar-exports"><view v-if="!book.readOnly || book.readOnly.format === 'pdf'" class="sidebar-export" @tap="readBook">{{ book.readOnly ? $t('转换为可编辑书籍') : $t('阅读整本书') }}</view><view v-if="!book.readOnly" class="sidebar-export" @tap="showExport = true">{{ $t('导出 PDF　↗') }}</view><view v-if="!book.readOnly" class="sidebar-export" @tap="openImageExport">{{ $t('导出图片　↗') }}</view></view></view>
+      <view v-if="book.readOnly" class="book-content read-only-content"><view class="page-title">{{ $t('继续整理这份文稿') }}</view><view class="subtle">{{ book.readOnly.format === 'pdf' ? $t('将旧版导入的 PDF 提取为章节和正文，之后即可编辑、缩放字体和阅读。') : $t('此旧版文件格式已停止支持，可删除这条书架记录后导入 DOCX 或 PDF。') }}</view><view v-if="book.readOnly.format === 'pdf'" class="read-only-card card"><UiIcon name="file" /><view class="read-only-name">{{ book.readOnly.fileName }}</view><view class="primary-button" @tap="convertPdf">{{ $t('转换为可编辑书籍') }}</view></view></view>
+      <view v-else class="book-content"><view class="content-heading"><view><view class="eyebrow">{{ $t('写作目录') }}</view><view class="page-title">{{ $t('章节与正文') }}</view><view class="subtle">{{ $t('继续写下一个片段，或从已有的正文开始。') }}</view></view><view class="new-chapter" @tap="openCreateChapter">{{ $t('＋ 新建章节') }}</view></view><view class="search-box"><text>⌕</text><input v-model="query" :placeholder="$t('搜索章节、篇名或正文')" confirm-type="search" /></view><view v-if="lastEdited" class="resume-card" @tap="resumeWriting"><view class="resume-mark"><view class="resume-line"></view></view><view class="resume-copy"><text>{{ $t('继续上次写作') }}</text><strong>{{ lastEdited.title }}</strong></view><view class="resume-arrow"></view></view>
+      <view v-if="!book.chapters.length" class="empty card">{{ $t('先创建一个章节，再写第一篇正文。') }}</view><view v-for="(chapter, ci) in visibleChapters" :key="chapter.id" class="chapter-card card"><view class="chapter-heading" @tap="toggleChapter(chapter.id)"><view class="chapter-num">{{ String(ci + 1).padStart(2, '0') }}</view><view class="chapter-name">{{ chapter.title }} <text class="chapter-article-count">{{ chapter.articles.length }} {{ $t('篇') }}</text></view><view class="chapter-caret" :class="{ folded: collapsed[chapter.id] && !query }"></view><MoreIcon class="chapter-action" @tap.stop="openChapterMenu(chapter)" /></view><view v-if="query || !collapsed[chapter.id]" class="chapter-children"><view v-for="article in filteredArticles(chapter)" :key="article.id" class="article-row" @tap="openArticle(chapter.id, article.id)" @longpress="openArticleMenu(chapter, article)"><view class="article-icon"><view></view><view></view></view><view class="article-main"><view class="article-title">{{ article.title || $t('无题正文') }}</view><view class="article-preview">{{ preview(article) }}</view></view><view class="article-tail"><text>{{ wordCount(article) }} {{ $t('字') }}</text><MoreIcon class="article-more" @tap.stop="openArticleMenu(chapter, article)" /></view></view><view class="add-article" @tap="startArticle(chapter.id)">{{ $t('＋ 添加正文') }}</view></view></view><view v-if="query && !visibleChapters.length" class="empty">{{ $t('没有找到匹配内容') }}</view></view>
     </view>
   </view>
-  <PdfImportBridge ref="pdfBridge" @progress="conversionProgress = `正在提取第 ${$event.current} / ${$event.total} 页`" />
-  <AppSheet :visible="converting" title="转换 PDF" :subtitle="conversionProgress" @close="pdfBridge?.cancel()"><view class="subtle">完成后，原有书名、作者和封面会保留。</view></AppSheet>
-  <AppDialog :visible="!!conversionError" title="PDF 转换提示" :message="conversionError" confirm-text="知道了" @cancel="conversionError = ''" @confirm="conversionError = ''" />
+  <PdfImportBridge ref="pdfBridge" @progress="conversionProgress = $t('正在提取第 {current} / {total} 页', $event)" />
+  <AppSheet :visible="converting" :title="$t('转换 PDF')" :subtitle="conversionProgress" @close="pdfBridge?.cancel()"><view class="subtle">{{ $t('完成后，原有书名、作者和封面会保留。') }}</view></AppSheet>
+  <AppDialog :visible="!!conversionError" :title="$t('PDF 转换提示')" :message="conversionError" :confirm-text="$t('知道了')" @cancel="conversionError = ''" @confirm="conversionError = ''" />
   <ActionMenu :visible="!!menuType && !dialogType" :title="menuTitle" :items="menuItems" @close="menuType = ''" @select="onMenuSelect" />
-  <AppDialog :visible="dialogType === 'chapter'" :title="chapterDraftId ? '重命名章节' : '新建章节'" :confirm-text="chapterDraftId ? '保存' : '创建章节'" @cancel="dialogType = ''" @confirm="saveChapter"><input v-model="chapterDraftTitle" class="field" maxlength="80" placeholder="章节名（必填）" /></AppDialog>
-  <AppDialog :visible="dialogType === 'book'" title="编辑书籍信息" confirm-text="保存" @cancel="dialogType = ''" @confirm="saveBookInfo"><view class="book-edit"><view class="cover-edit" @tap="selectCover"><image v-if="bookDraft.cover" :src="bookDraft.cover" mode="aspectFill" /><view v-else class="cover-edit-placeholder">＋<text>选择封面</text></view></view><view class="book-fields"><input v-model="bookDraft.title" class="field" maxlength="80" placeholder="书名" /><input v-model="bookDraft.author" class="field" maxlength="80" placeholder="作者" /><textarea v-model="bookDraft.description" class="description-input" maxlength="240" placeholder="简介" /></view></view></AppDialog>
-  <AppDialog :visible="dialogType === 'deleteChapter'" title="删除章节" :message="`确定删除「${selectedChapter?.title || ''}」和其中全部正文？`" confirm-text="删除章节" :destructive="true" @cancel="dialogType = ''" @confirm="confirmDeleteChapter" />
-  <AppDialog :visible="dialogType === 'deleteArticle'" title="删除正文" :message="`确定删除「${selectedArticle?.title || '无题正文'}」？`" confirm-text="删除正文" :destructive="true" @cancel="dialogType = ''" @confirm="confirmDeleteArticle" />
-  <AppDialog :visible="showExport" title="导出整本书" confirm-text="生成 PDF" @cancel="showExport = false" @confirm="doExport"><view class="export-row" @tap="withToc = !withToc"><view><view>包含目录</view><text>按章节生成导航页</text></view><view class="custom-check" :class="{ checked: withToc }">{{ withToc ? '✓' : '' }}</view></view></AppDialog>
-  <AppDialog :visible="!!exportResult" :title="exportResult?.ok ? 'PDF 已生成' : '导出失败'" :message="exportResult?.message" :confirm-text="exportResult?.ok ? '打开 PDF' : '知道了'" @cancel="exportResult = null" @confirm="openExport" />
+  <AppDialog :visible="dialogType === 'chapter'" :title="chapterDraftId ? $t('重命名章节') : $t('新建章节')" :confirm-text="chapterDraftId ? $t('保存') : $t('创建章节')" @cancel="dialogType = ''" @confirm="saveChapter"><input v-model="chapterDraftTitle" class="field" maxlength="80" :placeholder="$t('章节名（必填）')" /></AppDialog>
+  <AppDialog :visible="dialogType === 'book'" :title="$t('编辑书籍信息')" :confirm-text="$t('保存')" @cancel="dialogType = ''" @confirm="saveBookInfo"><view class="book-edit"><view class="cover-edit" @tap="selectCover"><image v-if="bookDraft.cover" :src="bookDraft.cover" mode="aspectFill" /><view v-else class="cover-edit-placeholder">＋<text>{{ $t('选择封面') }}</text></view></view><view class="book-fields"><input v-model="bookDraft.title" class="field" maxlength="80" :placeholder="$t('书名')" /><input v-model="bookDraft.author" class="field" maxlength="80" :placeholder="$t('作者')" /><textarea v-model="bookDraft.description" class="description-input" maxlength="240" :placeholder="$t('简介')" /></view></view></AppDialog>
+  <AppDialog :visible="dialogType === 'deleteChapter'" :title="$t('删除章节')" :message="$t('确定删除「{title}」和其中全部正文？', { title: selectedChapter?.title || '' })" :confirm-text="$t('删除章节')" :destructive="true" @cancel="dialogType = ''" @confirm="confirmDeleteChapter" />
+  <AppDialog :visible="dialogType === 'deleteArticle'" :title="$t('删除正文')" :message="$t('确定删除「{title}」？', { title: selectedArticle?.title || $t('无题正文') })" :confirm-text="$t('删除正文')" :destructive="true" @cancel="dialogType = ''" @confirm="confirmDeleteArticle" />
+  <AppDialog :visible="showExport" :title="$t('导出整本书')" :confirm-text="$t('生成 PDF')" @cancel="showExport = false" @confirm="doExport"><view class="export-row" @tap="withToc = !withToc"><view><view>{{ $t('包含目录') }}</view><text>{{ $t('按章节生成导航页') }}</text></view><view class="custom-check" :class="{ checked: withToc }">{{ withToc ? '✓' : '' }}</view></view></AppDialog>
+  <AppDialog :visible="!!exportResult" :title="exportResult?.ok ? $t('PDF 已生成') : $t('导出失败')" :message="exportResult?.message" :confirm-text="exportResult?.ok ? $t('打开 PDF') : $t('知道了')" @cancel="exportResult = null" @confirm="openExport" />
   </view>
 </template>
 
@@ -38,6 +38,7 @@ import UiIcon from '../../components/UiIcon.vue'
 import MoreIcon from '../../components/MoreIcon.vue'
 import ActionMenu from '../../components/ActionMenu.vue'
 import AppDialog from '../../components/AppDialog.vue'
+import { t } from '../../src/i18n.js'
 
 const pdfBridge = ref(null), converting = ref(false), conversionProgress = ref(''), conversionError = ref('')
 const bookId = ref(''), query = ref(''), menuType = ref(''), dialogType = ref(''), showExport = ref(false), withToc = ref(true), exportResult = ref(null)
@@ -53,9 +54,9 @@ const totalWords = computed(() => book.value?.chapters.reduce((n, c) => n + c.ar
 const articleMatches = a => (a.title + '\n' + textOnlyParagraphs(a.paragraphs).join('\n')).toLocaleLowerCase().includes(query.value.toLocaleLowerCase())
 const visibleChapters = computed(() => book.value?.chapters.filter(ch => !query.value || ch.title.toLocaleLowerCase().includes(query.value.toLocaleLowerCase()) || ch.articles.some(articleMatches)) || [])
 const filteredArticles = ch => !query.value || ch.title.toLocaleLowerCase().includes(query.value.toLocaleLowerCase()) ? ch.articles : ch.articles.filter(articleMatches)
-const preview = a => textOnlyParagraphs(a.paragraphs).find(p => p.trim()) || (Object.keys(a.images || {}).length ? '包含图片' : '还没有正文')
-const menuTitle = computed(() => menuType.value === 'book' ? book.value?.title : menuType.value === 'chapter' ? selectedChapter.value?.title : selectedArticle.value?.title || '无题正文')
-const menuItems = computed(() => menuType.value === 'book' ? (book.value?.readOnly ? [{ label: '编辑书籍信息' }, ...(book.value.readOnly.format === 'pdf' ? [{ label: '转换为可编辑书籍' }] : [])] : [{ label: '编辑书籍信息' }, { label: '阅读整本书' }, { label: '导出 PDF' }, { label: '导出图片' }]) : menuType.value === 'chapter' ? [{ label: '重命名章节' }, { label: '删除章节', danger: true }] : [{ label: '删除正文', danger: true }])
+const preview = a => textOnlyParagraphs(a.paragraphs).find(p => p.trim()) || t(Object.keys(a.images || {}).length ? '包含图片' : '还没有正文')
+const menuTitle = computed(() => menuType.value === 'book' ? book.value?.title : menuType.value === 'chapter' ? selectedChapter.value?.title : selectedArticle.value?.title || t('无题正文'))
+const menuItems = computed(() => menuType.value === 'book' ? (book.value?.readOnly ? [{ label: t('编辑书籍信息') }, ...(book.value.readOnly.format === 'pdf' ? [{ label: t('转换为可编辑书籍') }] : [])] : [{ label: t('编辑书籍信息') }, { label: t('阅读整本书') }, { label: t('导出 PDF') }, { label: t('导出图片') }]) : menuType.value === 'chapter' ? [{ label: t('重命名章节') }, { label: t('删除章节'), danger: true }] : [{ label: t('删除正文'), danger: true }])
 function back() { uni.navigateBack() }
 function openBookMenu() { if (book.value) menuType.value = 'book' }
 function openChapterMenu(chapter) { selectedChapter.value = chapter; menuType.value = 'chapter' }
@@ -72,9 +73,9 @@ function onMenuSelect(index) {
   if (type === 'article') dialogType.value = 'deleteArticle'
 }
 function openCreateChapter() { chapterDraftId.value = ''; chapterDraftTitle.value = ''; dialogType.value = 'chapter' }
-function saveChapter() { if (!chapterDraftTitle.value.trim()) return uni.showToast({ title: '请输入章节名', icon: 'none' }); if (chapterDraftId.value) renameChapter(bookId.value, chapterDraftId.value, chapterDraftTitle.value); else addChapter(bookId.value, chapterDraftTitle.value); dialogType.value = '' }
+function saveChapter() { if (!chapterDraftTitle.value.trim()) return uni.showToast({ title: t('请输入章节名'), icon: 'none' }); if (chapterDraftId.value) renameChapter(bookId.value, chapterDraftId.value, chapterDraftTitle.value); else addChapter(bookId.value, chapterDraftTitle.value); dialogType.value = '' }
 async function selectCover() { try { bookDraft.cover = await chooseBookCover() } catch (error) { if (!String(error.message).includes('取消')) uni.showToast({ title: error.message, icon: 'none' }) } }
-function saveBookInfo() { if (!bookDraft.title.trim()) return uni.showToast({ title: '请输入书名', icon: 'none' }); updateBook(bookId.value, bookDraft); dialogType.value = '' }
+function saveBookInfo() { if (!bookDraft.title.trim()) return uni.showToast({ title: t('请输入书名'), icon: 'none' }); updateBook(bookId.value, bookDraft); dialogType.value = '' }
 function confirmDeleteChapter() { deleteChapter(bookId.value, selectedChapter.value.id); dialogType.value = '' }
 function confirmDeleteArticle() { deleteArticle(bookId.value, selectedChapter.value.id, selectedArticle.value.id); dialogType.value = '' }
 function startArticle(chapterId) { const a = addArticle(bookId.value, chapterId); openArticle(chapterId, a.id) }
@@ -86,26 +87,26 @@ async function doExport() {
   showExport.value = false
   try {
     const path = exportBookPdf(book.value, withToc.value)
-    try { await mirrorExport(path, 'pdf'); exportResult.value = { ok:true, path, message:'PDF 已保存在 Documents/PaperWriter/exports 中。' } }
-    catch (copyError) { exportResult.value = { ok:true, path, message:`PDF 已生成，但复制到数据目录失败：${copyError.message || copyError}` } }
+    try { await mirrorExport(path, 'pdf'); exportResult.value = { ok:true, path, message:t('PDF 已保存在 Documents/PaperWriter/exports 中。') } }
+    catch (copyError) { exportResult.value = { ok:true, path, message:t('PDF 已生成，但复制到数据目录失败：{error}', { error:copyError.message || copyError }) } }
   }
   catch (error) { exportResult.value = { ok: false, message: error.message || String(error) } }
 }
 function openExport() {
   const result = exportResult.value; exportResult.value = null
-  if (result?.ok && typeof plus !== 'undefined') plus.runtime.openFile(result.path, {}, () => uni.showToast({ title: '请安装可以打开 PDF 的应用', icon: 'none' }))
+  if (result?.ok && typeof plus !== 'undefined') plus.runtime.openFile(result.path, {}, () => uni.showToast({ title: t('请安装可以打开 PDF 的应用'), icon: 'none' }))
 }
 async function convertPdf() {
   if (converting.value || book.value?.readOnly?.format !== 'pdf') return
   const source = { ...book.value.readOnly }
-  converting.value = true; conversionProgress.value = '正在读取原文件'
+  converting.value = true; conversionProgress.value = t('正在读取原文件')
   try {
     const result = await pdfBridge.value.parse({ path: source.path })
     const content = buildPdfBook(result.pages, result.metadata, source.fileName)
     replaceImportedContent(bookId.value, content)
     removeImportedFile(source.path)
     if (content.warnings.length) conversionError.value = content.warnings.join('\n')
-  } catch (error) { if (!String(error.message).includes('取消')) conversionError.value = error.message || '转换失败' }
+  } catch (error) { if (!String(error.message).includes('取消')) conversionError.value = error.message || t('转换失败') }
   finally { converting.value = false }
 }
 </script>

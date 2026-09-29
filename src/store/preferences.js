@@ -1,6 +1,7 @@
 import { reactive } from 'vue'
-import { DEFAULT_AI_PROMPT } from '../services/assistant.js'
+import { DEFAULT_AI_PROMPT, defaultAiPrompt, isDefaultAiPrompt } from '../services/assistant.js'
 import { queueDirectorySync } from '../services/data-directory.js'
+import { setLanguage, SUPPORTED_LANGUAGES } from '../i18n.js'
 
 const KEY = 'paperwriter.preferences.v1'
 export const accentChoices = [
@@ -21,7 +22,9 @@ export function loadPreferences() {
   try { Object.assign(preferences, defaults, JSON.parse(uni.getStorageSync(KEY) || '{}')) } catch (_) { /* keep defaults */ }
   if (!Array.isArray(preferences.customFonts)) preferences.customFonts = []
   if (!accentChoices.some(choice => choice.id === preferences.accent)) preferences.accent = defaults.accent
-  if (preferences.language !== 'zh-CN') preferences.language = defaults.language
+  if (!SUPPORTED_LANGUAGES.includes(preferences.language)) preferences.language = defaults.language
+  setLanguage(preferences.language)
+  if (isDefaultAiPrompt(preferences.aiSystemPrompt)) preferences.aiSystemPrompt = defaultAiPrompt(preferences.language)
   if (!['review', 'full'].includes(preferences.aiApprovalMode)) preferences.aiApprovalMode = 'review'
   if (!['beam', 'neovim'].includes(preferences.cursorStyle)) preferences.cursorStyle = defaults.cursorStyle
   if (!/^#[0-9a-f]{6}$/i.test(preferences.cursorTrailColor)) preferences.cursorTrailColor = defaults.cursorTrailColor
@@ -34,6 +37,11 @@ export function loadPreferences() {
 export function reloadPreferences() { loaded = false; Object.assign(preferences, defaults); loadPreferences(); applyTheme() }
 export function updatePreferences(patch) {
   loadPreferences(); Object.assign(preferences, patch)
+  if (Object.prototype.hasOwnProperty.call(patch, 'language')) {
+    if (!SUPPORTED_LANGUAGES.includes(preferences.language)) preferences.language = defaults.language
+    setLanguage(preferences.language)
+    if (isDefaultAiPrompt(preferences.aiSystemPrompt)) preferences.aiSystemPrompt = defaultAiPrompt(preferences.language)
+  }
   uni.setStorageSync(KEY, JSON.stringify(preferences))
   queueDirectorySync()
   applyTheme()

@@ -1,5 +1,5 @@
 <template>
-  <view class="more-icon" aria-label="更多操作"><view></view><view></view><view></view></view>
+  <view class="more-icon" :aria-label="$t('更多操作')"><view></view><view></view><view></view></view>
 </template>
 
 <style scoped>

@@ -1,4 +1,4 @@
-<template><view v-if="mounted" class="sheet-mask" :class="{ shown }" @tap="close"><view class="sheet-panel" @tap.stop><view class="sheet-header"><view><view class="sheet-title">{{ title }}</view><text v-if="subtitle" class="sheet-subtitle">{{ subtitle }}</text></view><view class="sheet-close" role="button" aria-label="关闭" @tap="close"><UiIcon name="close" /></view></view><view class="sheet-body"><slot></slot></view><view v-if="$slots.footer" class="sheet-footer"><slot name="footer"></slot></view></view></view></template>
+<template><view v-if="mounted" class="sheet-mask" :class="{ shown }" @tap="close"><view class="sheet-panel" @tap.stop><view class="sheet-header"><view><view class="sheet-title">{{ $m(title) }}</view><text v-if="subtitle" class="sheet-subtitle">{{ $m(subtitle) }}</text></view><view class="sheet-close" role="button" :aria-label="$t('关闭')" @tap="close"><UiIcon name="close" /></view></view><view class="sheet-body"><slot></slot></view><view v-if="$slots.footer" class="sheet-footer"><slot name="footer"></slot></view></view></view></template>
 <script setup>
 import { ref, watch, onBeforeUnmount } from 'vue'
 import UiIcon from './UiIcon.vue'
