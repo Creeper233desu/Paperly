@@ -12,15 +12,15 @@ function displayName(resolver, uri) {
   } finally { plus.android.invoke(cursor, 'close') }
 }
 
-export function pickReadableBook() {
+export function pickAndroidPdf() {
   // #ifdef APP-PLUS
-  if (typeof plus === 'undefined' || plus.os.name !== 'Android') return Promise.reject(new Error('请在 Android 应用中导入 PDF 或 EPUB'))
+  if (typeof plus === 'undefined' || plus.os.name !== 'Android') return Promise.reject(new Error('请在 Android 应用中导入 PDF'))
   return new Promise((resolve, reject) => {
     const activity = plus.android.runtimeMainActivity()
     const Intent = plus.android.importClass('android.content.Intent')
     const intent = new Intent(Intent.ACTION_OPEN_DOCUMENT)
     intent.addCategory(Intent.CATEGORY_OPENABLE)
-    intent.setType('*/*')
+    intent.setType('application/pdf')
     intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     const previous = activity.onActivityResult
     const finish = () => { activity.onActivityResult = previous }
@@ -30,7 +30,7 @@ export function pickReadableBook() {
       if (resultCode !== -1 || !data) return reject(new Error('已取消选择'))
       const uri = plus.android.invoke(data, 'getData')
       if (!uri) return reject(new Error('无法读取所选文件'))
-      setTimeout(() => copyReadableFile(activity, uri).then(resolve, reject), 0)
+      setTimeout(() => copyPdfFile(activity, uri).then(resolve, reject), 0)
     }
     try { activity.startActivityForResult(intent, REQUEST_CODE) } catch (error) { finish(); reject(error) }
   })
@@ -40,32 +40,36 @@ export function pickReadableBook() {
   // #endif
 }
 
-export function readEpubBytes(path) {
+export function removeImportedFile(path) {
+  if (path && typeof plus !== 'undefined') plus.io.resolveLocalFileSystemURL(path, entry => entry.remove(() => {}, () => {}), () => {})
+}
+
+export function readPdfBase64(path) {
   return new Promise((resolve, reject) => {
     plus.io.resolveLocalFileSystemURL(path, entry => entry.file(file => {
-      if (file.size > 32 * 1024 * 1024) return reject(new Error('EPUB 文件不能超过 32 MB'))
+      if (file.size > MAX_BYTES) return reject(new Error('PDF 文件不能超过 80 MB'))
       const reader = new plus.io.FileReader()
       reader.onloadend = event => {
-        const data = String(event.target?.result || '')
-        if (!data.startsWith('data:') || !data.includes(',')) return reject(new Error('无法读取 EPUB 文件'))
-        try { resolve(new Uint8Array(uni.base64ToArrayBuffer(data.slice(data.indexOf(',') + 1)))) }
-        catch (_) { reject(new Error('EPUB 文件解码失败')) }
+        const data = String(event.target?.result || reader.result || '')
+        const match = data.match(/^data:[^,]*;base64,([\s\S]+)$/i)
+        if (!match) return reject(new Error('无法读取 PDF 文件内容'))
+        resolve(match[1])
       }
-      reader.onerror = () => reject(new Error('无法读取 EPUB 文件'))
-      reader.readAsDataURL(file)
-    }, () => reject(new Error('无法打开 EPUB 文件'))), () => reject(new Error('EPUB 文件不存在')))
+      reader.onerror = () => reject(new Error('无法读取 PDF 文件'))
+      try { reader.readAsDataURL(file) } catch (error) { reject(error) }
+    }, () => reject(new Error('无法打开 PDF 文件'))), () => reject(new Error('PDF 文件不存在')))
   })
 }
 
-async function copyReadableFile(activity, uri) {
+async function copyPdfFile(activity, uri) {
   const resolver = activity.getContentResolver()
   const foundName = displayName(resolver, uri)
   let mime = ''
   try { mime = String(plus.android.invoke(resolver, 'getType', uri) || '') } catch (_) { /* filename is enough */ }
-  const fallbackFormat = mime === 'application/pdf' ? 'pdf' : mime === 'application/epub+zip' ? 'epub' : ''
+  const fallbackFormat = mime === 'application/pdf' ? 'pdf' : ''
   const name = foundName || (fallbackFormat ? `导入的书籍.${fallbackFormat}` : '')
-  const format = name.toLowerCase().match(/\.(pdf|epub)$/)?.[1]
-  if (!format) throw new Error('请选择 PDF 或 EPUB 文件')
+  const format = name.toLowerCase().match(/\.(pdf)$/)?.[1]
+  if (!format) throw new Error('请选择 PDF 文件')
   const File = plus.android.importClass('java.io.File')
   const FileInputStream = plus.android.importClass('java.io.FileInputStream')
   const FileOutputStream = plus.android.importClass('java.io.FileOutputStream')

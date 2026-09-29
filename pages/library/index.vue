@@ -1,19 +1,26 @@
 <template>
   <view class="home-shell" :class="themeClass()"><view class="home-panel" :class="{ active: tabIndex === 0 }" :style="panelStyle(0)"><view class="screen" :class="themeClass()"><view class="page-wrap">
-    <view class="topbar"><view class="brand"><image class="brand-mark" src="/static/brand/app-icon.png" mode="aspectFill" /><text>纸间</text></view><view class="top-actions"><text class="top-note">专注于你正在写的故事</text><view class="import-trigger" :class="{ busy: importBusy }" @tap="showImportOptions = true"><view class="import-glyph"><view></view></view><text>导入书籍</text></view><view class="round-action" @tap="openCreate">＋</view></view></view>
-    <view v-if="!books.length" class="hero"><view class="hero-copy"><view class="hero-kicker">简洁优雅的写作空间</view><view class="page-title">叙事始于此刻。</view><view class="subtle">整理章节，沉浸写作，让每本书都有自己的模样。</view><view class="hero-button" @tap="openCreate">＋　新建书籍</view><view class="hero-import" @tap="openImport">从 DOCX 导入现有作品</view></view><view class="hero-decoration"><view class="arc arc-a"></view><view class="arc arc-b"></view><text>写</text></view></view>
+    <view class="topbar"><view class="brand"><image class="brand-mark" src="/static/brand/app-icon.png" mode="aspectFill" /><text>纸间</text></view><view class="top-actions"><text class="top-note">专注于你正在写的故事</text><view class="import-trigger" :class="{ busy: importBusy }" @tap="!importBusy && (showImportOptions = true)"><UiIcon name="download" /><text>导入书籍</text></view><view class="round-action" aria-label="新建书籍" @tap="openCreate"><UiIcon name="plus" /></view></view></view>
+    <view v-if="!books.length" class="hero"><view class="hero-copy"><view class="hero-kicker">简洁优雅的写作空间</view><view class="page-title">叙事始于此刻。</view><view class="subtle">整理章节，沉浸写作，让每本书都有自己的模样。</view><view class="hero-button" @tap="openCreate">＋　新建书籍</view><view class="hero-import" @tap="showImportOptions = true">导入已有文稿</view></view><view class="hero-decoration"><view class="arc arc-a"></view><view class="arc arc-b"></view><text>写</text></view></view>
     <view class="section-head"><view><view class="section-title">我的书架 <text class="book-count">{{ books.length }}</text></view><view class="subtle">长按或点击更多可管理书籍</view></view><view class="sort-note">最近编辑</view></view>
     <view v-if="!books.length" class="empty card">书架还没有书。点击“新建书籍”，写下第一章。</view>
-    <view class="book-grid"><view v-for="(book, index) in books" :key="book.id" class="book-card card" :class="{ 'new-book': freshId === book.id, removing: removingId === book.id }" @tap="openBook(book.id)" @longpress="openActions(book)"><view class="book-art" :class="'cover-' + index % 4"><image v-if="book.cover" :src="book.cover" mode="aspectFill" class="cover-image" /><view v-else class="cover-letter">{{ book.title.slice(0, 1) }}</view><view class="book-spine"></view></view><view class="book-info"><view class="book-title-row"><view class="book-title">{{ book.title }}</view><MoreIcon class="more-button" @tap.stop="openActions(book)" /></view><view class="book-author">{{ book.author || '未设置作者' }}</view><view class="book-description">{{ book.description || (book.readOnly ? '原文件只读，保留原有排版和图片。' : '打开这本书，继续写下去。') }}</view><view class="book-meta"><text>{{ book.readOnly ? `${book.readOnly.format.toUpperCase()} · 只读` : `${book.chapters.length} 章 · ${articleCount(book)} 篇` }}</text><text>{{ formatDate(book.updatedAt) }}</text></view></view></view></view>
+    <view class="book-grid"><view v-for="(book, index) in books" :key="book.id" class="book-card card" :class="{ 'new-book': freshId === book.id, removing: removingId === book.id }" @tap="openBook(book.id)" @longpress="openActions(book)"><view class="book-art" :class="'cover-' + index % 4"><image v-if="book.cover" :src="book.cover" mode="aspectFill" class="cover-image" /><view v-else class="cover-letter">{{ book.title.slice(0, 1) }}</view><view class="book-spine"></view></view><view class="book-info"><view class="book-title-row"><view class="book-title">{{ book.title }}</view><MoreIcon class="more-button" @tap.stop="openActions(book)" /></view><view class="book-author">{{ book.author || '未设置作者' }}</view><view class="book-description">{{ book.description || (book.readOnly ? '旧版导入文件，可转换为可编辑书籍。' : '打开这本书，继续写下去。') }}</view><view class="book-meta"><text>{{ book.readOnly ? `${book.readOnly.format.toUpperCase()} · 只读` : `${book.chapters.length} 章 · ${articleCount(book)} 篇` }}</text><text>{{ formatDate(book.updatedAt) }}</text></view></view></view></view>
   </view></view></view>
   <view class="home-panel" :class="{ active: tabIndex === 1 }" :style="panelStyle(1)"><StatisticsPanel /></view>
   <view class="home-panel" :class="{ active: tabIndex === 2 }" :style="panelStyle(2)"><SettingsPanel :embedded="true" @modal-change="settingsModalOpen = $event" /></view>
   <AppNav />
-  <ActionMenu :visible="showImportOptions" title="选择导入方式" :items="[{ label: 'DOCX · 导入为可编辑书籍' }, { label: 'PDF / EPUB · 保留原文件只读' }]" @close="showImportOptions = false" @select="chooseImport" />
+  <PdfImportBridge ref="pdfBridge" @progress="pdfProgress" />
+  <AppSheet :visible="showImportOptions" title="导入文稿" subtitle="把已有文字整理成书，导入后可继续编辑。" @close="showImportOptions = false">
+    <view class="import-option" @tap="chooseImport('docx')"><view class="format-badge docx"><UiIcon name="file" /><text>DOCX</text></view><view class="option-copy"><strong>Word 文档</strong><text>识别标题层级，保留正文段落</text></view><UiIcon name="chevron-right" /></view>
+    <view class="import-option" @tap="chooseImport('pdf')"><view class="format-badge pdf"><UiIcon name="file" /><text>PDF</text></view><view class="option-copy"><strong>PDF 文档</strong><text>提取文字，整理为可编辑章节</text></view><UiIcon name="chevron-right" /></view>
+    <view class="import-help">导入前可修改书名和作者。PDF 需要包含文字层；扫描件请先进行 OCR。</view>
+  </AppSheet>
+  <AppSheet :visible="importBusy" title="正在导入" :subtitle="importProgress" @close="cancelPendingImport"><view class="import-progress"><view></view></view><view class="import-help">较长的文档需要一点时间，完成后可预览章节。</view></AppSheet>
+  <AppDialog :visible="!!importFailure" title="无法导入文稿" :message="importFailure" confirm-text="知道了" @cancel="importFailure = ''" @confirm="importFailure = ''" />
   <ActionMenu :visible="!!actionBook && !showDelete" :title="actionBook?.title" :items="[{ label: '编辑书籍信息' }, { label: '删除书籍', danger: true }]" @close="actionBook = null" @select="onAction" />
-  <AppDialog :visible="showReadOnlyImport" title="导入只读书籍" confirm-text="导入书架" @cancel="cancelReadOnlyImport" @confirm="saveReadOnlyBook"><view class="import-source">{{ readOnlyPreview?.name }}</view><input v-model="readOnlyDraft.title" class="field" maxlength="80" placeholder="书名（必填）" /><input v-model="readOnlyDraft.author" class="field" maxlength="80" placeholder="作者（可选）" /><textarea v-model="readOnlyDraft.description" class="description-field" maxlength="240" placeholder="简介（可选）" /><view v-if="readOnlyPreview?.outline?.length" class="import-overview">识别到 {{ readOnlyPreview.outline.length }} 章 · {{ readOnlyPreview.outline.reduce((sum, group) => sum + group.articles.length, 0) }} 篇正文</view><view class="import-note">{{ readOnlyPreview?.format === 'epub' ? '已识别 EPUB 的封面、作者、目录、正文及插图。进入书籍后在应用内阅读。' : 'PDF 会在应用内逐页阅读。' }}</view></AppDialog>
+
   <AppDialog :visible="showEdit" :title="editingId ? '编辑书籍' : '新建书籍'" :confirm-text="editingId ? '保存' : '创建书籍'" @cancel="showEdit = false" @confirm="saveBook"><view class="edit-layout"><view class="cover-picker" @tap="chooseCover"><image v-if="draft.cover" :src="draft.cover" mode="aspectFill" /><view v-else class="cover-placeholder">＋<text>选择封面</text></view></view><view class="edit-fields"><input v-model="draft.title" class="field" maxlength="80" placeholder="书名（必填）" /><input v-model="draft.author" class="field" maxlength="80" placeholder="作者（可选）" /><textarea v-model="draft.description" class="description-field" maxlength="240" placeholder="简介（可选）" /></view></view></AppDialog>
-  <AppDialog class="import-dialog" :visible="showImport" title="导入为书籍" confirm-text="导入书架" @cancel="showImport = false" @confirm="saveImportedBook"><view class="import-source">{{ importFileName }}</view><view class="import-field-label">书名</view><input v-model="importDraft.title" class="field" maxlength="80" placeholder="填写书名" /><view class="import-field-label">作者</view><input v-model="importDraft.author" class="field" maxlength="80" placeholder="作者（可选）" /><view class="import-field-label">简介</view><textarea v-model="importDraft.description" class="description-field" maxlength="240" placeholder="简介（可选）" /><view class="import-overview"><text>{{ importSummary.chapters }} 章 · {{ importSummary.articles }} 篇 · {{ importSummary.words }} 字</text><text>识别预览</text></view><scroll-view class="import-outline" scroll-y><view v-for="(group, index) in importPreview?.chapters || []" :key="index" class="import-chapter"><view><text class="import-chapter-number">{{ String(index + 1).padStart(2, '0') }}</text><text>{{ group.title }}</text></view><text class="import-article" v-for="(item, articleIndex) in group.articles" :key="articleIndex">{{ item.title || '无题正文' }} · {{ item.paragraphs.length }} 段</text></view></scroll-view><view class="import-note">标题样式及“第 X 章 / 节”会成为目录；普通段落保留为正文。仅导入文字。</view></AppDialog>
+  <AppSheet :visible="showImport" title="确认文稿" subtitle="核对书籍信息和目录，准备好后加入书架。" @close="cancelImport"><view class="import-source">{{ importFileName }}</view><view class="import-field-label">书名</view><input v-model="importDraft.title" class="field" maxlength="80" placeholder="填写书名" /><view class="import-field-label">作者</view><input v-model="importDraft.author" class="field" maxlength="80" placeholder="作者（可选）" /><view class="import-field-label">简介</view><textarea v-model="importDraft.description" class="description-field" maxlength="240" placeholder="简介（可选）" /><view class="import-overview"><text>{{ importSummary.chapters }} 章 · {{ importSummary.articles }} 篇 · {{ importSummary.words }} 字</text><text>识别预览</text></view><scroll-view class="import-outline" scroll-y><view v-for="(group, index) in importPreview?.chapters || []" :key="index" class="import-chapter"><view><text class="import-chapter-number">{{ String(index + 1).padStart(2, '0') }}</text><text>{{ group.title }}</text></view><text class="import-article" v-for="(item, articleIndex) in group.articles" :key="articleIndex">{{ item.title || '无题正文' }} · {{ item.paragraphs.length }} 段</text></view></scroll-view><view class="import-note">{{ importFormat === 'pdf' ? '已按章节标题整理并合并排版断行。PDF 仅提取文字，可在导入后调整段落。' : '标题样式及“第 X 章 / 节”会成为目录；普通段落保留为正文。仅导入文字。' }}</view><view v-for="warning in importPreview?.warnings || []" :key="warning" class="import-warning">{{ warning }}</view><template #footer><view class="import-footer"><view @tap="cancelImport">取消</view><view class="import-save" @tap="saveImportedBook"><UiIcon name="download" /><text>导入书架</text></view></view></template></AppSheet>
   <AppDialog :visible="showDelete" title="删除书籍" :message="`确定删除《${actionBook?.title || ''}》及其中所有章节和正文？此操作无法撤销。`" confirm-text="删除" :destructive="true" @cancel="cancelDelete" @confirm="confirmDelete" />
   </view>
 </template>
@@ -21,7 +28,7 @@
 <script setup>
 import { computed, reactive, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import { useLibrary, addBook, importBook, importReadOnlyBook, updateBook, deleteBook } from '../../src/store/library'
+import { useLibrary, addBook, importBook, updateBook, deleteBook } from '../../src/store/library'
 import { PRIMARY_TABS, primaryNavigation } from '../../src/store/navigation'
 import { themeClass } from '../../src/store/preferences'
 import { chooseBookCover } from '../../src/services/covers'
@@ -33,9 +40,11 @@ import SettingsPanel from '../settings/index.vue'
 import MoreIcon from '../../components/MoreIcon.vue'
 import { pickAndroidDocx } from '../../src/services/android-docx-picker'
 import { importedBookSummary, parseDocx } from '../../src/services/docx-import'
-import { pickReadableBook, readEpubBytes } from '../../src/services/android-readable-picker'
-import { parseEpub } from '../../src/services/epub'
-import { saveEpubCover } from '../../src/services/epub-cover'
+import { pickAndroidPdf, removeImportedFile } from '../../src/services/android-pdf-picker'
+import { buildPdfBook } from '../../src/services/pdf-import'
+import PdfImportBridge from '../../components/PdfImportBridge.vue'
+import AppSheet from '../../components/AppSheet.vue'
+import UiIcon from '../../components/UiIcon.vue'
 
 const store = useLibrary()
 onLoad(options => { if (PRIMARY_TABS.includes(options?.tab)) primaryNavigation.active = options.tab })
@@ -44,69 +53,46 @@ const settingsModalOpen = ref(false)
 const panelStyle = index => ({ '--panel-shift': `${(index - tabIndex.value) * 100}%`, zIndex: index === 2 && settingsModalOpen.value ? 20 : index === tabIndex.value ? 2 : 1, pointerEvents: index === tabIndex.value ? 'auto' : 'none' })
 const books = computed(() => store.books)
 const showEdit = ref(false), showDelete = ref(false), editingId = ref(''), actionBook = ref(null)
-const showImport = ref(false), showImportOptions = ref(false), showReadOnlyImport = ref(false), importBusy = ref(false), importPreview = ref(null), importFileName = ref(''), readOnlyPreview = ref(null)
+const showImport = ref(false), showImportOptions = ref(false), importBusy = ref(false), importPreview = ref(null), importFileName = ref('')
 const importDraft = reactive({ title: '', author: '', description: '' })
-const readOnlyDraft = reactive({ title: '', author: '', description: '' })
+const importFailure = ref('')
+const pdfBridge = ref(null), importProgress = ref(''), importFormat = ref('docx')
 const importSummary = computed(() => importPreview.value ? importedBookSummary(importPreview.value) : { chapters: 0, articles: 0, words: 0 })
+let importGeneration = 0
 const freshId = ref(''), removingId = ref('')
 const draft = reactive({ title: '', author: '', description: '', cover: '' })
 const articleCount = book => book.chapters.reduce((count, chapter) => count + chapter.articles.length, 0)
 const formatDate = date => date ? new Date(date).toLocaleDateString('zh-CN') : '今天'
 function openBook(id) { if (!actionBook.value && !removingId.value) uni.navigateTo({ url: `/pages/book/index?id=${id}` }) }
 function openCreate() { editingId.value = ''; Object.assign(draft, { title: '', author: '', description: '', cover: '' }); showEdit.value = true }
-function chooseImport(index) { showImportOptions.value = false; if (index === 0) openImport(); else openReadOnlyImport() }
-async function openReadOnlyImport() {
+function chooseImport(format) { if (importBusy.value) return; showImportOptions.value = false; openImport(format) }
+function cancelImport() { importGeneration++; pdfBridge.value?.cancel(); showImport.value = false }
+function cancelPendingImport() { importGeneration++; pdfBridge.value?.cancel() }
+function pdfProgress(progress) { importProgress.value = `正在提取第 ${progress.current} / ${progress.total} 页` }
+async function openImport(format = 'docx') {
   if (importBusy.value) return
   importBusy.value = true
-  let file = null
+  importFormat.value = format
+  const generation = ++importGeneration
+  importProgress.value = '正在选择文件'
+  let file
   try {
-    file = await pickReadableBook()
-    const parsed = file.format === 'epub' ? parseEpub(await readEpubBytes(file.path), file.name) : null
-    const cover = parsed ? saveEpubCover(parsed) : ''
-    readOnlyPreview.value = { ...file, outline: parsed?.outline || [], cover }
-    Object.assign(readOnlyDraft, { title: parsed?.title || file.name.replace(/\.(pdf|epub)$/i, ''), author: parsed?.author || '', description: parsed?.description || '' })
-    showReadOnlyImport.value = true
-  } catch (error) {
-    if (file?.path) plus.io.resolveLocalFileSystemURL(file.path, entry => entry.remove(() => {}, () => {}), () => {})
-    if (readOnlyPreview.value?.cover) plus.io.resolveLocalFileSystemURL(readOnlyPreview.value.cover, entry => entry.remove(() => {}, () => {}), () => {})
-    if (!String(error.message).includes('取消')) uni.showToast({ title: error.message || '导入失败', icon: 'none' })
-  }
-  finally { importBusy.value = false }
-}
-function saveReadOnlyBook() {
-  if (!readOnlyPreview.value) return
-  try {
-    const book = importReadOnlyBook(readOnlyPreview.value, readOnlyDraft)
-    showReadOnlyImport.value = false; readOnlyPreview.value = null
-    freshId.value = book.id
-    setTimeout(() => { if (freshId.value === book.id) freshId.value = '' }, 900)
-  } catch (error) { uni.showToast({ title: error.message || '保存失败', icon: 'none' }) }
-}
-function cancelReadOnlyImport() {
-  showReadOnlyImport.value = false
-  const path = readOnlyPreview.value?.path
-  const cover = readOnlyPreview.value?.cover
-  readOnlyPreview.value = null
-  if (path && typeof plus !== 'undefined') plus.io.resolveLocalFileSystemURL(path, entry => entry.remove(() => {}, () => {}), () => {})
-  if (cover && typeof plus !== 'undefined') plus.io.resolveLocalFileSystemURL(cover, entry => entry.remove(() => {}, () => {}), () => {})
-}
-async function openImport() {
-  if (importBusy.value) return
-  importBusy.value = true
-  let loading = false, failure = ''
-  try {
-    const file = await pickAndroidDocx()
-    uni.showLoading({ title: '正在识别正文' })
-    loading = true
-    await new Promise(resolve => setTimeout(resolve, 20))
-    const parsed = parseDocx(file.bytes, file.name)
+    file = format === 'pdf' ? await pickAndroidPdf() : await pickAndroidDocx()
+    if (generation !== importGeneration) return
+    importProgress.value = '正在识别正文'
+    let parsed
+    if (format === 'pdf') {
+      const result = await pdfBridge.value.parse(file)
+      parsed = buildPdfBook(result.pages, result.metadata, file.name)
+    } else parsed = parseDocx(file.bytes, file.name)
+    if (generation !== importGeneration) return
     importPreview.value = parsed
     importFileName.value = file.name
     Object.assign(importDraft, { title: parsed.title, author: parsed.author, description: parsed.description })
     showImport.value = true
-  } catch (error) { if (!String(error.message).includes('取消')) failure = error.message || '导入失败' }
-  finally { importBusy.value = false; if (loading) uni.hideLoading() }
-  if (failure) uni.showToast({ title: failure, icon: 'none' })
+  } catch (error) {
+    if (!String(error.message).includes('取消')) importFailure.value = error.message || '导入失败'
+  } finally { if (format === 'pdf') removeImportedFile(file?.path); importBusy.value = false; importProgress.value = '' }
 }
 function saveImportedBook() {
   if (!importPreview.value) return
@@ -184,4 +170,8 @@ function cancelDelete() { showDelete.value = false; actionBook.value = null }
 .import-note { margin-top:10px; color:var(--muted); font-size:10px; line-height:1.5; }
 @media(max-width:440px) { .import-trigger { width:38px; padding:0; justify-content:center; }.import-trigger>text { display:none; }.hero-import { margin-left:0; display:block; width:max-content; } }
 @media(prefers-reduced-motion:reduce) { .import-trigger,.hero-import { transition:none; } }
+.round-action { display:flex; align-items:center; justify-content:center; transition:transform .2s ease; }.round-action:active { transform:scale(.9); }
+.import-option { display:flex; align-items:center; gap:16px; padding:18px 0; border-bottom:1px solid var(--line); color:var(--muted); transition:transform .2s ease; }.import-option:active { transform:translateX(4px); }.format-badge { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; width:56px; height:64px; border-radius:13px; background:var(--accent-soft); color:var(--accent); flex:none; }.format-badge text { font-size:9px; font-weight:750; }.format-badge.pdf { color:var(--danger); background:var(--surface-alt); }.option-copy { flex:1; min-width:0; }.option-copy strong { display:block; color:var(--text); font-size:16px; font-weight:650; }.option-copy text,.import-help { display:block; font-size:12px; line-height:1.8; color:var(--muted); margin-top:5px; }.import-help { margin-top:20px; }.import-warning { margin-top:8px; color:var(--danger); font-size:12px; line-height:1.6; }.import-progress { height:4px; overflow:hidden; border-radius:4px; background:var(--surface-alt); }.import-progress view { width:35%; height:100%; border-radius:4px; background:var(--accent); animation:import-progress 1.2s ease-in-out infinite alternate; }@keyframes import-progress { to { transform:translateX(185%); } }
+@media(prefers-reduced-motion:reduce) { .import-option,.round-action { transition:none; }.import-progress view { animation:none; width:100%; opacity:.5; } }
+.import-footer { display:flex; align-items:center; justify-content:flex-end; gap:20px; font-size:13px; color:var(--muted); }.import-save { display:flex; align-items:center; gap:7px; border-radius:12px; padding:10px 17px; background:var(--accent); color:var(--surface); font-weight:600; transition:transform .18s ease; }.import-save:active { transform:scale(.97); }
 </style>

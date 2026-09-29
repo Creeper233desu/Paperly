@@ -1,0 +1,3 @@
+# Preserve bundled third-party code and license text, including literal whitespace.
+static/pdfjs/** -whitespace linguist-vendored=true
+static/pdfjs/*.js -diff

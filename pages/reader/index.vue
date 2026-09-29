@@ -1,149 +1,63 @@
 <template>
   <view class="reader-screen" :class="themeClass()">
-    <view class="reader-header"><view class="back-action" @tap="back"><view class="back-chevron"></view><text>返回书籍</text></view><view class="header-title"><strong>{{ book?.title || '阅读' }}</strong><text>{{ positionLabel }}</text></view><view class="header-actions"><view v-if="isEpub" class="pinch-lock" :class="{ unlocked: !pinchLocked }" :aria-label="pinchLocked ? '解锁双指缩放' : '锁定双指缩放'" @tap="togglePinchLock"><view class="lock-icon" :class="{ unlocked: !pinchLocked }"></view></view><view v-if="isEpub" class="font-button" :class="{ selected: showFontSize }" aria-label="调整阅读字号" @tap="toggleFontSize">Aa</view><view class="toc-button" :class="{ selected: tocOpen }" @tap="toggleToc"><view class="toc-glyph"><view></view><view></view><view></view></view><text>目录</text></view><view class="page-control" :class="{ disabled: currentIndex <= 0 }" @tap="change(-1)">‹</view><view class="page-control" :class="{ disabled: currentIndex >= itemCount - 1 }" @tap="change(1)">›</view></view></view>
+    <view class="reader-header"><view class="back-action" @tap="back"><UiIcon name="chevron-left" /><text>返回书籍</text></view><view class="header-title"><strong>{{ book?.title || '阅读' }}</strong><text>{{ positionLabel }}</text></view><view class="header-actions"><view class="pinch-lock" :class="{ unlocked: !pinchLocked }" :aria-label="pinchLocked ? '解锁双指缩放' : '锁定双指缩放'" @tap="pinchLocked = !pinchLocked"><view class="lock-icon" :class="{ unlocked: !pinchLocked }"></view></view><view class="font-button" :class="{ selected: showFontSize }" aria-label="调整阅读字号" @tap="toggleFontSize">Aa</view><view class="toc-button" :class="{ selected: tocOpen }" @tap="toggleToc"><view class="toc-glyph"><view></view><view></view><view></view></view><text>目录</text></view><view class="page-control" :class="{ disabled: currentIndex <= 0 }" aria-label="上一篇" @tap="change(-1)"><UiIcon name="chevron-left" /></view><view class="page-control" :class="{ disabled: currentIndex >= sections.length - 1 }" aria-label="下一篇" @tap="change(1)"><UiIcon name="chevron-right" /></view></view></view>
     <view v-if="tocOpen" class="toc-backdrop" @tap="tocOpen = false"></view>
     <view v-if="showFontSize" class="font-backdrop" @tap="showFontSize = false"></view>
-    <view v-if="showFontSize" class="font-size-panel"><view class="font-size-title"><text>阅读字号</text><text>{{ prefs.fontSize }} px</text></view><slider :value="prefs.fontSize" :min="12" :max="36" :step="1" :show-value="false" activeColor="#5774a0" backgroundColor="#dce2eb" @changing="onFontSlider" @change="onFontSlider" /><view class="font-size-range"><text>小</text><text>大</text></view><view class="font-size-hint">{{ pinchLocked ? '点击顶部的锁图标，解锁双指缩放' : '双指缩放已开启' }}</view></view>
-    <view class="reader-layout"><view class="reader-toc" :class="{ open: tocOpen }"><view class="toc-head"><text>书籍目录</text><view @tap="tocOpen = false">×</view></view><scroll-view scroll-y class="toc-scroll"><template v-if="pdf"><view v-for="page in pdfCount" :key="page" class="toc-page" :class="{ current: currentIndex === page - 1 }" @tap="select(page - 1)">第 {{ page }} 页</view></template><template v-else><view v-for="(group, groupIndex) in outline" :key="groupIndex" class="toc-group"><view class="toc-chapter">{{ group.title }}</view><view v-for="article in group.articles" :key="article.id" class="toc-article" :class="{ current: sections[currentIndex]?.id === article.id }" @tap="selectById(article.id)">{{ article.title || group.title }}</view></view></template></scroll-view></view>
-      <scroll-view class="reader-content" scroll-y :scroll-into-view="topAnchor" @touchstart="onTouchStart" @touchmove="onTouchMove" @touchend="onTouchEnd"><view :id="topAnchorId" class="reader-top-anchor"></view><view v-if="loading" class="reader-loading">正在准备阅读内容…</view><view v-else-if="error" class="reader-error">{{ error }}</view><view v-else-if="pdf" class="pdf-stage"><image v-if="pdfImage && !pdfImageError" class="pdf-page" :src="pdfImage.src" :style="{ aspectRatio: `${pdfImage.width} / ${pdfImage.height}` }" mode="widthFix" @error="onPdfImageError" /><view v-else-if="pdfImageError" class="reader-error pdf-retry" @tap="renderPdfPage">{{ pdfImageError }}，点击重试</view><view v-else class="reader-loading">正在绘制这一页…</view><view class="page-label">{{ currentIndex + 1 }} / {{ pdfCount }}</view></view><view v-else-if="currentSection" class="reading-sheet" :style="{ '--reading-font': fontFamilyFor(prefs.font), '--reading-size': `${prefs.fontSize}px` }"><view v-if="currentIndex === 0 && book?.cover" class="opening-cover"><image :src="book.cover" mode="aspectFit" /><view><strong>{{ book.title }}</strong><text>{{ book.author }}</text></view></view><view class="chapter-kicker">{{ currentSection.chapterTitle }}</view><view v-if="currentSection.title && currentSection.title !== currentSection.chapterTitle" class="section-title">{{ currentSection.title }}</view><view v-for="(block, index) in displayBlocks" :key="index" class="read-block" :class="block.type"><image v-if="block.type === 'image' && block.src" :src="block.src" mode="widthFix" /><text v-else-if="block.type !== 'image'">{{ block.text }}</text></view><view class="section-end">— {{ currentIndex + 1 }} / {{ itemCount }} —</view></view><view v-else class="reader-loading">这本书还没有正文。返回书籍页添加章节后即可阅读。</view></scroll-view>
+    <view v-if="showFontSize" class="font-size-panel"><FontSizeControl :value="prefs.fontSize" title="阅读字号" @change="setReadingFontSize" /><view class="font-size-hint">{{ pinchLocked ? '点击顶部锁图标，开启双指缩放' : '双指缩放已开启，点击锁图标可锁定字号' }}</view></view>
+    <view class="reader-layout"><view class="reader-toc" :class="{ open: tocOpen }"><view class="toc-head"><text>书籍目录</text><view @tap="tocOpen = false"><UiIcon name="close" /></view></view><scroll-view scroll-y class="toc-scroll"><view v-for="(group, groupIndex) in outline" :key="groupIndex" class="toc-group"><view class="toc-chapter">{{ group.title }}</view><view v-for="article in group.articles" :key="article.id" class="toc-article" :class="{ current: currentSection?.id === article.id }" @tap="selectById(article.id)">{{ article.title || group.title }}</view></view></scroll-view></view>
+      <ReadingSurface :enabled="!pinchLocked" @pinch="onPinch"><scroll-view class="reader-content" scroll-y :scroll-into-view="topAnchor" @touchstart="onTouchStart" @touchend="onTouchEnd" @touchcancel="touchStart = null"><view :id="topAnchorId" class="reader-top-anchor"></view><view v-if="error" class="reader-error">{{ error }}</view><view v-else-if="currentSection" class="reading-sheet" :style="{ '--reading-font': fontFamilyFor(prefs.font), '--reading-size': `${prefs.fontSize}px` }"><view v-if="currentIndex === 0 && book?.cover" class="opening-cover"><image :src="book.cover" mode="aspectFit" /><view><strong>{{ book.title }}</strong><text>{{ book.author }}</text></view></view><view class="chapter-kicker">{{ currentSection.chapterTitle }}</view><view v-if="currentSection.title && currentSection.title !== currentSection.chapterTitle" class="section-title">{{ currentSection.title }}</view><view v-for="(block, index) in currentSection.blocks" :key="index" class="read-block" :class="block.type"><image v-if="block.type === 'image' && block.src" :src="block.src" mode="widthFix" /><text v-else-if="block.type !== 'image'">{{ block.text }}</text></view><view class="section-end">{{ currentIndex + 1 }} / {{ sections.length }}</view></view><view v-else class="reader-loading">这本书还没有正文。返回书籍页添加章节后即可阅读。</view></scroll-view></ReadingSurface>
     </view>
   </view>
 </template>
-
 <script setup>
 import { computed, nextTick, ref } from 'vue'
-import { onLoad, onUnload } from '@dcloudio/uni-app'
+import { onLoad } from '@dcloudio/uni-app'
 import { getBook } from '../../src/store/library'
 import { loadPreferences, preferences, themeClass, updatePreferences } from '../../src/store/preferences'
 import { fontFamilyFor, loadSelectedFont } from '../../src/services/fonts'
 import { imageIdFromParagraph } from '../../src/utils/media'
-import { parseEpub, epubImageSource } from '../../src/services/epub'
-import { readEpubBytes } from '../../src/services/android-readable-picker'
-import { openPdfReader } from '../../src/services/pdf-reader'
-
+import { clampFontSize, scaleFontSize } from '../../src/utils/font-scale'
+import FontSizeControl from '../../components/FontSizeControl.vue'
+import ReadingSurface from '../../components/ReadingSurface.vue'
+import UiIcon from '../../components/UiIcon.vue'
 loadPreferences()
 const prefs = preferences
 const bookId = ref(''), book = computed(() => getBook(bookId.value))
-const sections = ref([]), outline = ref([]), currentIndex = ref(0), tocOpen = ref(false), showFontSize = ref(false), pinchLocked = ref(true), loading = ref(true), error = ref('')
-const pdf = ref(false), pdfCount = ref(0), pdfImage = ref(null), pdfImageError = ref(''), topAnchor = ref(''), topAnchorId = ref('reader-top-0')
-let epub = null, pdfReader = null, renderRevision = 0, anchorRevision = 0, touchStart = null, pinchDistance = 0
-const itemCount = computed(() => pdf.value ? pdfCount.value : sections.value.length)
-const isEpub = computed(() => book.value?.readOnly?.format === 'epub' && !pdf.value)
+const currentIndex = ref(0), tocOpen = ref(false), showFontSize = ref(false), pinchLocked = ref(true), error = ref('')
+const topAnchor = ref(''), topAnchorId = ref('reader-top-0')
+let anchorRevision = 0, touchStart = null
+const outline = computed(() => (book.value?.chapters || []).map(chapter => ({ title:chapter.title, articles:chapter.articles })))
+const sections = computed(() => (book.value?.chapters || []).flatMap(chapter => chapter.articles.map(article => ({ id:article.id, chapterTitle:chapter.title, title:article.title, blocks:(article.paragraphs || []).map(paragraph => {
+  const id = imageIdFromParagraph(paragraph)
+  return id ? { type:'image', src:article.images?.[id]?.path || '' } : { type:'paragraph', text:paragraph.replace(/^[\u3000\t]+/, '') }
+}) }))))
 const currentSection = computed(() => sections.value[currentIndex.value])
-const positionLabel = computed(() => pdf.value ? `第 ${currentIndex.value + 1} / ${pdfCount.value} 页` : currentSection.value ? `${currentSection.value.chapterTitle} · ${currentIndex.value + 1} / ${itemCount.value}` : '')
-const displayBlocks = computed(() => (currentSection.value?.blocks || []).map(block => block.type !== 'image' ? block : ({ ...block, src: epub ? epubImageSource(epub, block.path) : block.src || '' })))
-
-function writableSections(source) {
-  const groups = []
-  const items = []
-  for (const chapter of source.chapters || []) {
-    const group = { title: chapter.title, articles: [] }
-    for (const article of chapter.articles || []) {
-      group.articles.push({ id: article.id, title: article.title || chapter.title })
-      items.push({ id: article.id, chapterTitle: chapter.title, title: article.title, blocks: (article.paragraphs || []).map(paragraph => {
-        const imageId = imageIdFromParagraph(paragraph)
-        return imageId ? { type: 'image', src: article.images?.[imageId]?.path || '', alt: '正文插图' } : { type: 'paragraph', text: paragraph }
-      }) })
-    }
-    groups.push(group)
-  }
-  return { groups, items }
-}
-
-onLoad(async options => {
+const positionLabel = computed(() => currentSection.value ? `${currentSection.value.chapterTitle} · ${currentIndex.value + 1} / ${sections.value.length}` : '')
+onLoad(options => {
   bookId.value = options.bookId || ''
-  const source = book.value
-  if (!source) { error.value = '书籍不存在'; loading.value = false; return }
+  if (!book.value) { error.value = '书籍不存在'; return }
+  if (book.value.readOnly) { error.value = '请返回书籍页，将原文件转换为可编辑书籍后阅读。'; return }
   loadSelectedFont().catch(() => {})
-  try {
-    if (options.pdfPath || source.readOnly?.format === 'pdf') {
-      pdf.value = true
-      let pdfPath = options.pdfPath || source.readOnly.path
-      if (options.pdfPath) { try { pdfPath = decodeURIComponent(pdfPath) } catch (_) { /* uni-app already decoded the route */ } }
-      pdfReader = openPdfReader(pdfPath)
-      pdfCount.value = pdfReader.count
-      if (!pdfCount.value) throw new Error('PDF 中没有页面')
-      currentIndex.value = Math.max(0, Math.min(pdfCount.value - 1, Number(options.page) || 0))
-      loading.value = false
-      renderPdfPage()
-    } else if (source.readOnly?.format === 'epub') {
-      epub = parseEpub(await readEpubBytes(source.readOnly.path), source.readOnly.fileName)
-      sections.value = epub.sections
-      outline.value = epub.outline
-      currentIndex.value = Math.max(0, sections.value.findIndex(section => section.id === options.section))
-      loading.value = false
-    } else {
-      const parsed = writableSections(source)
-      sections.value = parsed.items
-      outline.value = parsed.groups
-      currentIndex.value = Math.max(0, sections.value.findIndex(section => section.id === options.section))
-      loading.value = false
-    }
-  } catch (cause) { error.value = cause?.message || '无法打开书籍'; loading.value = false; pdfReader?.close(); pdfReader = null }
+  currentIndex.value = Math.max(0, sections.value.findIndex(section => section.id === options.section))
 })
-onUnload(() => { renderRevision++; pdfReader?.close(); pdfReader = null; epub = null })
 function back() { uni.navigateBack() }
 function toggleToc() { showFontSize.value = false; tocOpen.value = !tocOpen.value }
 function toggleFontSize() { tocOpen.value = false; showFontSize.value = !showFontSize.value }
-function togglePinchLock() { pinchLocked.value = !pinchLocked.value; pinchDistance = 0; touchStart = null }
-function setReadingFontSize(size) {
-  const next = Math.max(12, Math.min(36, Math.round(Number(size))))
-  if (Number.isFinite(next) && next !== prefs.fontSize) updatePreferences({ fontSize: next })
-}
-function onFontSlider(event) { setReadingFontSize(event.detail?.value) }
-function resetScroll() {
-  const id = `reader-top-${++anchorRevision}`
-  topAnchorId.value = id
+function setReadingFontSize(size) { const next = clampFontSize(size, prefs.fontSize); if (next !== prefs.fontSize) updatePreferences({ fontSize:next }) }
+function onPinch(ratio) { if (!pinchLocked.value) setReadingFontSize(scaleFontSize(prefs.fontSize, ratio)) }
+function select(index) {
+  if (index < 0 || index >= sections.value.length) return
+  currentIndex.value = index; tocOpen.value = false; showFontSize.value = false
+  const id = `reader-top-${++anchorRevision}`; topAnchorId.value = id
   nextTick(() => { topAnchor.value = id })
 }
-function renderPdfPage() {
-  const revision = ++renderRevision
-  pdfImage.value = null
-  pdfImageError.value = ''
-  error.value = ''
-  setTimeout(async () => {
-    if (!pdfReader || revision !== renderRevision) return
-    try {
-      const result = await pdfReader.render(currentIndex.value, Math.min(1300, Math.max(800, uni.getSystemInfoSync().windowWidth * 1.5)))
-      if (pdfReader && revision === renderRevision) pdfImage.value = result
-    } catch (cause) { if (revision === renderRevision) error.value = cause?.message || 'PDF 页面绘制失败' }
-  }, 0)
-}
-function onPdfImageError() {
-  if (!pdfImage.value) return
-  if (pdfImage.value.fallbackSrc && pdfImage.value.src !== pdfImage.value.fallbackSrc) pdfImage.value = { ...pdfImage.value, src: pdfImage.value.fallbackSrc }
-  else pdfImageError.value = 'PDF 页面图片加载失败'
-}
-function select(index) {
-  if (index < 0 || index >= itemCount.value) return
-  currentIndex.value = index
-  tocOpen.value = false
-  showFontSize.value = false
-  resetScroll()
-  if (pdf.value) renderPdfPage()
-}
-function selectById(id) { select(sections.value.findIndex(item => item.id === id)) }
+function selectById(id) { select(sections.value.findIndex(section => section.id === id)) }
 function change(step) { select(currentIndex.value + step) }
-function distanceBetweenTouches(touches) {
-  return Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY)
-}
 function onTouchStart(event) {
-  if (isEpub.value && event.touches?.length === 2) { pinchDistance = pinchLocked.value ? 0 : distanceBetweenTouches(event.touches); touchStart = null; return }
-  const point = event.touches?.[0]
-  if (point) touchStart = { x: point.clientX, y: point.clientY }
-}
-function onTouchMove(event) {
-  if (!isEpub.value || event.touches?.length !== 2) return
-  touchStart = null
-  if (pinchLocked.value) return
-  if (event.cancelable) event.preventDefault?.()
-  const distance = distanceBetweenTouches(event.touches)
-  if (!pinchDistance) { pinchDistance = distance; touchStart = null; return }
-  const ratio = distance / pinchDistance
-  if (ratio > 1.055 || ratio < .945) { setReadingFontSize(prefs.fontSize * ratio); pinchDistance = distance; touchStart = null }
+  if (event.touches?.length !== 1) { touchStart = null; return }
+  const point = event.touches[0]; touchStart = { x:point.clientX, y:point.clientY }
 }
 function onTouchEnd(event) {
-  if (pinchDistance) { if ((event.touches?.length || 0) < 2) pinchDistance = 0; touchStart = null; return }
   const point = event.changedTouches?.[0]
   if (!point || !touchStart) return
   const dx = point.clientX - touchStart.x, dy = point.clientY - touchStart.y
@@ -151,7 +65,6 @@ function onTouchEnd(event) {
   if (Math.abs(dx) > 90 && Math.abs(dx) > Math.abs(dy) * 1.6) change(dx < 0 ? 1 : -1)
 }
 </script>
-
 <style scoped>
 .reader-screen { height:100vh; box-sizing:border-box; padding-top:var(--status-bar-height); background:var(--bg); color:var(--text); overflow:hidden; }
 .reader-header { height:64px; display:flex; align-items:center; gap:16px; padding:0 28px; box-sizing:border-box; border-bottom:1px solid var(--line); background:var(--surface); }

@@ -6,8 +6,9 @@
       <view class="writing-column"><view class="writing-meta"><text>{{ chapter?.title }}</text><text>{{ wordTotal }} 字 · {{ paragraphCount }} 段</text></view><input class="article-name" :value="title" placeholder="" maxlength="100" @input="onTitle" @blur="saveNow" /><view class="writing-rule"></view><view class="document-wrap"><DocumentInput :value="body" :images="images" :document-id="ids.article" :document-revision="documentRevision" :font-family="fontFamilyFor(prefs.font)" :font-size="prefs.fontSize" :pinch-enabled="!pinchLocked" :focus-mode="prefs.focus" :animated-cursor="prefs.animatedCursor" :cursor-style="prefs.cursorStyle" :cursor-trail-color="prefs.cursorTrailColor" :cursor-trail-length="prefs.cursorTrailLength" :cursor-request="cursorRequest" @blur="saveNow" @input="onDocumentInput" @cursor="onVisualCursor" @pinch="onPinch" @remove-image="removeImage" @ask-ai="onAskAi" @export-image="onExportSelection" /></view></view>
       <view class="info-rail"><view class="status-summary"><view class="rail-caption">写作状态</view><view class="info-stat"><text class="info-number">{{ wordTotal }}</text><text>当前字数</text></view><view class="info-stat"><text class="info-number">{{ paragraphCount }}</text><text>段落</text></view><view class="info-note">文字会自动保存。目录中可随时切换篇章。</view></view><view class="assistant-slot" :class="{ open: showAi }"><AiAssistant v-if="book" ref="aiRef" :book="book" :article-id="ids.article" :body="body" :selected-text="selectedContext" :system-prompt="prefs.aiSystemPrompt" :fullscreen="aiFullscreen" :open="showAi" @close="closeAi" @toggle-fullscreen="aiFullscreen = !aiFullscreen" @clear-selection="selectedContext = ''" @apply="applyAiProposal" /></view></view>
     </view>
-    <view class="editor-dock"><view class="dock-count">{{ wordTotal }} 字</view><scroll-view class="dock-scroll" scroll-x :show-scrollbar="false"><view class="dock-scroll-content"><view class="dock-group"><view class="dock-icon" @tap="undo">↶</view><view class="dock-icon" @tap="redo">↷</view></view><view class="dock-divider"></view><view class="dock-group symbols"><view class="dock-icon" @tap="insertSymbol('（','）')">（）</view><view class="dock-icon" @tap="insertSymbol('“','”')">“”</view><view class="dock-icon" @tap="insertSymbol('「','」')">「」</view></view><view class="dock-divider"></view><view class="dock-icon" @tap="appendParagraph">↵</view><view class="dock-icon image-dock" aria-label="插入图片" @tap="addImage"><view class="picture-glyph"><view class="picture-sun"></view><view class="picture-land"></view></view><view class="picture-plus"></view></view></view></scroll-view><view class="dock-fixed"><view class="dock-icon" aria-label="查找与替换" @tap="showSearch = !showSearch">⌕</view><view class="dock-icon" :class="{ active: prefs.focus }" aria-label="聚焦" @tap="toggleFocus">◎</view><view class="dock-icon font-dock" :class="{ active: showFontSize }" aria-label="调整字号" @tap="showFontSize = !showFontSize">Aa</view><view class="dock-icon ai-dock" :class="{ active: showAi }" aria-label="写作助手" @tap="toggleAi"><AssistantGlyph name="sparkle" /></view><view class="dock-icon" aria-label="沉浸模式" @tap="immersive = !immersive">{{ immersive ? '▣' : '□' }}</view></view></view>
-    <view v-if="showFontSize" class="font-size-panel"><view class="font-size-title"><text>正文字号</text><text>{{ prefs.fontSize }} px</text></view><slider :value="prefs.fontSize" :min="12" :max="36" :step="1" :show-value="false" activeColor="#5774a0" backgroundColor="#dce2eb" @changing="onFontSlider" @change="onFontSlider" /><view class="font-size-range"><text>小</text><text>大</text></view></view>
+    <view class="editor-dock"><view class="dock-count">{{ wordTotal }} 字</view><scroll-view class="dock-scroll" scroll-x :show-scrollbar="false"><view class="dock-scroll-content"><view class="dock-group"><view class="dock-icon" aria-label="撤销" @tap="undo"><UiIcon name="undo" /></view><view class="dock-icon" aria-label="重做" @tap="redo"><UiIcon name="redo" /></view></view><view class="dock-divider"></view><view class="dock-group symbols"><view class="dock-icon" @tap="insertSymbol('（','）')">（）</view><view class="dock-icon" @tap="insertSymbol('“','”')">“”</view><view class="dock-icon" @tap="insertSymbol('「','」')">「」</view></view><view class="dock-divider"></view><view class="dock-icon" aria-label="换段" @tap="appendParagraph"><UiIcon name="return" /></view><view class="dock-icon image-dock" aria-label="插入图片" @tap="openImageInsert"><UiIcon name="image" /></view></view></scroll-view><view class="dock-fixed"><view class="dock-icon" aria-label="查找与替换" @tap="showSearch = !showSearch"><UiIcon name="search" /></view><view class="dock-icon" :class="{ active: prefs.focus }" aria-label="聚焦" @tap="toggleFocus"><UiIcon name="focus" /></view><view class="dock-icon font-dock" :class="{ active: showFontSize }" aria-label="调整字号" @tap="showFontSize = !showFontSize">Aa</view><view class="dock-icon ai-dock" :class="{ active: showAi }" aria-label="写作助手" @tap="toggleAi"><AssistantGlyph name="sparkle" /></view><view class="dock-icon" aria-label="沉浸模式" @tap="immersive = !immersive"><UiIcon :name="immersive ? 'collapse' : 'expand'" /></view></view></view>
+    <view v-if="showFontSize" class="font-size-panel"><FontSizeControl :value="prefs.fontSize" @change="onFontSlider" /></view>
+    <ImageInsertSheet :visible="showImageInsert" @close="showImageInsert = false" @insert="addImage" />
     <view v-if="showSearch" class="search-panel"><view class="search-head"><text>查找与替换</text><text @tap="showSearch = false">完成</text></view><view class="search-inputs"><input v-model="searchQuery" class="search-input" placeholder="查找文字" confirm-type="search" @confirm="nextMatch" /><input v-model="replacement" class="search-input" placeholder="替换为" /></view><view class="search-actions"><text class="match-count">{{ matches.length ? `${Math.max(matchIndex + 1, 0)} / ${matches.length} 处` : '无匹配' }}</text><text @tap="previousMatch">上一个</text><text @tap="nextMatch">下一个</text><text @tap="replaceCurrent">替换</text><text @tap="replaceEvery">全部替换</text></view></view>
   </view>
 </template>
@@ -24,13 +25,18 @@ import AssistantGlyph from '../../components/AssistantGlyph.vue'
 import { refreshAssistantProposals, registerAssistantEditor } from '../../src/store/assistant-sessions.js'
 import { rebaseBookEdit, validateStructureProposal } from '../../src/services/assistant.js'
 import { prepareImageExport } from '../../src/store/image-export-draft'
-import { chooseArticleImage } from '../../src/services/article-images'
+import ImageInsertSheet from '../../components/ImageInsertSheet.vue'
+import FontSizeControl from '../../components/FontSizeControl.vue'
+import UiIcon from '../../components/UiIcon.vue'
+import { clampFontSize, scaleFontSize } from '../../src/utils/font-scale'
 import { imageIdFromParagraph, insertImageAt, removeImageFromDocument, textOnlyDocument } from '../../src/utils/media'
 import { documentFromParagraphs, editDocument, findMatches, paragraphOffset, paragraphsFromDocument, replaceAt, replaceAll, stepMatchIndex, stripLegacyIndents } from '../../src/utils/text'
 
 const ids = ref({ book: '', chapter: '', article: '' })
 const documentRevision = ref(0)
 const title = ref(''), body = ref(''), images = ref({}), cursorRequest = ref({ seq: 0, start: 0, end: 0 }), lastCursor = ref(0)
+const showImageInsert = ref(false)
+let imageInsertionCursor = 0
 const showSearch = ref(false), showOutline = ref(false), showFontSize = ref(false), pinchLocked = ref(true), searchQuery = ref(''), replacement = ref(''), matchIndex = ref(-1), saveState = ref('已保存'), immersive = ref(false), switching = ref(false)
 const showAi = ref(false), aiFullscreen = ref(false), selectedContext = ref(''), aiRef = ref(null)
 const collapsedChapters = reactive({})
@@ -128,13 +134,13 @@ function appendParagraph() {
   body.value = body.value.slice(0, cursor) + '\n' + body.value.slice(cursor)
   focusAt(cursor + 1, undefined, { animate: true }); scheduleHistory(); scheduleSave()
 }
-async function addImage() {
+function openImageInsert() { imageInsertionCursor = lastCursor.value; showImageInsert.value = true }
+function addImage(image) {
   try {
-    const image = await chooseArticleImage()
     const id = `img-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
     commitHistory()
     images.value = { ...images.value, [id]: image }
-    const next = insertImageAt(body.value, lastCursor.value, id)
+    const next = insertImageAt(body.value, imageInsertionCursor, id)
     body.value = next.text
     focusAt(next.cursor, undefined, { preserveScroll: true })
     commitHistory(); scheduleSave()
@@ -169,8 +175,8 @@ function openSibling(chapterId, articleId) {
 }
 function openSettings() { saveNow(); uni.navigateTo({ url: '/pages/settings/index' }) }
 function toggleFocus() { updatePreferences({ focus: !prefs.focus }) }
-function onFontSlider(event) { const size = Number(event.detail?.value); if (Number.isFinite(size)) updatePreferences({ fontSize: Math.max(12, Math.min(36, Math.round(size))) }) }
-function onPinch(scale) { if (!pinchLocked.value && Number.isFinite(scale) && scale > 0) updatePreferences({ fontSize: Math.max(12, Math.min(36, Math.round(prefs.fontSize * scale))) }) }
+function onFontSlider(size) { updatePreferences({ fontSize:clampFontSize(size, prefs.fontSize) }) }
+function onPinch(scale) { if (!pinchLocked.value) updatePreferences({ fontSize:scaleFontSize(prefs.fontSize, scale) }) }
 function toggleAi() { if (immersive.value) immersive.value = false; showOutline.value = false; showAi.value = !showAi.value; updatePreferences({ aiSidebarOpen: showAi.value }); if (!showAi.value) aiFullscreen.value = false }
 function closeAi() { showAi.value = false; aiFullscreen.value = false; updatePreferences({ aiSidebarOpen: false }) }
 function onAskAi(selection) { selectedContext.value = selection?.text || ''; immersive.value = false; showOutline.value = false; showAi.value = true; updatePreferences({ aiSidebarOpen: true }) }
@@ -318,4 +324,6 @@ function replaceEvery() { if (!searchQuery.value) return; const result = replace
   .dock-fixed { gap:0; padding-left:3px; }.dock-fixed .dock-icon { min-width:30px; padding:0 1px; }
   .font-size-panel { right:10px; }
 }
+.editor-dock { box-shadow:0 8px 34px var(--shadow),inset 0 1px 0 rgba(255,255,255,.06); }.dock-icon { transition:background .2s ease,color .2s ease,transform .2s cubic-bezier(.2,.8,.2,1); }.dock-icon:active { transform:scale(.88); }.image-dock { background:var(--accent-soft); color:var(--accent); }.dock-icon.active { box-shadow:inset 0 1px 0 rgba(255,255,255,.1); }
+@media(prefers-reduced-motion:reduce) { .dock-icon { transition:none; } }
 </style>

@@ -33,8 +33,7 @@ export function addBook(title) {
   const book = { id: uid(), title: title.trim(), author: '', description: '', cover: '', createdAt: now(), updatedAt: now(), chapters: [] }
   state.books.unshift(book); persist(); return book
 }
-export function importBook(content, details = {}) {
-  initStore()
+function importedBook(content, details = {}) {
   const title = String(details.title || content?.title || '').trim()
   if (!title) throw new Error('请填写书名')
   if (!Array.isArray(content?.chapters) || !content.chapters.length) throw new Error('文档中没有可导入的章节')
@@ -44,21 +43,29 @@ export function importBook(content, details = {}) {
     articles: (group.articles || []).map(item => ({ id: uid(), title: String(item.title || '').trim(), paragraphs: (item.paragraphs || []).map(String), images: item.images || {}, updatedAt: timestamp }))
   }))
   const first = chapters.flatMap(group => group.articles.map(item => ({ chapterId: group.id, articleId: item.id })))[0]
-  const book = { id: uid(), title, author: String(details.author ?? content.author ?? '').trim(), description: String(details.description ?? content.description ?? '').trim(), cover: '', createdAt: timestamp, updatedAt: timestamp, chapters, ...(first ? { lastEdited: { ...first, cursor: 0, updatedAt: timestamp } } : {}) }
+  return { id: uid(), title, author: String(details.author ?? content.author ?? '').trim(), description: String(details.description ?? content.description ?? '').trim(), cover: '', createdAt: timestamp, updatedAt: timestamp, chapters, ...(first ? { lastEdited: { ...first, cursor: 0, updatedAt: timestamp } } : {}) }
+}
+export function importBook(content, details = {}) {
+  initStore()
+  const book = importedBook(content, details)
   state.books.unshift(book)
   try { persist() }
   catch (error) { state.books.shift(); throw new Error(`保存导入书籍失败：${error.message || '请检查存储空间'}`) }
   return book
 }
-export function importReadOnlyBook(file, details = {}) {
-  initStore()
-  if (!['pdf', 'epub'].includes(file?.format) || !file?.path) throw new Error('只支持 PDF 或 EPUB 文件')
-  const title = String(details.title || file.name?.replace(/\.(pdf|epub)$/i, '') || '导入的书籍').trim()
-  if (!title) throw new Error('请填写书名')
-  const book = { id: uid(), title, author: String(details.author || '').trim(), description: String(details.description || '').trim(), cover: file.cover || '', readOnly: { format: file.format, path: file.path, fileName: file.name, outline: file.outline || [] }, createdAt: now(), updatedAt: now(), chapters: [] }
-  state.books.unshift(book)
-  try { persist() } catch (error) { state.books.shift(); throw error }
-  return book
+// Convert legacy PDF entries in place so their book ID and metadata survive.
+export function replaceImportedContent(id, content) {
+  const original = getBook(id)
+  if (!original) throw new Error('书籍不存在')
+  const snapshot = JSON.parse(JSON.stringify(original))
+  const imported = importedBook(content, original)
+  original.chapters = imported.chapters
+  original.lastEdited = imported.lastEdited
+  original.updatedAt = now()
+  delete original.readOnly
+  try { persist() }
+  catch (error) { if (!Object.prototype.hasOwnProperty.call(snapshot, 'lastEdited')) delete original.lastEdited; Object.assign(original, snapshot); throw error }
+  return original
 }
 export function updateBook(id, patch) {
   const book = getBook(id); if (!book) return
@@ -75,7 +82,7 @@ export function deleteBook(id) {
   state.books = state.books.filter(item => item.id !== id); persist()
   removed.forEach(article => recordWordDelta(book.id, book.title, article.id, article.title, -article.words))
   if (book.readOnly?.path && typeof plus !== 'undefined') plus.io.resolveLocalFileSystemURL(book.readOnly.path, entry => entry.remove(() => {}, () => {}), () => {})
-  if (book.readOnly?.format === 'epub' && book.cover?.startsWith('_doc/') && typeof plus !== 'undefined') plus.io.resolveLocalFileSystemURL(book.cover, entry => entry.remove(() => {}, () => {}), () => {})
+  if (book.readOnly && book.cover?.startsWith('_doc/') && typeof plus !== 'undefined') plus.io.resolveLocalFileSystemURL(book.cover, entry => entry.remove(() => {}, () => {}), () => {})
 }
 export function addChapter(bookId, title, id = uid()) {
   const book = getBook(bookId); if (!book) return null
