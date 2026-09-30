@@ -614,6 +614,6 @@ function replaceEvery() { if (!searchQuery.value) return; const result = replace
   .dock-fixed { gap:0; padding-left:3px; }.dock-fixed .dock-icon { min-width:30px; padding:0 1px; }
   .font-size-panel { right:10px; }
 }
-.editor-dock { box-shadow:0 8px 34px var(--shadow),inset 0 1px 0 rgba(255,255,255,.06); }.dock-icon { transition:background .2s ease,color .2s ease,transform .2s cubic-bezier(.2,.8,.2,1); }.dock-icon:active { transform:scale(.88); }.image-dock { background:var(--accent-soft); color:var(--accent); }.dock-icon.active { box-shadow:inset 0 1px 0 rgba(255,255,255,.1); }
+.editor-dock { box-shadow:0 8px 34px var(--shadow),inset 0 1px 0 rgba(255,255,255,.06); }.dock-icon { transition:background .2s ease,color .2s ease,transform .2s cubic-bezier(.2,.8,.2,1); }.dock-icon:active { transform:scale(.88); }.image-dock { background:transparent; color:var(--muted); }.dock-icon.active { box-shadow:inset 0 1px 0 rgba(255,255,255,.1); }
 @media(prefers-reduced-motion:reduce) { .dock-icon { transition:none; } }
 </style>
