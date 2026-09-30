@@ -2,3 +2,4 @@ node_modules/
 unpackage/
 .hbuilderx/
 *.log
+tests
