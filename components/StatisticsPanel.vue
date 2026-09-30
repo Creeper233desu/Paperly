@@ -11,9 +11,9 @@
 
 <script setup>
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import { themeClass } from '../src/store/preferences'
+import { displayDate, themeClass } from '../src/store/preferences'
 import { dayBookSources, localDayKey, useStatistics } from '../src/store/statistics'
-import { t, localeTag } from '../src/i18n.js'
+import { t } from '../src/i18n.js'
 
 const statistics = useStatistics()
 const props = defineProps({ active: { type:Boolean, default:true } })
@@ -27,7 +27,7 @@ today.setHours(0, 0, 0, 0)
 const todayKey = localDayKey(today)
 const selectedDay = ref(todayKey)
 const signed = value => value > 0 ? `+${value}` : String(value || 0)
-const readableDay = key => new Date(`${key}T12:00:00`).toLocaleDateString(localeTag(), { year:'numeric', month:'long', day:'numeric' })
+const readableDay = key => displayDate(key)
 const todayNet = computed(() => statistics.days[todayKey]?.net || 0)
 const selectedNet = computed(() => statistics.days[selectedDay.value]?.net || 0)
 const totalNet = computed(() => Object.values(statistics.days).reduce((sum, day) => sum + day.net, 0))

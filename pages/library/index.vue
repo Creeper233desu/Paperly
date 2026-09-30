@@ -31,7 +31,7 @@ import { computed, reactive, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useLibrary, addBook, importBook, updateBook, deleteBook } from '../../src/store/library'
 import { PRIMARY_TABS, primaryNavigation } from '../../src/store/navigation'
-import { themeClass } from '../../src/store/preferences'
+import { displayDate, themeClass } from '../../src/store/preferences'
 import { chooseBookCover } from '../../src/services/covers'
 import AppNav from '../../components/AppNav.vue'
 import DataDirectoryGate from '../../components/DataDirectoryGate.vue'
@@ -48,7 +48,7 @@ import { buildPdfBook } from '../../src/services/pdf-import'
 import PdfImportBridge from '../../components/PdfImportBridge.vue'
 import AppSheet from '../../components/AppSheet.vue'
 import UiIcon from '../../components/UiIcon.vue'
-import { t, localeTag } from '../../src/i18n.js'
+import { t } from '../../src/i18n.js'
 
 const store = useLibrary()
 onLoad(options => { if (PRIMARY_TABS.includes(options?.tab)) primaryNavigation.active = options.tab })
@@ -67,7 +67,7 @@ const freshId = ref(''), removingId = ref('')
 const draft = reactive({ title: '', author: '', description: '', cover: '' })
 const articleCount = book => book.chapters.reduce((count, chapter) => count + chapter.articles.length, 0)
 const bookMeta = book => book.readOnly ? t('{format} · 只读', { format: book.readOnly.format.toUpperCase() }) : t('{chapters} 章 · {articles} 篇', { chapters: book.chapters.length, articles: articleCount(book) })
-const formatDate = date => date ? new Date(date).toLocaleDateString(localeTag()) : t('今天')
+const formatDate = date => displayDate(date) || t('今天')
 function openBook(id) { if (!actionBook.value && !removingId.value) uni.navigateTo({ url: `/pages/book/index?id=${id}` }) }
 function openCreate() { editingId.value = ''; Object.assign(draft, { title: '', author: '', description: '', cover: '' }); showEdit.value = true }
 function chooseImport(format) { if (importBusy.value) return; showImportOptions.value = false; openImport(format) }
@@ -179,4 +179,5 @@ function cancelDelete() { showDelete.value = false; actionBook.value = null }
 .import-option { display:flex; align-items:center; gap:16px; padding:18px 0; border-bottom:1px solid var(--line); color:var(--muted); transition:transform .2s ease; }.import-option:active { transform:translateX(4px); }.format-badge { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; width:56px; height:64px; border-radius:13px; background:var(--accent-soft); color:var(--accent); flex:none; }.format-badge text { font-size:9px; font-weight:750; }.format-badge.pdf { color:var(--danger); background:var(--surface-alt); }.option-copy { flex:1; min-width:0; }.option-copy strong { display:block; color:var(--text); font-size:16px; font-weight:650; }.option-copy text,.import-help { display:block; font-size:12px; line-height:1.8; color:var(--muted); margin-top:5px; }.import-help { margin-top:20px; }.import-warning { margin-top:8px; color:var(--danger); font-size:12px; line-height:1.6; }.import-progress { height:4px; overflow:hidden; border-radius:4px; background:var(--surface-alt); }.import-progress view { width:35%; height:100%; border-radius:4px; background:var(--accent); animation:import-progress 1.2s ease-in-out infinite alternate; }@keyframes import-progress { to { transform:translateX(185%); } }
 @media(prefers-reduced-motion:reduce) { .import-option,.round-action { transition:none; }.import-progress view { animation:none; width:100%; opacity:.5; } }
 .import-footer { display:flex; align-items:center; justify-content:flex-end; gap:20px; font-size:13px; color:var(--muted); }.import-save { display:flex; align-items:center; gap:7px; border-radius:12px; padding:10px 17px; background:var(--accent); color:var(--surface); font-weight:600; transition:transform .18s ease; }.import-save:active { transform:scale(.97); }
+.book-meta { flex-wrap:wrap; row-gap:4px; }.book-meta text:last-child { white-space:normal; overflow:visible; overflow-wrap:anywhere; }
 </style>

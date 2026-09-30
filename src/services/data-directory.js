@@ -217,7 +217,7 @@ async function backupTo(root) {
     deleteFile(child(root, name))
     deleteFile(child(root, name.replace(/\.json$/, '.ok')))
   }
-  dataDirectory.lastSync = new Date().toLocaleString()
+  dataDirectory.lastSync = new Date().toISOString()
   dataDirectory.error = ''
 }
 async function restoreFrom(root) {

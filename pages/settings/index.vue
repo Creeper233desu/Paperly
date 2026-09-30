@@ -75,13 +75,15 @@
           <view v-if="activePanel === 'app'" class="app-settings">
             <view class="app-setting-card card" @tap="languageOpen = !languageOpen"><view class="app-setting-icon"><UiIcon name="sliders" /></view><view class="app-setting-copy"><view class="option-name">{{ $t('应用语言') }}</view><view class="option-note">{{ languageChoices.find(item => item.id === prefs.language)?.label }}</view></view><UiIcon class="language-chevron" :class="{ open:languageOpen }" name="chevron-right" /></view>
             <view v-if="languageOpen" class="language-panel card language-list"><view v-for="item in languageChoices" :key="item.id" class="language-choice" :class="{ selected: prefs.language === item.id }" @tap="setOption('language', item.id); languageOpen = false"><text>{{ item.label }}</text><UiIcon v-if="prefs.language === item.id" name="check" /></view></view>
+            <view class="app-setting-card card" @tap="dateFormatOpen = !dateFormatOpen"><view class="app-setting-icon"><UiIcon name="calendar" /></view><view class="app-setting-copy"><view class="option-name">{{ $t('日期显示') }}</view><view class="option-note">{{ displayDate(datePreview) }}</view></view><UiIcon class="language-chevron" :class="{ open:dateFormatOpen }" name="chevron-right" /></view>
+            <view v-if="dateFormatOpen" class="language-panel card language-list date-format-list"><view class="date-format-note">{{ $t('切换应用语言时自动选择对应日期格式，也可单独更改。') }}</view><view v-for="item in dateFormatChoices" :key="item.id" class="language-choice date-format-choice" :class="{ selected: prefs.dateFormat === item.id }" @tap="setOption('dateFormat', item.id); dateFormatOpen = false"><view><text>{{ item.label }}</text><text class="date-format-sample">{{ item.sample }}</text></view><UiIcon v-if="prefs.dateFormat === item.id" name="check" /></view></view>
             <view class="app-setting-card card"><view class="app-setting-icon"><UiIcon name="file" /></view><view class="app-setting-copy"><view class="option-name">{{ $t('数据目录') }}</view><view class="option-note">{{ dataDirectory.ready ? (dataDirectory.uri || dataDirectory.label) : $t('等待连接 Documents/PaperWriter') }}</view><view class="option-note">{{ $t('书籍、封面、字体、会话与导出文件会自动保存在固定目录') }}</view></view></view>
             <view class="app-action card" @tap="backupDirectory"><view><view class="option-name">{{ $t('立即备份数据') }}</view><view class="option-note">{{ $t('将当前书架和设置同步到 Documents/PaperWriter') }}</view></view><UiIcon name="chevron-right" /></view>
             <view class="app-action card destructive" @tap="showDeleteData = true"><view><view class="option-name">{{ $t('删除所有应用数据') }}</view><view class="option-note">{{ $t('清空书籍、统计、字体、模型配置和当前数据目录') }}</view></view><UiIcon name="chevron-right" /></view>
             <view class="app-setting-card card"><view class="app-setting-icon"><UiIcon name="gear" /></view><view class="app-setting-copy"><view class="option-name">{{ $t('软件版本') }}</view><view class="option-note">{{ $t('纸间 · Android') }}</view></view><view class="app-setting-value">{{ appVersion }}</view></view>
             <view v-if="appActionMessage" class="app-action-message" :class="{ error:appActionError }">{{ $m(appActionMessage) }}</view>
             <view v-if="dataDirectory.error && !appActionMessage" class="app-action-message error">{{ $t('同步提示：') }}{{ $m(dataDirectory.error) }}</view>
-            <view v-if="dataDirectory.lastSync" class="app-sync-note">{{ $t('上次备份：') }}{{ dataDirectory.lastSync }}</view>
+            <view v-if="dataDirectory.lastSync" class="app-sync-note">{{ $t('上次备份：') }}{{ displayDate(dataDirectory.lastSync, { includeTime:true }) }}</view>
           </view>
         </view>
       </view>
@@ -103,7 +105,8 @@
 
 <script setup>
 import { computed, getCurrentInstance, onMounted, onUnmounted, ref, watch } from 'vue'
-import { accentChoices, isDark, loadPreferences, updatePreferences, themeClass } from '../../src/store/preferences'
+import { accentChoices, displayDate, isDark, loadPreferences, updatePreferences, themeClass } from '../../src/store/preferences'
+import { formatDisplayDate } from '../../src/utils/display-date.js'
 import { fontFamilyFor, fontLabel, loadBundledFont, loadSelectedFont, loadCustomFont, importFont, removeFont } from '../../src/services/fonts'
 import AppNav from '../../components/AppNav.vue'
 import AppDialog from '../../components/AppDialog.vue'
@@ -157,6 +160,10 @@ const promptDraft = ref(prefs.aiSystemPrompt || defaultAiPrompt())
 const instance = getCurrentInstance()
 const themes = computed(() => [{ id: 'system', label: t('跟随系统') }, { id: 'light', label: t('浅色') }, { id: 'dark', label: t('深色') }])
 const languageChoices = [{ id:'zh-CN', label:'简体中文' }, { id:'en-US', label:'English' }, { id:'ja-JP', label:'日本語' }]
+const datePreview = ref(new Date())
+const dateFormatChoices = computed(() => [
+  { id:'zh-CN', label:t('中文格式') }, { id:'en-US', label:t('英文格式') }, { id:'ja-JP', label:t('日语格式') }
+].map(item => ({ ...item, sample:formatDisplayDate(datePreview.value, item.id) })))
 const cursorColors = ['#819bcb', '#a48bc6', '#78aeb1', '#d0a571', '#d98591']
 const trailLengthDraft = ref(prefs.cursorTrailLength)
 const colorPickerOpen = ref(false), colorPickerClosing = ref(false)
@@ -167,7 +174,7 @@ const activePanel = ref(''), closing = ref(false), fontPreviewErrors = ref({})
 const iconsFalling = ref(false)
 let iconTimer
 const panelTitle = computed(() => t(({ appearance: '外观主题', fonts: '文章字体', editing: '编辑体验', ai: 'AI 写作助手', app: '应用设置' })[activePanel.value] || ''))
-const appVersion = ref('1.3.5'), showDeleteData = ref(false), languageOpen = ref(false), appActionMessage = ref(''), appActionError = ref(false)
+const appVersion = ref('1.3.5'), showDeleteData = ref(false), languageOpen = ref(false), dateFormatOpen = ref(false), appActionMessage = ref(''), appActionError = ref(false)
 const fontChoices = computed(() => [
   { id: 'system', label: t('系统默认') }, { id: 'noto', label: t('思源宋体') }, { id: 'wenkai', label: t('霞鹜文楷') }, { id: 'sans', label: t('系统无衬线') },
   ...prefs.customFonts.map(font => ({ id: font.id, label: font.name, custom: true }))
@@ -183,6 +190,7 @@ function openPanel(id) {
   clearTimeout(closeTimer)
   closing.value = false
   activePanel.value = id
+  if (id === 'app') { datePreview.value = new Date(); languageOpen.value = false; dateFormatOpen.value = false }
   if (id === 'editing') trailLengthDraft.value = prefs.cursorTrailLength
   if (id === 'ai') { const current = activeAiProfile(); if (current) editProfile(current); else newProfile(); promptDraft.value = prefs.aiSystemPrompt || defaultAiPrompt(); aiTestResult.value = '' }
   emit('modal-change', true)
@@ -305,6 +313,7 @@ function confirmRemove() { removeFont(removeId.value); removeId.value = '' }
 .app-setting-value { color:var(--muted); font-size:11px; text-align:right; }
 .language-chevron { color:var(--muted); transition:transform .2s ease; }.language-chevron.open { transform:rotate(90deg); }.language-panel { margin-top:-5px; padding:17px 20px; display:flex; justify-content:space-between; align-items:center; color:var(--accent); font-size:13px; animation:cursor-options-in .2s ease both; }
 .language-list { display:block; padding:5px 8px; }.language-choice { min-height:44px; display:flex; align-items:center; justify-content:space-between; padding:8px 12px; border-radius:10px; color:var(--text); }.language-choice + .language-choice { border-top:1px solid var(--line); }.language-choice.selected { color:var(--accent); background:var(--accent-soft); }
+.date-format-note { padding:10px 12px; color:var(--muted); font-size:11px; line-height:1.6; }.date-format-choice { gap:12px; }.date-format-choice>view { min-width:0; }.date-format-sample { display:block; color:var(--muted); font-size:11px; margin-top:5px; overflow-wrap:anywhere; }.date-format-choice.selected .date-format-sample { color:var(--accent); }
 .app-action { justify-content:space-between; transition:transform .2s ease,border-color .2s ease; }
 .app-action:active { transform:scale(.985); border-color:var(--accent); }
 .app-action>view:last-child { color:var(--muted); }

@@ -2,6 +2,7 @@ import { reactive } from 'vue'
 import { DEFAULT_AI_PROMPT, defaultAiPrompt, isDefaultAiPrompt } from '../services/assistant.js'
 import { queueDirectorySync } from '../services/data-directory.js'
 import { setLanguage, SUPPORTED_LANGUAGES } from '../i18n.js'
+import { DATE_FORMATS, defaultDateFormat, formatDisplayDate } from '../utils/display-date.js'
 
 const KEY = 'paperwriter.preferences.v1'
 export const accentChoices = [
@@ -11,7 +12,7 @@ export const accentChoices = [
   { id: 'coral', label: '珊瑚', color: '#ac665c' },
   { id: 'amber', label: '琥珀', color: '#996e32' }
 ]
-const defaults = { theme: 'system', accent: 'slate', language:'zh-CN', font: 'system', fontSize: 18, focus: false, autoPair: true, animatedCursor: true, cursorStyle: 'beam', cursorTrailColor: '#819bcb', cursorTrailLength: 32, customFonts: [], aiSystemPrompt: DEFAULT_AI_PROMPT, aiSidebarOpen: false, aiApprovalMode: 'review' }
+const defaults = { theme: 'system', accent: 'slate', language:'zh-CN', dateFormat:'zh-CN', font: 'system', fontSize: 18, focus: false, autoPair: true, animatedCursor: true, cursorStyle: 'beam', cursorTrailColor: '#819bcb', cursorTrailLength: 32, customFonts: [], aiSystemPrompt: DEFAULT_AI_PROMPT, aiSidebarOpen: false, aiApprovalMode: 'review' }
 export const preferences = reactive({ ...defaults })
 const appearance = reactive({ dark: false })
 let loaded = false
@@ -19,10 +20,12 @@ let loaded = false
 export function loadPreferences() {
   if (loaded) return preferences
   loaded = true
-  try { Object.assign(preferences, defaults, JSON.parse(uni.getStorageSync(KEY) || '{}')) } catch (_) { /* keep defaults */ }
+  let saved = {}
+  try { saved = JSON.parse(uni.getStorageSync(KEY) || '{}') || {}; Object.assign(preferences, defaults, saved) } catch (_) { /* keep defaults */ }
   if (!Array.isArray(preferences.customFonts)) preferences.customFonts = []
   if (!accentChoices.some(choice => choice.id === preferences.accent)) preferences.accent = defaults.accent
   if (!SUPPORTED_LANGUAGES.includes(preferences.language)) preferences.language = defaults.language
+  preferences.dateFormat = DATE_FORMATS.includes(saved.dateFormat) ? saved.dateFormat : defaultDateFormat(preferences.language)
   setLanguage(preferences.language)
   if (isDefaultAiPrompt(preferences.aiSystemPrompt)) preferences.aiSystemPrompt = defaultAiPrompt(preferences.language)
   if (!['review', 'full'].includes(preferences.aiApprovalMode)) preferences.aiApprovalMode = 'review'
@@ -39,13 +42,16 @@ export function updatePreferences(patch) {
   loadPreferences(); Object.assign(preferences, patch)
   if (Object.prototype.hasOwnProperty.call(patch, 'language')) {
     if (!SUPPORTED_LANGUAGES.includes(preferences.language)) preferences.language = defaults.language
+    if (!Object.prototype.hasOwnProperty.call(patch, 'dateFormat')) preferences.dateFormat = defaultDateFormat(preferences.language)
     setLanguage(preferences.language)
     if (isDefaultAiPrompt(preferences.aiSystemPrompt)) preferences.aiSystemPrompt = defaultAiPrompt(preferences.language)
   }
+  if (!DATE_FORMATS.includes(preferences.dateFormat)) preferences.dateFormat = defaultDateFormat(preferences.language)
   uni.setStorageSync(KEY, JSON.stringify(preferences))
   queueDirectorySync()
   applyTheme()
 }
+export function displayDate(value, options) { return formatDisplayDate(value, loadPreferences().dateFormat, options) }
 export function isDark() {
   loadPreferences()
   if (preferences.theme === 'dark') return true

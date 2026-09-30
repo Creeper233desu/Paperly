@@ -1,5 +1,6 @@
 // Android PdfDocument 直接使用系统中文字体，不依赖网络、WebView 打印服务或大体积字库。
 import { imageIdFromParagraph } from '../utils/media.js'
+import { displayDate } from '../store/preferences.js'
 const WIDTH = 595, HEIGHT = 842, MARGIN = 56, BOTTOM = 770
 
 function wrapLine(text, paint, maxWidth) {
@@ -79,7 +80,7 @@ export function exportBookPdf(book, withToc = true) {
     newPage(); y = 205
     draw(book.title || '未命名书', titlePaint, 42)
     if (book.author) { y += 8; draw(book.author, bodyPaint, 24) }
-    y += 12; draw('纸间 · 导出于 ' + new Date().toLocaleDateString('zh-CN'), mutedPaint, 18)
+    y += 12; draw('纸间 · 导出于 ' + displayDate(new Date()), mutedPaint, 18)
     if (withToc) {
       newPage(); draw('目录', headingPaint, 32, 20)
       book.chapters.forEach((chapter, ci) => {

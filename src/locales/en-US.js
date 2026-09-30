@@ -1,4 +1,6 @@
 export const extraEnglish = {
+  '日期显示':'Date format', '中文格式':'Chinese', '英文格式':'English', '日语格式':'Japanese',
+  '切换应用语言时自动选择对应日期格式，也可单独更改。':'Changing the app language selects its date format. You can also choose a format separately.',
   '写下你的下一句。':'Write your next sentence.', '这篇正文没有文字':'This article has no text',
   '不思考':'No reasoning', '最低':'Minimal', '极高':'Extra high',
   '正在获取模型能力…':'Fetching model capabilities…',
