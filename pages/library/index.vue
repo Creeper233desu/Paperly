@@ -8,7 +8,7 @@
   </view></view></view>
   <view class="home-panel" :class="{ active: tabIndex === 1 }" :style="panelStyle(1)"><StatisticsPanel :active="pageVisible && tabIndex === 1" /></view>
   <view class="home-panel" :class="{ active: tabIndex === 2 }" :style="panelStyle(2)"><SettingsPanel :embedded="true" :active="tabIndex === 2" @modal-change="settingsModalOpen = $event" /></view>
-  <AppNav v-show="bookNavVisible" :floating="!!openedBookId" @select="selectPrimaryTab" />
+  <AppNav :floating="!!openedBookId" @select="selectPrimaryTab" />
   <BookTransition v-if="openedBookId" ref="bookTransition" :book-id="openedBookId" :source-id="bookCardId(openedBookId)" :cover-color="bookColor" :page-active="pageVisible" @handoff="bookHidden = true" @phase="bookPhase = $event" @closed="finishBookClose" />
   <DataDirectoryGate v-if="needsDataDirectory()" />
   <PdfImportBridge ref="pdfBridge" @progress="pdfProgress" />
@@ -64,7 +64,6 @@ const tabIndex = computed(() => Math.max(0, PRIMARY_TABS.indexOf(primaryNavigati
 const { waiting:libraryWaiting, entering:libraryEntering } = usePanelEntrance(() => pageVisible.value && tabIndex.value === 0, { skip:() => !!openedBookId.value })
 const settingsModalOpen = ref(false)
 const panelStyle = index => ({ '--panel-shift': `${(index - tabIndex.value) * 100}%`, zIndex: index === 2 && settingsModalOpen.value ? 20 : index === tabIndex.value ? 2 : 1, pointerEvents: index === tabIndex.value ? 'auto' : 'none' })
-const bookNavVisible = computed(() => !openedBookId.value || bookPhase.value !== 'ready' || primaryNavigation.active !== 'library')
 const books = computed(() => store.books)
 const showEdit = ref(false), showDelete = ref(false), editingId = ref(''), actionBook = ref(null)
 const showImport = ref(false), showImportOptions = ref(false), importBusy = ref(false), importPreview = ref(null), importFileName = ref('')

@@ -1,6 +1,6 @@
 <template>
   <view :id="hostId" class="book-transition" :class="themeClass()" :host-prop="hostId" :change:host-prop="motion.attach" :prop="motionPayload" :change:prop="motion.receive">
-    <view class="book-surface"><view class="book-background"></view></view>
+    <view class="book-surface" @tap="reopen"><view class="book-background"></view></view>
     <view class="book-viewport"><scroll-view scroll-y class="book-scroll">
       <BookPanel ref="panel" :book-id="bookId" :cover-color="coverColor" motion="live" @close="requestClose" @interact="reopen" />
     </scroll-view></view>
@@ -112,7 +112,9 @@ export default {
 .book-transition { position:fixed; z-index:40; inset:0; overflow:hidden; pointer-events:none; opacity:0; color:var(--text); isolation:isolate; }
 .book-transition.book-navigation-dismiss :deep(*) { pointer-events:none !important; }
 .book-surface,.book-viewport { position:absolute; inset:0; transform-origin:0 0; overflow:hidden; border-radius:22px; backface-visibility:hidden; pointer-events:none; }
-.book-surface { background:var(--surface); box-shadow:0 10px 35px var(--shadow); }.book-background { position:absolute; inset:0; background:var(--bg); opacity:0; }
+/* Only the expanding card blocks input below it. Uncovered navigation stays
+   usable; navigation dismissal disables this surface through the root class. */
+.book-surface { pointer-events:auto; background:var(--surface); box-shadow:0 10px 35px var(--shadow); }.book-background { position:absolute; inset:0; background:var(--bg); opacity:0; }
 .book-viewport { z-index:1; }.book-scroll { width:100%; height:100%; transform-origin:0 0; pointer-events:none; overscroll-behavior:contain; }
 .shared-elements { position:absolute; z-index:2; inset:0; pointer-events:none; overflow:hidden; }
 .shared-cover,.shared-title,.shared-author { position:absolute; top:0; left:0; margin:0; opacity:0; transform-origin:0 0; backface-visibility:hidden; }
