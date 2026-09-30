@@ -1,9 +1,9 @@
 <template>
   <view class="screen book-screen" :class="[themeClass(), `motion-${motion}`, { 'shared-hidden':hideShared }]"><view class="page-wrap">
     <view class="topbar book-rest"><text class="back" @tap="back">{{ $t('‹　返回书架') }}</text><view class="book-top-menu" @tap="openBookMenu"><text>{{ $t('更多操作') }}</text><MoreIcon /></view></view>
-    <view v-if="book" class="book-layout"><view class="book-sidebar"><view class="large-cover" :style="coverColor ? { background:coverColor } : {}"><image v-if="book.cover" :src="book.cover" mode="aspectFill" /><view v-else class="large-letter">{{ book.title.slice(0, 1) }}</view><view class="large-spine"></view></view><view class="sidebar-label book-rest">{{ $t('当前书籍') }}</view><view class="sidebar-title">{{ book.title }}</view><view class="sidebar-author">{{ book.author || $t('未设置作者') }}</view><view v-if="book.description" class="sidebar-description book-rest">{{ book.description }}</view><view v-if="!book.readOnly" class="sidebar-stats book-rest"><view><text class="stat-number">{{ book.chapters.length }}</text><text>{{ $t('章节') }}</text></view><view><text class="stat-number">{{ totalArticles }}</text><text>{{ $t('正文') }}</text></view><view><text class="stat-number">{{ totalWords }}</text><text>{{ $t('字数') }}</text></view></view><view class="sidebar-exports book-rest"><view v-if="!book.readOnly || book.readOnly.format === 'pdf'" class="sidebar-export" @tap="readBook">{{ book.readOnly ? $t('转换为可编辑书籍') : $t('阅读整本书') }}</view><view v-if="!book.readOnly" class="sidebar-export" @tap="showExport = true">{{ $t('导出 PDF　↗') }}</view><view v-if="!book.readOnly" class="sidebar-export" @tap="openImageExport">{{ $t('导出图片　↗') }}</view></view></view>
+    <view v-if="book" class="book-layout"><view class="book-sidebar book-rest"><view class="large-cover" :style="coverColor ? { background:coverColor } : {}"><image v-if="book.cover" :src="book.cover" mode="aspectFill" /><view v-else class="large-letter">{{ book.title.slice(0, 1) }}</view><view class="large-spine"></view></view><view class="sidebar-label">{{ $t('当前书籍') }}</view><view class="sidebar-title">{{ book.title }}</view><view class="sidebar-author">{{ book.author || $t('未设置作者') }}</view><view v-if="book.description" class="sidebar-description">{{ book.description }}</view><view v-if="!book.readOnly" class="sidebar-stats"><view><text class="stat-number">{{ book.chapters.length }}</text><text>{{ $t('章节') }}</text></view><view><text class="stat-number">{{ totalArticles }}</text><text>{{ $t('正文') }}</text></view><view><text class="stat-number">{{ totalWords }}</text><text>{{ $t('字数') }}</text></view></view><view class="sidebar-exports"><view v-if="!book.readOnly || book.readOnly.format === 'pdf'" class="sidebar-export" @tap="readBook">{{ book.readOnly ? $t('转换为可编辑书籍') : $t('阅读整本书') }}</view><view v-if="!book.readOnly" class="sidebar-export" @tap="openPdfExport">{{ $t('导出 PDF　↗') }}</view><view v-if="!book.readOnly" class="sidebar-export" @tap="openImageExport">{{ $t('导出图片　↗') }}</view></view></view>
       <view v-if="book.readOnly" class="book-content read-only-content book-rest"><view class="page-title">{{ $t('继续整理这份文稿') }}</view><view class="subtle">{{ book.readOnly.format === 'pdf' ? $t('将旧版导入的 PDF 提取为章节和正文，之后即可编辑、缩放字体和阅读。') : $t('此旧版文件格式已停止支持，可删除这条书架记录后导入 DOCX 或 PDF。') }}</view><view v-if="book.readOnly.format === 'pdf'" class="read-only-card card"><UiIcon name="file" /><view class="read-only-name">{{ book.readOnly.fileName }}</view><view class="primary-button" @tap="convertPdf">{{ $t('转换为可编辑书籍') }}</view></view></view>
-      <view v-else class="book-content book-rest"><view class="content-heading"><view><view class="eyebrow">{{ $t('写作目录') }}</view><view class="page-title">{{ $t('章节与正文') }}</view><view class="subtle">{{ $t('继续写下一个片段，或从已有的正文开始。') }}</view></view><view class="new-chapter" @tap="openCreateChapter">{{ $t('＋ 新建章节') }}</view></view><view class="search-box"><text>⌕</text><input v-model="query" :placeholder="$t('搜索章节、篇名或正文')" confirm-type="search" /></view><view v-if="lastEdited" class="resume-card" @tap="resumeWriting"><view class="resume-mark"><view class="resume-line"></view></view><view class="resume-copy"><text>{{ $t('继续上次写作') }}</text><strong>{{ lastEdited.title }}</strong></view><view class="resume-arrow"></view></view>
+      <view v-else class="book-content book-rest"><view class="content-heading"><view><view class="eyebrow">{{ $t('写作目录') }}</view><view class="page-title">{{ $t('章节与正文') }}</view><view class="subtle">{{ $t('继续写下一个片段，或从已有的正文开始。') }}</view></view><view class="new-chapter" @tap="openCreateChapter">{{ $t('＋ 新建章节') }}</view></view><view class="search-box" @tap="interact"><text>⌕</text><input v-model="query" :placeholder="$t('搜索章节、篇名或正文')" confirm-type="search" /></view><view v-if="lastEdited" class="resume-card" @tap="resumeWriting"><view class="resume-mark"><view class="resume-line"></view></view><view class="resume-copy"><text>{{ $t('继续上次写作') }}</text><strong>{{ lastEdited.title }}</strong></view><view class="resume-arrow"></view></view>
       <view v-if="!book.chapters.length" class="empty card">{{ $t('先创建一个章节，再写第一篇正文。') }}</view><view v-for="(chapter, ci) in visibleChapters" :key="chapter.id" class="chapter-card card"><view class="chapter-heading" @tap="toggleChapter(chapter.id)"><view class="chapter-num">{{ String(ci + 1).padStart(2, '0') }}</view><view class="chapter-name">{{ chapter.title }} <text class="chapter-article-count">{{ chapter.articles.length }} {{ $t('篇') }}</text></view><view class="chapter-caret" :class="{ folded: collapsed[chapter.id] && !query }"></view><MoreIcon class="chapter-action" @tap.stop="openChapterMenu(chapter)" /></view><view v-if="query || !collapsed[chapter.id]" class="chapter-children"><view v-for="article in filteredArticles(chapter)" :key="article.id" class="article-row" @tap="openArticle(chapter.id, article.id)" @longpress="openArticleMenu(chapter, article)"><view class="article-icon"><view></view><view></view></view><view class="article-main"><view class="article-title">{{ article.title || $t('无题正文') }}</view><view class="article-preview">{{ preview(article) }}</view></view><view class="article-tail"><text>{{ wordCount(article) }} {{ $t('字') }}</text><MoreIcon class="article-more" @tap.stop="openArticleMenu(chapter, article)" /></view></view><view class="add-article" @tap="startArticle(chapter.id)">{{ $t('＋ 添加正文') }}</view></view></view><view v-if="query && !visibleChapters.length" class="empty">{{ $t('没有找到匹配内容') }}</view></view>
     </view>
   </view>
@@ -21,8 +21,7 @@
 </template>
 
 <script setup>
-import { computed, getCurrentInstance, reactive, ref } from 'vue'
-import { readBookRects } from '../src/utils/book-transition.js'
+import { computed, reactive, ref } from 'vue'
 import { getBook, replaceImportedContent, getLastEditedArticle, updateBook, addChapter, renameChapter, deleteChapter, addArticle, deleteArticle, wordCount } from '../src/store/library'
 import { themeClass } from '../src/store/preferences'
 import { chooseBookCover } from '../src/services/covers'
@@ -41,8 +40,7 @@ import { t } from '../src/i18n.js'
 
 const pdfBridge = ref(null), converting = ref(false), conversionProgress = ref(''), conversionError = ref('')
 const props = defineProps({ bookId:String, motion:{ type:String, default:'none' }, hideShared:Boolean, coverColor:String })
-const emit = defineEmits(['close'])
-const owner = getCurrentInstance()?.proxy
+const emit = defineEmits(['close', 'interact'])
 const bookId = computed(() => props.bookId)
 const query = ref(''), menuType = ref(''), dialogType = ref(''), showExport = ref(false), withToc = ref(true), exportResult = ref(null)
 const collapsed = reactive({})
@@ -59,7 +57,8 @@ const preview = a => textOnlyParagraphs(a.paragraphs).find(p => p.trim()) || t(O
 const menuTitle = computed(() => menuType.value === 'book' ? book.value?.title : menuType.value === 'chapter' ? selectedChapter.value?.title : selectedArticle.value?.title || t('无题正文'))
 const menuItems = computed(() => menuType.value === 'book' ? (book.value?.readOnly ? [{ label: t('编辑书籍信息') }, ...(book.value.readOnly.format === 'pdf' ? [{ label: t('转换为可编辑书籍') }] : [])] : [{ label: t('编辑书籍信息') }, { label: t('阅读整本书') }, { label: t('导出 PDF') }, { label: t('导出图片') }]) : menuType.value === 'chapter' ? [{ label: t('重命名章节') }, { label: t('删除章节'), danger: true }] : [{ label: t('删除正文'), danger: true }])
 function back() { emit('close') }
-function measureShared() { return readBookRects(owner, { cover:'.large-cover', title:'.sidebar-title', author:'.sidebar-author', spine:'.large-spine', ...(!book.value?.cover ? { letter:'.large-letter' } : {}) }) }
+function interact() { emit('interact') }
+function openPdfExport() { interact(); showExport.value = true }
 function dismissOverlay() {
   if (dialogType.value) { dialogType.value = ''; return true }
   if (menuType.value) { menuType.value = ''; return true }
@@ -69,11 +68,11 @@ function dismissOverlay() {
   if (converting.value) { pdfBridge.value?.cancel(); return true }
   return false
 }
-defineExpose({ measureShared, dismissOverlay })
-function openBookMenu() { if (book.value) menuType.value = 'book' }
-function openChapterMenu(chapter) { selectedChapter.value = chapter; menuType.value = 'chapter' }
-function toggleChapter(id) { collapsed[id] = !collapsed[id] }
-function openArticleMenu(chapter, article) { selectedChapter.value = chapter; selectedArticle.value = article; menuType.value = 'article' }
+defineExpose({ dismissOverlay })
+function openBookMenu() { interact(); if (book.value) menuType.value = 'book' }
+function openChapterMenu(chapter) { interact(); selectedChapter.value = chapter; menuType.value = 'chapter' }
+function toggleChapter(id) { interact(); collapsed[id] = !collapsed[id] }
+function openArticleMenu(chapter, article) { interact(); selectedChapter.value = chapter; selectedArticle.value = article; menuType.value = 'article' }
 function onMenuSelect(index) {
   const type = menuType.value; menuType.value = ''
   if (type === 'book' && index === 0) { Object.assign(bookDraft, { title: book.value.title, author: book.value.author || '', description: book.value.description || '', cover: book.value.cover || '' }); dialogType.value = 'book' }
@@ -84,7 +83,7 @@ function onMenuSelect(index) {
   if (type === 'chapter' && index === 1) dialogType.value = 'deleteChapter'
   if (type === 'article') dialogType.value = 'deleteArticle'
 }
-function openCreateChapter() { chapterDraftId.value = ''; chapterDraftTitle.value = ''; dialogType.value = 'chapter' }
+function openCreateChapter() { interact(); chapterDraftId.value = ''; chapterDraftTitle.value = ''; dialogType.value = 'chapter' }
 function saveChapter() { if (!chapterDraftTitle.value.trim()) return uni.showToast({ title: t('请输入章节名'), icon: 'none' }); if (chapterDraftId.value) renameChapter(bookId.value, chapterDraftId.value, chapterDraftTitle.value); else addChapter(bookId.value, chapterDraftTitle.value); dialogType.value = '' }
 async function selectCover() { try { bookDraft.cover = await chooseBookCover() } catch (error) { if (!String(error.message).includes('取消')) uni.showToast({ title: error.message, icon: 'none' }) } }
 function saveBookInfo() { if (!bookDraft.title.trim()) return uni.showToast({ title: t('请输入书名'), icon: 'none' }); updateBook(bookId.value, bookDraft); dialogType.value = '' }
@@ -92,9 +91,9 @@ function confirmDeleteChapter() { deleteChapter(bookId.value, selectedChapter.va
 function confirmDeleteArticle() { deleteArticle(bookId.value, selectedChapter.value.id, selectedArticle.value.id); dialogType.value = '' }
 function startArticle(chapterId) { const a = addArticle(bookId.value, chapterId); openArticle(chapterId, a.id) }
 function resumeWriting() { if (lastEdited.value) openArticle(lastEdited.value.chapterId, lastEdited.value.articleId, lastEdited.value.cursor) }
-function openArticle(chapterId, articleId, cursor = 0) { if (!menuType.value && !book.value?.readOnly) uni.navigateTo({ url: `/pages/editor/index?bookId=${bookId.value}&chapterId=${chapterId}&articleId=${articleId}&cursor=${cursor}` }) }
-function readBook() { if (book.value?.readOnly) return convertPdf(); if (book.value) uni.navigateTo({ url: `/pages/reader/index?bookId=${encodeURIComponent(bookId.value)}` }) }
-function openImageExport() { uni.navigateTo({ url: `/pages/export-image/index?bookId=${bookId.value}` }) }
+function openArticle(chapterId, articleId, cursor = 0) { interact(); if (!menuType.value && !book.value?.readOnly) uni.navigateTo({ url: `/pages/editor/index?bookId=${bookId.value}&chapterId=${chapterId}&articleId=${articleId}&cursor=${cursor}` }) }
+function readBook() { interact(); if (book.value?.readOnly) return convertPdf(); if (book.value) uni.navigateTo({ url: `/pages/reader/index?bookId=${encodeURIComponent(bookId.value)}` }) }
+function openImageExport() { interact(); uni.navigateTo({ url: `/pages/export-image/index?bookId=${bookId.value}` }) }
 async function doExport() {
   showExport.value = false
   try {
@@ -109,6 +108,7 @@ function openExport() {
   if (result?.ok && typeof plus !== 'undefined') plus.runtime.openFile(result.path, {}, () => uni.showToast({ title: t('请安装可以打开 PDF 的应用'), icon: 'none' }))
 }
 async function convertPdf() {
+  interact()
   if (converting.value || book.value?.readOnly?.format !== 'pdf') return
   const source = { ...book.value.readOnly }
   converting.value = true; conversionProgress.value = t('正在读取原文件')
@@ -126,16 +126,9 @@ async function convertPdf() {
 <style scoped>
 .book-screen { padding-bottom: 45px; }
 .book-screen:not(.motion-none) { background:transparent; }
+.motion-live :deep(.dialog-backdrop),.motion-live :deep(.menu-backdrop),.motion-live :deep(.sheet-mask) { pointer-events:auto; }
 .shared-hidden .large-cover,.shared-hidden .sidebar-title,.shared-hidden .sidebar-author { visibility:hidden; }
-.book-rest { opacity:1; transform:translate3d(0,0,0); transition:opacity .28s ease,transform .4s cubic-bezier(.2,.8,.2,1); }
-.motion-preparing .book-rest { opacity:0; transform:translate3d(0,14px,0); transition:none; }
-.motion-opening .book-rest { transition-delay:100ms; }
-.motion-closing .book-rest { opacity:0; transform:translate3d(0,8px,0); transition-delay:0ms; }
-.book-sidebar { transition:background-color .4s ease,border-color .4s ease; }
-.motion-preparing .book-sidebar { background:transparent; border-color:transparent; transition:none; }
-.motion-opening .book-sidebar { transition-delay:100ms; }
-.motion-closing .book-sidebar { background:transparent; border-color:transparent; transition-duration:.2s; }
-@media(prefers-reduced-motion:reduce) { .book-rest,.book-sidebar { transition:none; } }
+.book-rest { opacity:1; }
 .book-top-menu { display: flex; align-items: center; gap: 4px; color: var(--accent); font-size: 14px; }
 .book-layout { display: grid; grid-template-columns: 290px minmax(0,1fr); gap: 48px; margin-top: 25px; }.book-sidebar { padding: 24px; border-radius: 26px; background: var(--surface); border: 1px solid var(--line); height: fit-content; }.large-cover { position: relative; width: 185px; height: 264px; margin: 0 auto 24px; border-radius: 7px 16px 16px 7px; background: #536887; display: flex; align-items: center; justify-content: center; overflow: hidden; box-shadow: 10px 15px 28px var(--shadow); }.large-cover image { width: 100%; height: 100%; }.large-letter { font-family: serif; font-size: 86px; color: #fff; }.large-spine { position: absolute; left: 0; top: 0; bottom: 0; width: 9px; background: rgba(0,0,0,.13); }
 .sidebar-label, .eyebrow { color: var(--accent); font-size: 11px; letter-spacing: .12em; }.sidebar-title { margin-top: 10px; font-size: 23px; font-weight: 700; line-height: 1.25; }.sidebar-author { color: var(--muted); font-size: 13px; margin-top: 8px; }.sidebar-description { color: var(--muted); font-size: 12px; line-height: 1.65; margin-top: 20px; }.sidebar-stats { display: flex; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin-top: 24px; padding: 20px 0; justify-content: space-between; }.sidebar-stats view { display: flex; flex-direction: column; gap: 4px; }.sidebar-stats .stat-number { font-size: 20px; color: var(--text); font-weight: 600; }.sidebar-stats text { font-size: 11px; color: var(--muted); }.sidebar-export { color: var(--accent); font-size: 13px; font-weight: 650; padding-top: 23px; }
