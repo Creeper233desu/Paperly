@@ -12,7 +12,7 @@ export const accentChoices = [
   { id: 'coral', label: '珊瑚', color: '#ac665c' },
   { id: 'amber', label: '琥珀', color: '#996e32' }
 ]
-const defaults = { theme: 'system', accent: 'slate', language:'zh-CN', dateFormat:'zh-CN', font: 'system', fontSize: 18, focus: false, autoPair: true, animatedCursor: true, cursorStyle: 'beam', cursorTrailColor: '#819bcb', cursorTrailLength: 32, customFonts: [], aiSystemPrompt: DEFAULT_AI_PROMPT, aiSidebarOpen: false, aiApprovalMode: 'review' }
+const defaults = { theme: 'system', accent: 'slate', language:'zh-CN', dateFormat:'zh-CN', font: 'system', fontSize: 18, focus: true, autoPair: true, animatedCursor: true, cursorStyle: 'neovim', cursorTrailColor: '#819bcb', cursorTrailLength: 32, customFonts: [], aiSystemPrompt: DEFAULT_AI_PROMPT, aiSidebarOpen: false, aiApprovalMode: 'review' }
 export const preferences = reactive({ ...defaults })
 const appearance = reactive({ dark: false })
 let loaded = false

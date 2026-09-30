@@ -5,7 +5,7 @@
       <BookPanel ref="panel" :book-id="bookId" :cover-color="coverColor" motion="live" @close="requestClose" @interact="reopen" />
     </scroll-view></view>
     <view v-if="book" class="shared-elements" aria-hidden="true">
-      <view class="shared-cover" :style="{ background:coverColor }"><image v-if="book.cover" :src="book.cover" mode="aspectFill" /><view v-else class="shared-cover-letter">{{ book.title.slice(0, 1) }}</view><view class="shared-spine"></view></view>
+      <BookCover class="shared-cover" :src="book.cover" :title="book.title" :color="coverColor" letter-class="shared-cover-letter" spine-class="shared-spine" @load="coverLoaded" @error="coverLoaded" />
       <view class="shared-title">{{ book.title }}</view><view class="shared-author">{{ book.author || $t('未设置作者') }}</view>
     </view>
   </view>
@@ -13,20 +13,22 @@
 
 <script>
 import BookPanel from './BookPanel.vue'
+import BookCover from './BookCover.vue'
 import { getBook } from '../src/store/library'
 import { themeClass } from '../src/store/preferences'
 
 export default {
-  components:{ BookPanel },
+  components:{ BookPanel, BookCover },
   props:{ bookId:String, sourceId:String, coverColor:String, pageActive:{ type:Boolean, default:true } },
   emits:['handoff', 'phase', 'closed'],
-  data() { return { hostId:`book-motion-${Date.now()}-${Math.random().toString(36).slice(2)}`, mode:'open', seq:1, bridgeEpoch:0, phase:'preparing', closed:false } },
+  data() { return { hostId:`book-motion-${Date.now()}-${Math.random().toString(36).slice(2)}`, mode:'open', seq:1, bridgeEpoch:0, phase:'preparing', closed:false, loadedCover:'' } },
   computed:{
     book() { return getBook(this.bookId) },
-    motionPayload() { return JSON.stringify({ sourceId:this.sourceId, mode:this.mode, seq:this.seq, pageActive:this.pageActive, epoch:this.bridgeEpoch }) }
+    motionPayload() { return JSON.stringify({ sourceId:this.sourceId, mode:this.mode, seq:this.seq, pageActive:this.pageActive, epoch:this.bridgeEpoch, coverReady:!this.book?.cover || this.loadedCover === this.book.cover }) }
   },
   methods:{
     themeClass,
+    coverLoaded(src) { if (src === this.book?.cover) this.loadedCover = src },
     requestClose() {
       if (this.closed) return
       if (this.$refs.panel?.dismissOverlay()) return
@@ -102,7 +104,7 @@ export default {
         isOpening:() => !this.disposed && this.packet?.mode === 'open' && this.packet?.pageActive !== false && this.controller.getState().phase === 'opening',
         onTap:() => this.notify('renderOutsideTap', { seq:this.packet?.seq })
       })
-      if (this.packet) this.controller.command(this.packet)
+      if (this.packet && (this.packet.mode !== 'open' || this.packet.coverReady !== false)) this.controller.command(this.packet)
       this.notify('renderMounted', this.hostId)
     },
     receive(value) {
@@ -111,6 +113,9 @@ export default {
       if (!packet || this.disposed || packet.seq < (this.packet?.seq ?? -1)) return
       this.packet = packet
       if (!this.mountedReady) return
+      // Keep the source image visible until the shared cover is decoded. A
+      // close/dismiss command must still work while an image is loading.
+      if (packet.mode === 'open' && packet.coverReady === false) return
       if (this.controller) this.controller.command(this.packet)
       else this.$nextTick(() => this.attach(this.hostId))
     }
@@ -119,7 +124,7 @@ export default {
 </script>
 
 <style scoped>
-.book-transition { position:fixed; z-index:40; inset:0; overflow:hidden; pointer-events:none; opacity:0; color:var(--text); isolation:isolate; }
+.book-transition { position:fixed; z-index:40; inset:0; overflow:hidden; pointer-events:none; opacity:0; visibility:hidden; color:var(--text); isolation:isolate; }
 .book-transition.book-navigation-dismiss :deep(*) { pointer-events:none !important; }
 .book-surface,.book-viewport { position:absolute; inset:0; transform-origin:0 0; overflow:hidden; border-radius:22px; backface-visibility:hidden; pointer-events:none; }
 /* Only the expanding card blocks input below it. Uncovered navigation stays
@@ -128,9 +133,7 @@ export default {
 .book-viewport { z-index:1; }.book-scroll { width:100%; height:100%; transform-origin:0 0; pointer-events:none; overscroll-behavior:contain; }
 .shared-elements { position:absolute; z-index:2; inset:0; pointer-events:none; overflow:hidden; }
 .shared-cover,.shared-title,.shared-author { position:absolute; top:0; left:0; margin:0; opacity:0; transform-origin:0 0; backface-visibility:hidden; }
-.shared-cover { display:flex; align-items:center; justify-content:center; overflow:hidden; border-radius:7px 16px 16px 7px; }
-.shared-cover image { display:block; width:100%; height:100%; }.shared-cover-letter { font-family:serif; color:#fff; line-height:1; }
-.shared-spine { position:absolute; top:0; bottom:0; left:0; background:rgba(0,0,0,.12); transform-origin:left center; }
+.shared-elements .shared-cover { position:absolute; }
 .shared-title { overflow:hidden; color:var(--text); font-weight:700; line-height:1.25; word-break:break-all; }
 .shared-author { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; color:var(--muted); font-size:13px; }
 </style>

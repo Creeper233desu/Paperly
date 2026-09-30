@@ -25,7 +25,6 @@ export function createBookMorph(options) {
   const surface = host.querySelector('.book-surface'), background = host.querySelector('.book-background')
   const viewport = host.querySelector('.book-viewport'), scroll = host.querySelector('.book-scroll')
   const ghosts = Object.fromEntries(Object.keys(sharedSelectors).map(key => [key, host.querySelector(`.shared-${key}`)]))
-  const letter = host.querySelector('.shared-cover-letter'), spine = host.querySelector('.shared-spine')
   const targets = Object.fromEntries(Object.entries(sharedSelectors).map(([key, selector]) => [key, host.querySelector(selector)]))
   let rest = [...host.querySelectorAll('.book-rest')]
   let controls = [...host.querySelectorAll(controlSelectors)]
@@ -59,6 +58,12 @@ export function createBookMorph(options) {
     source = document.getElementById(sourceId)
     const frame = rectOf(host), card = rectOf(source)
     if (!frame || !card || !surface || !viewport || !scroll || !background) return null
+    const cardStyle = readStyle(source)
+    const corners = ['borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomRightRadius', 'borderBottomLeftRadius'].map(key => {
+      const values = String(cardStyle[key] || cardStyle.borderRadius || '22px').trim().split(/\s+/)
+      const radius = (value, length) => value.endsWith('%') ? parseFloat(value) * length / 100 : parseFloat(value)
+      return [radius(values[0], card.width) || 0, radius(values[1] || values[0], card.height) || 0]
+    })
     const shared = {}
     for (const key of Object.keys(sharedSelectors)) {
       const fromNode = source.querySelector(sourceSelectors[key]), targetNode = targets[key], ghost = ghosts[key]
@@ -68,24 +73,22 @@ export function createBookMorph(options) {
       shared[key] = { from, to, scale:(parseFloat(fromStyle.fontSize) || 13) / (parseFloat(toStyle.fontSize) || 13) }
       // Fixed final layout: no width, height or font writes occur in RAF.
       ghost.style.width = `${to.width}px`; ghost.style.height = `${to.height}px`
+      if (key === 'cover') ghost.style.setProperty('--cover-width', `${to.width}px`)
       ghost.style.fontSize = toStyle.fontSize; ghost.style.fontWeight = toStyle.fontWeight
       ghost.style.lineHeight = toStyle.lineHeight; ghost.style.color = toStyle.color
     }
-    const targetLetter = host.querySelector('.large-letter'), sourceLetter = source.querySelector('.cover-letter')
-    if (letter && targetLetter && sourceLetter) {
-      const font = readStyle(targetLetter).fontSize
-      letter.style.fontSize = font
-      shared.cover.letterScale = (parseFloat(readStyle(sourceLetter).fontSize) || 64) / (parseFloat(font) || 86)
-    }
-    const targetSpine = rectOf(host.querySelector('.large-spine')), sourceSpine = rectOf(source.querySelector('.book-spine'))
-    if (spine && targetSpine && sourceSpine) {
-      spine.style.width = `${targetSpine.width}px`
-      shared.cover.spineScale = sourceSpine.width / targetSpine.width
-    }
-    return { frame, card, shared }
+    return { frame, card, shared, corners }
   }
   function snapshot() {
     try { return measureSnapshot() } catch (_) { return null }
+  }
+  function roundCard(sx = 1, sy = 1) {
+    // FLIP scales the card differently on each axis. Counter-scale its corner
+    // radii so the visible corners remain the source card's circular shape,
+    // including the fully opened and reversed states.
+    const corners = geometry?.corners || Array.from({ length:4 }, () => [22, 22])
+    const radius = `${corners.map(([x]) => `${x / sx}px`).join(' ')} / ${corners.map(([, y]) => `${y / sy}px`).join(' ')}`
+    for (const node of [surface, viewport]) if (node) node.style.borderRadius = radius
   }
   function draw(progress) {
     if (disposed || !geometry) return
@@ -94,6 +97,7 @@ export function createBookMorph(options) {
     const x = (card.left - frame.left) * (1 - p), y = (card.top - frame.top) * (1 - p)
     const transform = `translate3d(${x}px,${y}px,0) scale(${sx},${sy})`
     surface.style.transform = transform; viewport.style.transform = transform
+    roundCard(sx, sy)
     // Counter-transform the fixed-size content. Only the visible rectangle
     // expands; typography and hit targets retain their natural layout.
     scroll.style.transform = `translate3d(${-x / sx}px,${-y / sy}px,0) scale(${1 / sx},${1 / sy})`
@@ -105,28 +109,23 @@ export function createBookMorph(options) {
       const { from, to, scale } = shared[key]
       const left = mix(from.left, to.left, p) - frame.left, top = mix(from.top, to.top, p) - frame.top
       const xScale = key === 'cover' ? mix(from.width / to.width, 1, p) : mix(scale, 1, p)
-      const yScale = key === 'cover' ? mix(from.height / to.height, 1, p) : xScale
-      ghosts[key].style.transform = `translate3d(${left}px,${top}px,0) scale(${xScale},${yScale})`
+      // All three covers use one aspect ratio and crop; a uniform transform
+      // preserves the same image, letter, spine, shadow and rounded corners.
+      ghosts[key].style.transform = `translate3d(${left}px,${top}px,0) scale(${xScale},${xScale})`
       ghosts[key].style.opacity = 1
-      if (key === 'cover') {
-        if (letter && shared.cover.letterScale) {
-          const scale = mix(shared.cover.letterScale, 1, p)
-          letter.style.transform = `scale(${scale / xScale},${scale / yScale})`
-        }
-        if (spine && shared.cover.spineScale) spine.style.transform = `scaleX(${mix(shared.cover.spineScale, 1, p) / xScale})`
-      }
     }
   }
   function completeClose() {
     interaction(false)
     if (source) source.style.opacity = ''
+    host.style.visibility = 'hidden'
     promote(false); setPhase('closed'); options.onClosed?.()
   }
   function finish(target) {
     if (disposed || dismissing) return
     if (target === 0) { completeClose(); return }
     for (const node of [surface, viewport, scroll]) if (node) node.style.transform = 'none'
-    for (const node of [surface, viewport]) if (node) node.style.borderRadius = '0px'
+    roundCard()
     for (const ghost of Object.values(ghosts)) if (ghost) ghost.style.opacity = 0
     for (const node of rest) { node.style.opacity = 1; node.style.transform = 'none' }
     showTargets(true); interaction(true, true); promote(false); setPhase('ready')
@@ -135,6 +134,8 @@ export function createBookMorph(options) {
 
   function fallback() {
     host.style.opacity = 1
+    host.style.visibility = 'visible'
+    roundCard()
     for (const node of [surface, viewport, scroll]) if (node) node.style.transform = 'none'
     if (background) background.style.opacity = 1
     for (const node of rest) { node.style.opacity = 1; node.style.transform = 'none' }
@@ -198,7 +199,7 @@ export function createBookMorph(options) {
         return
       }
       host.style.opacity = 1
-      for (const node of [surface, viewport]) node.style.borderRadius = '22px'
+      host.style.visibility = 'visible'
       showTargets(false); promote(true)
       draw(state.progress)
       if (source) source.style.opacity = '0'
