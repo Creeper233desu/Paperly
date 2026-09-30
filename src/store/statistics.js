@@ -22,6 +22,9 @@ export function useStatistics() {
   return state
 }
 export function reloadStatistics() { loaded = false; state.days = {}; useStatistics() }
+// A visible panel owns its snapshot. Ledger writes continue to persist while
+// that panel is hidden, without changing its last displayed values.
+export function snapshotStatistics() { return JSON.parse(JSON.stringify(useStatistics().days)) }
 
 export function recordWordDelta(bookId, bookTitle, articleId, articleTitle, delta, date = new Date()) {
   if (!Number.isFinite(delta) || delta === 0) return

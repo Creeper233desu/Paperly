@@ -1,12 +1,12 @@
 <template>
-  <view class="home-shell" :class="themeClass()"><view class="home-panel" :class="{ active: tabIndex === 0 }" :style="panelStyle(0)"><view class="screen" :class="themeClass()"><view class="page-wrap">
+  <view class="home-shell" :class="themeClass()"><view class="home-panel" :class="{ active: tabIndex === 0 }" :style="panelStyle(0)"><view class="screen" :class="themeClass()"><view class="page-wrap" :class="{ 'shelf-entering': libraryEntering }">
     <view class="topbar"><view class="brand"><image class="brand-mark" src="/static/brand/app-icon.png" mode="aspectFill" /><text>{{ $t('纸间') }}</text></view><view class="top-actions"><text class="top-note">{{ $t('专注于你正在写的故事') }}</text><view class="import-trigger" :class="{ busy: importBusy }" @tap="!importBusy && (showImportOptions = true)"><UiIcon name="download" /><text>{{ $t('导入书籍') }}</text></view><view class="round-action" :aria-label="$t('新建书籍')" @tap="openCreate"><UiIcon name="plus" /></view></view></view>
     <view v-if="!books.length" class="hero"><view class="hero-copy"><view class="hero-kicker">{{ $t('简洁优雅的写作空间') }}</view><view class="page-title">{{ $t('叙事始于此刻。') }}</view><view class="subtle">{{ $t('整理章节，沉浸写作，让每本书都有自己的模样。') }}</view><view class="hero-button" @tap="openCreate">{{ $t('＋　新建书籍') }}</view><view class="hero-import" @tap="showImportOptions = true">{{ $t('导入已有文稿') }}</view></view><view class="hero-decoration"><view class="arc arc-a"></view><view class="arc arc-b"></view><text>{{ $t('写') }}</text></view></view>
     <view class="section-head"><view><view class="section-title">{{ $t('我的书架') }} <text class="book-count">{{ books.length }}</text></view><view class="subtle">{{ $t('长按或点击更多可管理书籍') }}</view></view><view class="sort-note">{{ $t('最近编辑') }}</view></view>
     <view v-if="!books.length" class="empty card">{{ $t('书架还没有书。点击“新建书籍”，写下第一章。') }}</view>
-    <view class="book-grid"><view v-for="(book, index) in books" :key="book.id" class="book-card card" :class="{ 'new-book': freshId === book.id, removing: removingId === book.id }" @tap="openBook(book.id)" @longpress="openActions(book)"><view class="book-art" :class="'cover-' + index % 4"><image v-if="book.cover" :src="book.cover" mode="aspectFill" class="cover-image" /><view v-else class="cover-letter">{{ book.title.slice(0, 1) }}</view><view class="book-spine"></view></view><view class="book-info"><view class="book-title-row"><view class="book-title">{{ book.title }}</view><MoreIcon class="more-button" @tap.stop="openActions(book)" /></view><view class="book-author">{{ book.author || $t('未设置作者') }}</view><view class="book-description">{{ book.description || (book.readOnly ? $t('旧版导入文件，可转换为可编辑书籍。') : $t('打开这本书，继续写下去。')) }}</view><view class="book-meta"><text>{{ bookMeta(book) }}</text><text>{{ formatDate(book.updatedAt) }}</text></view></view></view></view>
+    <view class="book-grid"><view v-for="(book, index) in books" :key="book.id" class="book-slot" :style="{ '--entry-delay': `${Math.min(index, 7) * 35}ms` }"><view class="book-card card" :class="{ 'new-book': freshId === book.id, removing: removingId === book.id }" @tap="openBook(book.id)" @longpress="openActions(book)"><view class="book-art" :class="'cover-' + index % 4"><image v-if="book.cover" :src="book.cover" mode="aspectFill" class="cover-image" /><view v-else class="cover-letter">{{ book.title.slice(0, 1) }}</view><view class="book-spine"></view></view><view class="book-info"><view class="book-title-row"><view class="book-title">{{ book.title }}</view><MoreIcon class="more-button" @tap.stop="openActions(book)" /></view><view class="book-author">{{ book.author || $t('未设置作者') }}</view><view class="book-description">{{ book.description || (book.readOnly ? $t('旧版导入文件，可转换为可编辑书籍。') : $t('打开这本书，继续写下去。')) }}</view><view class="book-meta"><text>{{ bookMeta(book) }}</text><text>{{ formatDate(book.updatedAt) }}</text></view></view></view></view></view>
   </view></view></view>
-  <view class="home-panel" :class="{ active: tabIndex === 1 }" :style="panelStyle(1)"><StatisticsPanel :active="tabIndex === 1" /></view>
+  <view class="home-panel" :class="{ active: tabIndex === 1 }" :style="panelStyle(1)"><StatisticsPanel :active="pageVisible && tabIndex === 1" /></view>
   <view class="home-panel" :class="{ active: tabIndex === 2 }" :style="panelStyle(2)"><SettingsPanel :embedded="true" :active="tabIndex === 2" @modal-change="settingsModalOpen = $event" /></view>
   <AppNav />
   <DataDirectoryGate v-if="needsDataDirectory()" />
@@ -28,7 +28,8 @@
 
 <script setup>
 import { computed, reactive, ref } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onHide, onLoad, onShow } from '@dcloudio/uni-app'
+import { usePanelEntrance } from '../../src/composables/use-panel-entrance.js'
 import { useLibrary, addBook, importBook, updateBook, deleteBook } from '../../src/store/library'
 import { PRIMARY_TABS, primaryNavigation } from '../../src/store/navigation'
 import { displayDate, themeClass } from '../../src/store/preferences'
@@ -51,8 +52,12 @@ import UiIcon from '../../components/UiIcon.vue'
 import { t } from '../../src/i18n.js'
 
 const store = useLibrary()
+const pageVisible = ref(false)
+onShow(() => { pageVisible.value = true })
+onHide(() => { pageVisible.value = false })
 onLoad(options => { if (PRIMARY_TABS.includes(options?.tab)) primaryNavigation.active = options.tab })
 const tabIndex = computed(() => Math.max(0, PRIMARY_TABS.indexOf(primaryNavigation.active)))
+const libraryEntering = usePanelEntrance(() => pageVisible.value && tabIndex.value === 0)
 const settingsModalOpen = ref(false)
 const panelStyle = index => ({ '--panel-shift': `${(index - tabIndex.value) * 100}%`, zIndex: index === 2 && settingsModalOpen.value ? 20 : index === tabIndex.value ? 2 : 1, pointerEvents: index === tabIndex.value ? 'auto' : 'none' })
 const books = computed(() => store.books)
@@ -180,4 +185,16 @@ function cancelDelete() { showDelete.value = false; actionBook.value = null }
 @media(prefers-reduced-motion:reduce) { .import-option,.round-action { transition:none; }.import-progress view { animation:none; width:100%; opacity:.5; } }
 .import-footer { display:flex; align-items:center; justify-content:flex-end; gap:20px; font-size:13px; color:var(--muted); }.import-save { display:flex; align-items:center; gap:7px; border-radius:12px; padding:10px 17px; background:var(--accent); color:var(--surface); font-weight:600; transition:transform .18s ease; }.import-save:active { transform:scale(.97); }
 .book-meta { flex-wrap:wrap; row-gap:4px; }.book-meta text:last-child { white-space:normal; overflow:visible; overflow-wrap:anywhere; }
+.book-slot { min-width:0; }.book-slot>.book-card { height:100%; animation:none; }
+.book-slot>.book-card.new-book { animation:book-arrive .65s cubic-bezier(.2,.8,.2,1) both; }.book-slot>.book-card.removing { animation:book-leave .28s ease-in both; }
+.hero { animation:none; }
+.shelf-entering .topbar { animation:shelf-heading-in .7s cubic-bezier(.2,.75,.25,1) both; }
+.shelf-entering .section-head { animation:shelf-heading-in .72s cubic-bezier(.2,.75,.25,1) .075s both; }
+.shelf-entering .hero { animation:shelf-card-in .74s cubic-bezier(.2,.75,.25,1) .1s both; }
+.shelf-entering .hero-copy .page-title { animation:shelf-heading-in .72s cubic-bezier(.2,.75,.25,1) .12s both; }
+.shelf-entering .empty { animation:shelf-card-in .74s cubic-bezier(.2,.75,.25,1) .18s both; }
+.shelf-entering .book-slot { animation:shelf-card-in .74s cubic-bezier(.2,.75,.25,1) calc(.11s + var(--entry-delay,0ms)) both; }
+@keyframes shelf-heading-in { 0% { opacity:0; transform:translate3d(-18px,-10px,0); } 58% { opacity:1; transform:translate3d(2px,0,0); } 82% { transform:translate3d(-.6px,0,0); } 100% { opacity:1; transform:none; } }
+@keyframes shelf-card-in { 0% { opacity:0; transform:translate3d(0,30px,0) scale(.98); } 58% { opacity:1; transform:translate3d(0,-3px,0) scale(1.005); } 82% { transform:translate3d(0,1px,0); } 100% { opacity:1; transform:none; } }
+@media(prefers-reduced-motion:reduce) { .shelf-entering .topbar,.shelf-entering .section-head,.shelf-entering .hero,.shelf-entering .hero-copy .page-title,.shelf-entering .empty,.shelf-entering .book-slot,.book-slot>.book-card.new-book,.book-slot>.book-card.removing { animation:none; } }
 </style>

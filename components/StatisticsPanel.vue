@@ -1,39 +1,39 @@
 <template>
-  <view class="screen statistics-screen" :class="themeClass()">
+  <view class="screen statistics-screen" :class="[themeClass(), { 'stats-entering': entering }]">
     <view class="page-wrap">
-      <view class="stats-heading"><view><view class="stats-kicker">{{ $t('写作记录') }}</view><view class="page-title">{{ $t('每一个字，都有来处。') }}</view><view class="subtle">{{ $t('按实际净增减记录。删去文字或书籍，数字也会减少。') }}</view></view><view class="today-net" :class="{ negative: todayNet < 0 }"><text>{{ $t('今日净变化') }}</text><strong>{{ signed(todayNet) }}</strong><text>{{ $t('字') }}</text></view></view>
-      <view class="stats-summary"><view class="summary-card"><text>{{ $t('最近 7 天') }}</text><strong>{{ signed(recentNet) }}</strong><text>{{ $t('净字数') }}</text></view><view class="summary-card"><text>{{ $t('累计记录') }}</text><strong>{{ signed(totalNet) }}</strong><text>{{ $t('净字数') }}</text></view><view class="summary-card"><text>{{ $t('有记录的日子') }}</text><strong>{{ activeDays }}</strong><text>{{ $t('天') }}</text></view></view>
-      <view class="heat-card card"><view class="heat-head"><view><view class="section-title">{{ $t('每日码字热力图') }}</view><view class="subtle">{{ $t('颜色深浅表示当天净变化的绝对值；暖色表示减少。') }}</view></view><view class="heat-legend"><text>{{ $t('少') }}</text><view class="heat-cell positive level-1"></view><view class="heat-cell positive level-2"></view><view class="heat-cell positive level-3"></view><view class="heat-cell positive level-4"></view><text>{{ $t('多') }}</text></view></view><scroll-view scroll-x class="heat-scroll" :scroll-left="heatScrollLeft"><view class="heat-layout"><view class="weekday-labels"><text>{{ $t('一') }}</text><text>{{ $t('三') }}</text><text>{{ $t('五') }}</text><text>{{ $t('日') }}</text></view><view class="weeks"><view v-for="(week, wi) in weeks" :key="wi" class="week"><view v-for="day in week" :key="day.key" class="heat-cell" :class="[heatClass(day.net), { selected: selectedDay === day.key, future: day.future }]" @tap="!day.future && (selectedDay = day.key)"></view></view></view></view></scroll-view><view class="heat-foot"><text>{{ $t('过去约半年') }}</text><view><view class="heat-cell negative level-2"></view><text>{{ $t('净减少') }}</text></view></view></view>
-      <view class="source-card card"><view class="source-title"><view><view class="section-title">{{ readableDay(selectedDay) }}</view><view class="subtle">{{ selectedDay === todayKey ? $t('今天') : $t('当天') }}{{ $t('净变化与书籍来源') }}</view></view><strong :class="{ negative: selectedNet < 0 }">{{ signed(selectedNet) }} {{ $t('字') }}</strong></view><view v-if="!sources.length" class="no-source">{{ $t('这一天还没有字数变化。开始写作后，这里会按书籍显示来源。') }}</view><view v-for="source in sources" :key="source.id" class="source-row"><view class="source-marker">{{ source.title.slice(0, 1) }}</view><view class="source-info"><view>{{ source.title }}</view><text>{{ articleSummary(source) }}</text></view><strong :class="{ negative: source.net < 0 }">{{ signed(source.net) }}</strong></view></view>
+      <view class="stats-heading"><view class="stats-heading-copy"><view class="stats-kicker">{{ $t('写作记录') }}</view><view class="page-title">{{ $t('每一个字，都有来处。') }}</view><view class="subtle">{{ $t('按实际净增减记录。删去文字或书籍，数字也会减少。') }}</view></view><view class="today-net" :class="{ negative: todayNet < 0 }"><text>{{ $t('今日净变化') }}</text><strong><RollingNumber :value="todayNet" signed :active="active" /></strong><text>{{ $t('字') }}</text></view></view>
+      <view class="stats-summary"><view class="summary-card"><text>{{ $t('最近 7 天') }}</text><strong><RollingNumber :value="recentNet" signed :active="active" /></strong><text>{{ $t('净字数') }}</text></view><view class="summary-card"><text>{{ $t('累计记录') }}</text><strong><RollingNumber :value="totalNet" signed :active="active" /></strong><text>{{ $t('净字数') }}</text></view><view class="summary-card"><text>{{ $t('有记录的日子') }}</text><strong><RollingNumber :value="activeDays" :active="active" /></strong><text>{{ $t('天') }}</text></view></view>
+      <view class="heat-card card"><view class="heat-head"><view><view class="section-title">{{ $t('每日码字热力图') }}</view><view class="subtle">{{ $t('颜色深浅表示当天净变化的绝对值；暖色表示减少。') }}</view></view><view class="heat-legend"><text>{{ $t('少') }}</text><view class="heat-cell positive level-1"></view><view class="heat-cell positive level-2"></view><view class="heat-cell positive level-3"></view><view class="heat-cell positive level-4"></view><text>{{ $t('多') }}</text></view></view><scroll-view scroll-x class="heat-scroll" :scroll-left="heatScrollLeft"><view class="heat-layout"><view class="weekday-labels"><text>{{ $t('一') }}</text><text>{{ $t('三') }}</text><text>{{ $t('五') }}</text><text>{{ $t('日') }}</text></view><view class="weeks"><view v-for="(week, wi) in weeks" :key="wi" class="week"><view v-for="(day, di) in week" :key="day.key" class="heat-cell" :class="[heatClass(day.net), { selected: selectedDay === day.key, future: day.future, changed: changedDays.has(day.key) }]" :style="{ '--heat-delay': `${Math.min(26 - wi, 6) * 18 + di * 5}ms` }" @tap="!day.future && (selectedDay = day.key)"></view></view></view></view></scroll-view><view class="heat-foot"><text>{{ $t('过去约半年') }}</text><view><view class="heat-cell negative level-2"></view><text>{{ $t('净减少') }}</text></view></view></view>
+      <view class="source-card card"><view class="source-title"><view><view class="section-title">{{ readableDay(selectedDay) }}</view><view class="subtle">{{ selectedDay === todayKey ? $t('今天') : $t('当天') }}{{ $t('净变化与书籍来源') }}</view></view><strong :class="{ negative: selectedNet < 0 }"><RollingNumber :value="selectedNet" signed :active="active" /> {{ $t('字') }}</strong></view><view v-if="!sources.length" class="no-source">{{ $t('这一天还没有字数变化。开始写作后，这里会按书籍显示来源。') }}</view><view v-for="source in sources" :key="source.id" class="source-row"><view class="source-marker">{{ source.title.slice(0, 1) }}</view><view class="source-info"><view>{{ source.title }}</view><text>{{ articleSummary(source) }}</text></view><strong :class="{ negative: source.net < 0 }"><RollingNumber :value="source.net" signed :active="active" /></strong></view></view>
     </view>
   </view>
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, ref, shallowRef, watch } from 'vue'
 import { displayDate, themeClass } from '../src/store/preferences'
-import { dayBookSources, localDayKey, useStatistics } from '../src/store/statistics'
+import { dayBookSources, localDayKey, snapshotStatistics } from '../src/store/statistics'
+import { usePanelEntrance } from '../src/composables/use-panel-entrance.js'
+import RollingNumber from './RollingNumber.vue'
 import { t } from '../src/i18n.js'
 
-const statistics = useStatistics()
 const props = defineProps({ active: { type:Boolean, default:true } })
+const entering = usePanelEntrance(() => props.active)
+const visibleDays = shallowRef({}), changedDays = shallowRef(new Set())
 const heatScrollLeft = ref(0)
 let scrollRevision = 0
-function showLatest() { nextTick(() => { heatScrollLeft.value = 1000000 + ++scrollRevision }) }
-onMounted(showLatest)
-watch(() => props.active, active => { if (active) showLatest() })
-const today = new Date()
-today.setHours(0, 0, 0, 0)
-const todayKey = localDayKey(today)
-const selectedDay = ref(todayKey)
+function showLatest() { nextTick(() => { if (props.active) heatScrollLeft.value = 1000000 + ++scrollRevision }) }
+const today = ref(new Date())
+const todayKey = computed(() => localDayKey(today.value))
+const selectedDay = ref(todayKey.value)
 const signed = value => value > 0 ? `+${value}` : String(value || 0)
 const readableDay = key => displayDate(key)
-const todayNet = computed(() => statistics.days[todayKey]?.net || 0)
-const selectedNet = computed(() => statistics.days[selectedDay.value]?.net || 0)
-const totalNet = computed(() => Object.values(statistics.days).reduce((sum, day) => sum + day.net, 0))
-const activeDays = computed(() => Object.values(statistics.days).filter(day => Object.keys(day.books || {}).length).length)
-const recentNet = computed(() => Array.from({ length: 7 }, (_, i) => { const date = new Date(today); date.setDate(today.getDate() - i); return statistics.days[localDayKey(date)]?.net || 0 }).reduce((sum, value) => sum + value, 0))
-const sources = computed(() => dayBookSources(statistics.days[selectedDay.value]))
+const todayNet = computed(() => visibleDays.value[todayKey.value]?.net || 0)
+const selectedNet = computed(() => visibleDays.value[selectedDay.value]?.net || 0)
+const totalNet = computed(() => Object.values(visibleDays.value).reduce((sum, day) => sum + day.net, 0))
+const activeDays = computed(() => Object.values(visibleDays.value).filter(day => Object.keys(day.books || {}).length).length)
+const recentNet = computed(() => Array.from({ length: 7 }, (_, i) => { const date = new Date(today.value); date.setDate(today.value.getDate() - i); return visibleDays.value[localDayKey(date)]?.net || 0 }).reduce((sum, value) => sum + value, 0))
+const sources = computed(() => dayBookSources(visibleDays.value[selectedDay.value]))
 const articleSummary = source => Object.values(source.articles || {}).filter(item => item.net !== 0).map(item => `${item.title} ${signed(item.net)}`).join(' · ') || t('增减相抵')
 const heatClass = net => {
   if (!net) return ''
@@ -41,16 +41,26 @@ const heatClass = net => {
   return `${net < 0 ? 'negative' : 'positive'} level-${absolute < 30 ? 1 : absolute < 100 ? 2 : absolute < 300 ? 3 : 4}`
 }
 const weeks = computed(() => {
-  const start = new Date(today)
-  start.setDate(today.getDate() - 181)
+  const start = new Date(today.value)
+  start.setDate(today.value.getDate() - 181)
   start.setDate(start.getDate() - (start.getDay() + 6) % 7)
   return Array.from({ length: 27 }, (_, wi) => Array.from({ length: 7 }, (_, di) => {
     const date = new Date(start)
     date.setDate(start.getDate() + wi * 7 + di)
     const key = localDayKey(date)
-    return { key, net: statistics.days[key]?.net || 0, future: date > today }
+    return { key, net: visibleDays.value[key]?.net || 0, future: date > today.value }
   }))
 })
+function refresh() {
+  const previousToday = todayKey.value
+  const now = new Date(); now.setHours(0, 0, 0, 0); today.value = now
+  if (selectedDay.value === previousToday) selectedDay.value = todayKey.value
+  const next = snapshotStatistics(), previous = visibleDays.value
+  changedDays.value = new Set([...new Set([...Object.keys(previous), ...Object.keys(next)])].filter(key => (previous[key]?.net || 0) !== (next[key]?.net || 0)))
+  visibleDays.value = next
+  showLatest()
+}
+watch(() => props.active, active => { if (active) refresh() }, { immediate:true, flush:'sync' })
 </script>
 
 <style scoped>
@@ -65,4 +75,19 @@ const weeks = computed(() => {
 .source-title strong { color: var(--accent); font-size: 25px; white-space: nowrap; }.source-title strong.negative, .source-row strong.negative { color: var(--danger); }.no-source { padding: 44px 10px 24px; color: var(--muted); font-size: 13px; text-align: center; line-height: 1.7; }.source-row { display: flex; align-items: center; gap: 14px; padding: 16px 0; border-top: 1px solid var(--line); }.source-row:first-of-type { margin-top: 18px; }.source-marker { width: 37px; height: 43px; border-radius: 4px 9px 9px 4px; background: var(--accent-soft); color: var(--accent); display: flex; align-items: center; justify-content: center; font-family: serif; font-size: 18px; }.source-info { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; }.source-info text { display: block; color: var(--muted); font-size: 11px; font-weight: 400; margin-top: 5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }.source-row strong { color: var(--accent); font-size: 17px; }
 @media (max-width: 600px) { .stats-heading { display: block; margin-top: 14px; }.today-net { margin-top: 22px; width: 100%; flex-direction: row; align-items: baseline; gap: 9px; }.today-net strong { margin-left: auto; font-size: 30px; }.stats-summary { gap: 7px; }.summary-card { padding: 13px; }.summary-card strong { font-size: 20px; }.heat-card, .source-card { padding: 21px 18px; }.heat-legend { display: none; }.heat-cell { flex-basis: 12px; width: 12px; height: 12px; }.weeks, .week { gap: 4px; } }
 @media (prefers-reduced-motion: reduce) { .heat-cell { transition: none; } }
+.stats-entering .stats-kicker { animation:stats-title-in .68s cubic-bezier(.2,.75,.25,1) both; }
+.stats-entering .stats-heading-copy .page-title { animation:stats-title-in .72s cubic-bezier(.2,.75,.25,1) .055s both; }
+.stats-entering .stats-heading-copy .subtle { animation:stats-title-in .72s cubic-bezier(.2,.75,.25,1) .11s both; }
+.stats-entering .today-net { animation:stats-card-in .72s cubic-bezier(.2,.75,.25,1) .12s both; }
+.stats-entering .summary-card { animation:stats-card-in .72s cubic-bezier(.2,.75,.25,1) .17s both; }
+.stats-entering .summary-card:nth-child(2) { animation-delay:.205s; }.stats-entering .summary-card:nth-child(3) { animation-delay:.24s; }
+.stats-entering .heat-card { animation:stats-card-in .76s cubic-bezier(.2,.75,.25,1) .2s both; }
+.stats-entering .source-card { animation:stats-card-in .76s cubic-bezier(.2,.75,.25,1) .28s both; }
+.heat-cell { transition:background-color .62s cubic-bezier(.18,.8,.22,1),transform .18s ease,box-shadow .18s ease; transition-delay:var(--heat-delay,0ms),0ms,0ms; }
+.stats-entering .heat-cell.changed { animation:heat-renew .58s cubic-bezier(.18,.8,.22,1) calc(.26s + var(--heat-delay,0ms)) both; }
+.source-title strong,.source-row strong,.summary-card strong,.today-net strong { transition:color .4s ease; }
+@keyframes stats-title-in { 0% { opacity:0; transform:translate3d(-22px,-12px,0); } 58% { opacity:1; transform:translate3d(2px,1px,0); } 80% { transform:translate3d(-.7px,0,0); } 100% { opacity:1; transform:none; } }
+@keyframes stats-card-in { 0% { opacity:0; transform:translate3d(0,36px,0) scale(.978); } 58% { opacity:1; transform:translate3d(0,-3px,0) scale(1.004); } 80% { transform:translate3d(0,1px,0); } 100% { opacity:1; transform:none; } }
+@keyframes heat-renew { 0% { transform:scale(.72); } 54% { transform:scale(1.14); } 78% { transform:scale(.97); } 100% { transform:scale(1); } }
+@media(prefers-reduced-motion:reduce) { .stats-entering .stats-kicker,.stats-entering .stats-heading-copy .page-title,.stats-entering .stats-heading-copy .subtle,.stats-entering .today-net,.stats-entering .summary-card,.stats-entering .heat-card,.stats-entering .source-card,.stats-entering .heat-cell.changed { animation:none; }.heat-cell,.source-title strong,.source-row strong,.summary-card strong,.today-net strong { transition:none; } }
 </style>
