@@ -1,4 +1,5 @@
 import { TEXT_TOOLS } from './assistant.js'
+import { hasReasoning, modelInfo, normalizeModelInfo, selectedEffort } from './model-capabilities.js'
 
 export const AI_PROVIDERS = [
   { id: 'openai', name: 'OpenAI', baseUrl: 'https://api.openai.com/v1' },
@@ -27,33 +28,37 @@ function requestModelPage(url, header) {
     fail: error => reject(new Error(error?.errMsg || '无法连接模型服务'))
   }))
 }
-export async function fetchProviderModels(profile) {
+export async function fetchProviderCatalog(profile) {
   const base = `${providerBase(profile)}/models`, header = providerHeaders(profile)
   const all = []
   let cursor = ''
   for (let page = 0; page < 10; page++) {
     const url = profile.provider === 'anthropic' ? `${base}?limit=1000${cursor ? `&after_id=${encodeURIComponent(cursor)}` : ''}` : base
     const result = await requestModelPage(url, header)
-    all.push(...(result?.data || []).map(item => item.id).filter(Boolean))
+    all.push(...(result?.data || []).filter(item => typeof item.id === 'string'))
     if (profile.provider !== 'anthropic' || !result?.has_more || !result?.last_id) break
     cursor = result.last_id
   }
-  const models = [...new Set(all)].sort((a, b) => a.localeCompare(b))
+  const modelDetails = Object.fromEntries(all.map(item => [item.id, normalizeModelInfo(item)]))
+  const models = Object.keys(modelDetails).sort((a, b) => a.localeCompare(b))
   if (!models.length) throw new Error('连接成功，但没有取得可用模型')
-  return models
+  return { models, modelDetails }
+}
+
+export async function fetchProviderModels(profile) { return (await fetchProviderCatalog(profile)).models }
+export async function fetchModelInfo(profile) {
+  const raw = await requestModelPage(`${providerBase(profile)}/models/${encodeURIComponent(profile.model)}`, providerHeaders(profile))
+  return normalizeModelInfo(raw?.data?.id ? raw.data : raw)
 }
 
 export function supportsReasoning(profile) {
-  if (!profile?.model) return false
-  if (profile.provider === 'openai') return /^(o[1-9]|gpt-5|gpt-6)/i.test(profile.model)
-  if (profile.provider === 'anthropic') return /claude-(opus|sonnet|haiku)-(?:4[-.]([6-9]|[1-9][0-9])|[5-9])/i.test(profile.model)
-  if (profile.provider === 'deepseek') return true
-  return false
+  return hasReasoning(profile)
 }
 
 export function buildChatRequest(profile, system, messages) {
   if (!profile?.model) throw new Error('请先从已获取的模型列表中选择模型')
   const headers = providerHeaders(profile)
+  const effort = selectedEffort(profile)
   if (profile.provider === 'openai' && /^(gpt-[56]|o[1-9])/i.test(profile.model)) {
     const data = {
       model: profile.model, stream: true, store: false, instructions: system,
@@ -61,7 +66,7 @@ export function buildChatRequest(profile, system, messages) {
       tools: TEXT_TOOLS.map(item => ({ type: 'function', name: item.function.name, description: item.function.description, parameters: item.function.parameters, strict: false })),
       tool_choice: 'auto'
     }
-    if (supportsReasoning(profile)) data.reasoning = { summary: 'auto', ...(profile.effort !== 'auto' ? { effort: profile.effort } : {}) }
+    if (supportsReasoning(profile)) data.reasoning = { summary: 'auto', ...(effort !== 'auto' ? { effort } : {}) }
     return { url: `${providerBase(profile)}/responses`, headers, data, provider: 'openai-responses' }
   }
   if (profile.provider === 'anthropic') {
@@ -71,8 +76,10 @@ export function buildChatRequest(profile, system, messages) {
       tools: TEXT_TOOLS.map(item => ({ name: item.function.name, description: item.function.description, input_schema: item.function.parameters }))
     }
     if (supportsReasoning(profile)) {
-      data.thinking = { type: 'adaptive' }
-      if (profile.effort !== 'auto') data.output_config = { effort: profile.effort }
+      const info = modelInfo(profile)
+      if (!info?.thinkingModes || info.thinkingModes.includes('adaptive')) data.thinking = { type: 'adaptive' }
+      else if (info.thinkingModes.includes('enabled')) data.thinking = { type: 'enabled', budget_tokens: 2048 }
+      if (effort !== 'auto') data.output_config = { effort }
     }
     return { url: `${providerBase(profile)}/messages`, headers, data, provider: 'anthropic' }
   }
@@ -83,10 +90,10 @@ export function buildChatRequest(profile, system, messages) {
   }
   if (supportsReasoning(profile)) {
     if (profile.provider === 'deepseek') {
-      data.thinking = { type: 'enabled' }
-      if (['high', 'max'].includes(profile.effort)) data.reasoning_effort = profile.effort
+      data.thinking = { type: effort === 'none' ? 'disabled' : 'enabled' }
+      if (effort !== 'auto' && effort !== 'none') data.reasoning_effort = effort
     }
-    else if (profile.effort !== 'auto') data.reasoning_effort = profile.effort
+    else if (effort !== 'auto') data.reasoning_effort = effort
   }
   return { url: `${providerBase(profile)}/chat/completions`, headers, data, provider: profile.provider }
 }

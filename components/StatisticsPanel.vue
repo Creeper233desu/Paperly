@@ -3,19 +3,25 @@
     <view class="page-wrap">
       <view class="stats-heading"><view><view class="stats-kicker">{{ $t('写作记录') }}</view><view class="page-title">{{ $t('每一个字，都有来处。') }}</view><view class="subtle">{{ $t('按实际净增减记录。删去文字或书籍，数字也会减少。') }}</view></view><view class="today-net" :class="{ negative: todayNet < 0 }"><text>{{ $t('今日净变化') }}</text><strong>{{ signed(todayNet) }}</strong><text>{{ $t('字') }}</text></view></view>
       <view class="stats-summary"><view class="summary-card"><text>{{ $t('最近 7 天') }}</text><strong>{{ signed(recentNet) }}</strong><text>{{ $t('净字数') }}</text></view><view class="summary-card"><text>{{ $t('累计记录') }}</text><strong>{{ signed(totalNet) }}</strong><text>{{ $t('净字数') }}</text></view><view class="summary-card"><text>{{ $t('有记录的日子') }}</text><strong>{{ activeDays }}</strong><text>{{ $t('天') }}</text></view></view>
-      <view class="heat-card card"><view class="heat-head"><view><view class="section-title">{{ $t('每日码字热力图') }}</view><view class="subtle">{{ $t('颜色深浅表示当天净变化的绝对值；暖色表示减少。') }}</view></view><view class="heat-legend"><text>{{ $t('少') }}</text><view class="heat-cell positive level-1"></view><view class="heat-cell positive level-2"></view><view class="heat-cell positive level-3"></view><view class="heat-cell positive level-4"></view><text>{{ $t('多') }}</text></view></view><scroll-view scroll-x class="heat-scroll"><view class="heat-layout"><view class="weekday-labels"><text>{{ $t('一') }}</text><text>{{ $t('三') }}</text><text>{{ $t('五') }}</text><text>{{ $t('日') }}</text></view><view class="weeks"><view v-for="(week, wi) in weeks" :key="wi" class="week"><view v-for="day in week" :key="day.key" class="heat-cell" :class="[heatClass(day.net), { selected: selectedDay === day.key, future: day.future }]" @tap="!day.future && (selectedDay = day.key)"></view></view></view></view></scroll-view><view class="heat-foot"><text>{{ $t('过去约半年') }}</text><view><view class="heat-cell negative level-2"></view><text>{{ $t('净减少') }}</text></view></view></view>
+      <view class="heat-card card"><view class="heat-head"><view><view class="section-title">{{ $t('每日码字热力图') }}</view><view class="subtle">{{ $t('颜色深浅表示当天净变化的绝对值；暖色表示减少。') }}</view></view><view class="heat-legend"><text>{{ $t('少') }}</text><view class="heat-cell positive level-1"></view><view class="heat-cell positive level-2"></view><view class="heat-cell positive level-3"></view><view class="heat-cell positive level-4"></view><text>{{ $t('多') }}</text></view></view><scroll-view scroll-x class="heat-scroll" :scroll-left="heatScrollLeft"><view class="heat-layout"><view class="weekday-labels"><text>{{ $t('一') }}</text><text>{{ $t('三') }}</text><text>{{ $t('五') }}</text><text>{{ $t('日') }}</text></view><view class="weeks"><view v-for="(week, wi) in weeks" :key="wi" class="week"><view v-for="day in week" :key="day.key" class="heat-cell" :class="[heatClass(day.net), { selected: selectedDay === day.key, future: day.future }]" @tap="!day.future && (selectedDay = day.key)"></view></view></view></view></scroll-view><view class="heat-foot"><text>{{ $t('过去约半年') }}</text><view><view class="heat-cell negative level-2"></view><text>{{ $t('净减少') }}</text></view></view></view>
       <view class="source-card card"><view class="source-title"><view><view class="section-title">{{ readableDay(selectedDay) }}</view><view class="subtle">{{ selectedDay === todayKey ? $t('今天') : $t('当天') }}{{ $t('净变化与书籍来源') }}</view></view><strong :class="{ negative: selectedNet < 0 }">{{ signed(selectedNet) }} {{ $t('字') }}</strong></view><view v-if="!sources.length" class="no-source">{{ $t('这一天还没有字数变化。开始写作后，这里会按书籍显示来源。') }}</view><view v-for="source in sources" :key="source.id" class="source-row"><view class="source-marker">{{ source.title.slice(0, 1) }}</view><view class="source-info"><view>{{ source.title }}</view><text>{{ articleSummary(source) }}</text></view><strong :class="{ negative: source.net < 0 }">{{ signed(source.net) }}</strong></view></view>
     </view>
   </view>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { themeClass } from '../src/store/preferences'
 import { dayBookSources, localDayKey, useStatistics } from '../src/store/statistics'
 import { t, localeTag } from '../src/i18n.js'
 
 const statistics = useStatistics()
+const props = defineProps({ active: { type:Boolean, default:true } })
+const heatScrollLeft = ref(0)
+let scrollRevision = 0
+function showLatest() { nextTick(() => { heatScrollLeft.value = 1000000 + ++scrollRevision }) }
+onMounted(showLatest)
+watch(() => props.active, active => { if (active) showLatest() })
 const today = new Date()
 today.setHours(0, 0, 0, 0)
 const todayKey = localDayKey(today)

@@ -1,4 +1,12 @@
 export const extraEnglish = {
+  '写下你的下一句。':'Write your next sentence.', '这篇正文没有文字':'This article has no text',
+  '不思考':'No reasoning', '最低':'Minimal', '极高':'Extra high',
+  '正在获取模型能力…':'Fetching model capabilities…',
+  'API 未返回思考选项。可按服务商说明手动选择，默认不传入强度。':'The API did not return effort options. Choose manually using the provider’s documentation; Auto omits the effort parameter.',
+  '思考选项来自模型 API':'Effort options provided by the model API',
+  '模型未提供可调节的思考强度':'This model does not offer adjustable effort',
+  '来自模型 API':'From the model API',
+  'API 未返回上下文窗口，请按服务商说明手动填写；留空仅显示预估用量。':'The API did not return a context window. Enter the provider’s published limit; leave blank to show estimated usage only.',
   '包含图片':'Contains image', '还没有正文':'No article text yet', '请输入章节名':'Enter a chapter title', '请输入书名':'Enter a book title',
   '导出 PDF':'Export PDF', 'PDF 已保存在 Documents/PaperWriter/exports 中。':'PDF saved to Documents/PaperWriter/exports.',
   'PDF 已生成，但复制到数据目录失败：{error}':'PDF created, but could not be copied to the data folder: {error}',

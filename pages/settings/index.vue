@@ -11,7 +11,7 @@
         <view class="section-tile card" @tap="openPanel('fonts')"><view class="section-symbol font-symbol">Aa</view><text>{{ $t('文章字体') }}</text></view>
         <view class="section-tile card" @tap="openPanel('editing')"><view class="section-symbol editing-symbol"><view></view><view></view><view></view></view><text>{{ $t('编辑体验') }}</text></view>
         <view class="section-tile card" @tap="openPanel('ai')"><view class="section-symbol ai-symbol">✦</view><text>{{ $t('AI 写作助手') }}</text></view>
-        <view class="section-tile card" @tap="openPanel('app')"><view class="section-symbol app-symbol"><UiIcon name="gear" /></view><text>{{ $t('应用设置') }}</text></view>
+        <view class="section-tile card" @tap="openPanel('app')"><view class="section-symbol app-symbol"><view class="gear-glyph"><view class="gear-tooth t1"></view><view class="gear-tooth t2"></view><view class="gear-tooth t3"></view><view class="gear-tooth t4"></view><view class="gear-tooth t5"></view><view class="gear-tooth t6"></view><view class="gear-ring"></view><view class="gear-hole"></view></view></view><text>{{ $t('应用设置') }}</text></view>
       </view>
     </view></view>
     <AppNav v-if="!embedded" active="settings" />
@@ -35,7 +35,7 @@
             <view class="font-grid">
               <view v-for="item in fontChoices" :key="item.id" class="font-choice card" :class="{ selected: prefs.font === item.id }" @tap="chooseFont(item.id)" @longpress="item.custom && askRemove(item.id)">
                 <view class="font-sample" :style="{ fontFamily: fontFamilyFor(item.id) }">{{ $t('夕阳、某处，花火。') }}</view>
-                <view class="font-verse" :style="{ fontFamily: fontFamilyFor(item.id) }">{{ $t('写下属于你的下一句。') }}</view>
+                <view class="font-verse" :style="{ fontFamily: fontFamilyFor(item.id) }">{{ $t('写下你的下一句。') }}</view>
                 <view class="font-bottom"><text>{{ item.label }}</text><text v-if="item.custom" class="remove-font" @tap.stop="askRemove(item.id)">{{ $t('移除') }}</text><text v-else-if="prefs.font === item.id" class="selected-mark">✓</text></view>
                 <view v-if="fontPreviewErrors[item.id]" class="font-error">{{ $t('预览失败，点选重试') }}</view>
               </view>
@@ -62,12 +62,12 @@
           </view>
           <view v-if="activePanel === 'ai'" class="ai-settings">
             <view class="modal-intro">{{ $t('可以保存多组模型配置，在写作助手中随时切换。正文修改仍需由你确认。') }}</view>
-            <view class="saved-profiles"><view v-for="item in aiProfiles.profiles" :key="item.id" :class="{ selected: profileDraft.id === item.id }" @tap="editProfile(item)"><text>{{ item.name }}</text><small>{{ item.model || $t('未选择模型') }}</small></view><view class="add-profile" @tap="newProfile">{{ $t('＋ 新配置') }}</view></view>
-            <view class="ai-setting-card card"><view class="option-name">{{ $t('服务商') }}</view><view class="provider-options"><view v-for="item in AI_PROVIDERS" :key="item.id" :class="{ selected: profileDraft.provider === item.id }" @tap="chooseProvider(item.id)">{{ item.name }}</view></view><input class="field" :value="profileDraft.name" :placeholder="$t('配置名称')" @input="profileDraft.name = $event.detail.value" /></view>
-            <view class="ai-setting-card card"><view class="option-name">API Key</view><view class="option-note">{{ $t('只保存在本机，多个配置各自保存密钥') }}</view><input class="field" password :value="profileDraft.apiKey" :placeholder="$t('填写此服务商的 API Key')" @input="profileDraft.apiKey = $event.detail.value; aiTestResult = ''" /><view class="option-name ai-field-label">{{ $t('API 地址') }}</view><input class="field" :value="profileDraft.baseUrl" placeholder="https://.../v1" @input="profileDraft.baseUrl = $event.detail.value" /></view>
-            <view class="ai-setting-card card"><view class="model-heading"><view><view class="option-name">{{ $t('可用模型') }}</view><view class="option-note">{{ $t('从当前服务商实时获取') }}</view></view><view @tap="testAi">{{ aiTesting ? $t('获取中…') : $t('获取模型 / 测试连接') }}</view></view><view v-if="profileDraft.models.length" class="model-options"><view v-for="id in profileDraft.models" :key="id" class="model-option" :class="{ selected: profileDraft.model === id }" @tap="profileDraft.model = id"><text>{{ id }}</text><text>{{ profileDraft.model === id ? $t('当前选择') : $t('点选使用') }}</text></view></view><view v-else class="option-note model-empty">{{ $t('填入密钥后获取模型列表') }}</view></view>
-            <view v-if="supportsReasoning(profileDraft)" class="ai-setting-card card"><view class="option-name">{{ $t('思考强度') }}</view><view class="option-note">{{ $t('仅在所选模型支持时传入；思考内容由模型决定是否返回') }}</view><view class="effort-options"><view v-for="level in effortLevels" :key="level" :class="{ selected: profileDraft.effort === level }" @tap="profileDraft.effort = level">{{ { auto:$t('自动'), low:$t('低'), medium:$t('中'), high:$t('高'), max:$t('最高') }[level] }}</view></view></view>
-            <view class="ai-setting-card card"><view class="option-name">{{ $t('上下文窗口') }}</view><view class="option-note">{{ $t('可选。填写服务商公布的 token 上限后，助手会显示预估使用比例；留空仅显示预估用量。') }}</view><input class="field" type="number" :value="profileDraft.contextWindow || ''" :placeholder="$t('例如 128000')" @input="profileDraft.contextWindow = $event.detail.value" /></view>
+            <view class="saved-profiles"><view v-for="item in aiProfiles.profiles" :key="item.id" :class="{ selected: profileDraft.id === item.id }" @tap="editProfile(item)"><view class="profile-name"><ProviderIcon :provider="item.provider" /><text>{{ item.name }}</text></view><small>{{ item.model || $t('未选择模型') }}</small></view><view class="add-profile" @tap="newProfile">{{ $t('＋ 新配置') }}</view></view>
+            <view class="ai-setting-card card"><view class="option-name">{{ $t('服务商') }}</view><view class="provider-options"><view v-for="item in AI_PROVIDERS" :key="item.id" :class="{ selected: profileDraft.provider === item.id }" @tap="chooseProvider(item.id)"><ProviderIcon :provider="item.id" /><text>{{ item.name }}</text></view></view><input class="field" :value="profileDraft.name" :placeholder="$t('配置名称')" @input="profileDraft.name = $event.detail.value" /></view>
+            <view class="ai-setting-card card"><view class="option-name">API Key</view><view class="option-note">{{ $t('只保存在本机，多个配置各自保存密钥') }}</view><input class="field" password :value="profileDraft.apiKey" :placeholder="$t('填写此服务商的 API Key')" @input="changeConnection('apiKey', $event.detail.value)" /><view class="option-name ai-field-label">{{ $t('API 地址') }}</view><input class="field" :value="profileDraft.baseUrl" placeholder="https://.../v1" @input="changeConnection('baseUrl', $event.detail.value)" /></view>
+            <view class="ai-setting-card card"><view class="model-heading"><view><view class="option-name">{{ $t('可用模型') }}</view><view class="option-note">{{ $t('从当前服务商实时获取') }}</view></view><view @tap="testAi">{{ aiTesting ? $t('获取中…') : $t('获取模型 / 测试连接') }}</view></view><view v-if="profileDraft.models.length" class="model-options"><view v-for="id in profileDraft.models" :key="id" class="model-option" :class="{ selected: profileDraft.model === id }" @tap="chooseDraftModel(id)"><text>{{ id }}</text><text>{{ profileDraft.model === id ? $t('当前选择') : $t('点选使用') }}</text></view></view><view v-else class="option-note model-empty">{{ $t('填入密钥后获取模型列表') }}</view></view>
+            <view v-if="profileDraft.model" class="ai-setting-card card"><view class="option-name">{{ $t('思考强度') }}</view><view class="option-note">{{ capabilityLoading ? $t('正在获取模型能力…') : selectedModelInfo?.effortLevels == null ? $t('API 未返回思考选项。可按服务商说明手动选择，默认不传入强度。') : effortLevels.length > 1 ? $t('思考选项来自模型 API') : $t('模型未提供可调节的思考强度') }}</view><view class="effort-options"><view v-for="level in effortLevels" :key="level" :class="{ selected: profileDraft.effort === level }" @tap="profileDraft.effort = level">{{ effortLabel(level) }}</view></view></view>
+            <view class="ai-setting-card card"><view class="option-name">{{ $t('上下文窗口') }}</view><view v-if="selectedModelInfo?.contextWindow" class="capability-value"><strong>{{ selectedModelInfo.contextWindow.toLocaleString() }}</strong><text>tokens</text><small>{{ $t('来自模型 API') }}</small></view><template v-else><view class="option-note">{{ capabilityLoading ? $t('正在获取模型能力…') : $t('API 未返回上下文窗口，请按服务商说明手动填写；留空仅显示预估用量。') }}</view><input class="field" type="number" :value="profileDraft.contextWindow || ''" :placeholder="$t('例如 128000')" @input="setManualWindow($event.detail.value)" /></template></view>
             <view class="ai-setting-card card"><view class="prompt-heading"><view><view class="option-name">{{ $t('系统提示词') }}</view><view class="option-note">{{ $t('定义助手的写作方式和修改边界') }}</view></view><text @tap="promptDraft = defaultAiPrompt()">{{ $t('恢复默认') }}</text></view><textarea v-model="promptDraft" class="prompt-input" maxlength="4000" /></view>
             <view class="ai-setting-actions"><view v-if="profileDraft.id" class="ghost-button" @tap="deleteProfile">{{ $t('删除此配置') }}</view><view class="primary-button" @tap="saveAi">{{ $t('保存配置') }}</view></view>
             <view v-if="aiTestResult" class="ai-test-result" :class="{ error: aiTestError }">{{ aiTestResult }}</view>
@@ -114,16 +114,45 @@ import { navigatePrimary } from '../../src/store/navigation'
 import { hexToHsv, hsvToHex } from '../../src/utils/color'
 import { defaultAiPrompt } from '../../src/services/assistant'
 import { t } from '../../src/i18n.js'
-import { AI_PROVIDERS, fetchProviderModels, providerInfo, supportsReasoning } from '../../src/services/ai-providers'
+import { AI_PROVIDERS, fetchProviderCatalog, fetchModelInfo, providerInfo } from '../../src/services/ai-providers'
+import { effortOptions, modelInfo, profileForModel, selectedEffort } from '../../src/services/model-capabilities.js'
+import ProviderIcon from '../../components/ProviderIcon.vue'
 import { aiProfiles, activeAiProfile, loadAiProfiles, removeAiProfile, saveAiProfile, selectAiProfile } from '../../src/store/ai-profiles'
 
 const props = defineProps({ embedded: { type: Boolean, default: false }, active: { type: Boolean, default: true } })
 const emit = defineEmits(['modal-change'])
 const prefs = loadPreferences()
 loadAiProfiles()
-const emptyProfile = () => ({ id: '', provider: 'openai', name: '', apiKey: '', baseUrl: providerInfo('openai').baseUrl, model: '', models: [], effort: 'auto', contextWindow: 0 })
+const emptyProfile = () => ({ id: '', provider: 'openai', name: '', apiKey: '', baseUrl: providerInfo('openai').baseUrl, model: '', models: [], modelDetails: {}, contextWindows: {}, effort: 'auto', contextWindow: 0 })
 const profileDraft = ref(emptyProfile()), aiTesting = ref(false), aiTestResult = ref(''), aiTestError = ref(false)
-const effortLevels = computed(() => profileDraft.value.provider === 'deepseek' ? ['auto', 'high', 'max'] : ['auto', 'low', 'medium', 'high'])
+const effortLevels = computed(() => effortOptions(profileDraft.value))
+const selectedModelInfo = computed(() => modelInfo(profileDraft.value))
+const capabilityLoading = ref(false)
+let capabilityRevision = 0
+function effortLabel(value) { return t(({ auto:'自动', none:'不思考', minimal:'最低', low:'低', medium:'中', high:'高', xhigh:'极高', max:'最高' })[value] || '自动') }
+function setManualWindow(value) { profileDraft.value.contextWindow = value; profileDraft.value.contextWindows = { ...profileDraft.value.contextWindows, [profileDraft.value.model]:Number(value) || 0 } }
+function changeConnection(field, value) {
+  if (profileDraft.value[field] === value) return
+  capabilityRevision++; capabilityLoading.value = false
+  Object.assign(profileDraft.value, { [field]:value, models:[], modelDetails:{}, model:'', contextWindow:0, effort:'auto' })
+  aiTestResult.value = ''
+}
+async function chooseDraftModel(model, refresh = false) {
+  const draft = profileDraft.value
+  Object.assign(draft, profileForModel(draft, model))
+  const revision = ++capabilityRevision
+  const info = modelInfo(draft)
+  if (!draft.apiKey || (!refresh && info?.contextWindow && info.effortLevels !== null)) { capabilityLoading.value = false; return }
+  capabilityLoading.value = true
+  try {
+    const fetched = await fetchModelInfo(draft)
+    if (revision !== capabilityRevision || profileDraft.value !== draft) return
+    // Some gateways omit fields on /models/{id} that were present in the list.
+    draft.modelDetails = { ...draft.modelDetails, [model]:{ ...fetched, contextWindow:fetched.contextWindow || info?.contextWindow || 0, effortLevels:fetched.effortLevels ?? info?.effortLevels ?? null, thinkingModes:fetched.thinkingModes ?? info?.thinkingModes ?? null, reasoningSupported:fetched.reasoningSupported ?? info?.reasoningSupported ?? null } }
+    draft.effort = selectedEffort(draft)
+  } catch (_) { /* Model list remains usable; missing capabilities can be configured manually. */ }
+  finally { if (revision === capabilityRevision) capabilityLoading.value = false }
+}
 const promptDraft = ref(prefs.aiSystemPrompt || defaultAiPrompt())
 const instance = getCurrentInstance()
 const themes = computed(() => [{ id: 'system', label: t('跟随系统') }, { id: 'light', label: t('浅色') }, { id: 'dark', label: t('深色') }])
@@ -155,7 +184,7 @@ function openPanel(id) {
   closing.value = false
   activePanel.value = id
   if (id === 'editing') trailLengthDraft.value = prefs.cursorTrailLength
-  if (id === 'ai') { profileDraft.value = { ...(activeAiProfile() || emptyProfile()) }; promptDraft.value = prefs.aiSystemPrompt || defaultAiPrompt(); aiTestResult.value = '' }
+  if (id === 'ai') { const current = activeAiProfile(); if (current) editProfile(current); else newProfile(); promptDraft.value = prefs.aiSystemPrompt || defaultAiPrompt(); aiTestResult.value = '' }
   emit('modal-change', true)
   if (id === 'fonts') prepareFontPreviews()
 }
@@ -214,13 +243,16 @@ function changeSize(delta) { updatePreferences({ fontSize: Math.min(30, Math.max
 async function testAi() {
   if (aiTesting.value) return
   aiTesting.value = true; aiTestResult.value = ''; aiTestError.value = false
-  try { const models = await fetchProviderModels(profileDraft.value); profileDraft.value.models = models; if (!models.includes(profileDraft.value.model)) profileDraft.value.model = models[0]; aiTestResult.value = t('连接成功，获取到 {count} 个模型', { count:models.length }) }
-  catch (error) { aiTestError.value = true; aiTestResult.value = error.message || t('连接失败') }
+  const draft = profileDraft.value
+  const connection = `${draft.provider}:${draft.baseUrl}:${draft.apiKey}`
+  const current = () => profileDraft.value === draft && connection === `${draft.provider}:${draft.baseUrl}:${draft.apiKey}`
+  try { const catalog = await fetchProviderCatalog({ ...draft }); if (!current()) return; Object.assign(draft, catalog); await chooseDraftModel(catalog.models.includes(draft.model) ? draft.model : catalog.models[0]); if (current()) aiTestResult.value = t('连接成功，获取到 {count} 个模型', { count:catalog.models.length }) }
+  catch (error) { if (current()) { aiTestError.value = true; aiTestResult.value = error.message || t('连接失败') } }
   finally { aiTesting.value = false }
 }
-function editProfile(item) { profileDraft.value = { ...item, models: [...(item.models || [])] }; aiTestResult.value = '' }
-function newProfile() { profileDraft.value = emptyProfile(); aiTestResult.value = '' }
-function chooseProvider(id) { profileDraft.value = { ...emptyProfile(), provider: id, baseUrl: providerInfo(id).baseUrl }; aiTestResult.value = '' }
+function editProfile(item) { profileDraft.value = { ...item, models: [...(item.models || [])], modelDetails: { ...(item.modelDetails || {}) }, contextWindows:{ ...(item.contextWindows || {}) } }; aiTestResult.value = ''; chooseDraftModel(item.model) }
+function newProfile() { capabilityRevision++; capabilityLoading.value = false; profileDraft.value = emptyProfile(); aiTestResult.value = '' }
+function chooseProvider(id) { newProfile(); profileDraft.value = { ...emptyProfile(), provider: id, baseUrl: providerInfo(id).baseUrl } }
 function deleteProfile() { if (!profileDraft.value.id) return; removeAiProfile(profileDraft.value.id); profileDraft.value = { ...(activeAiProfile() || emptyProfile()) }; aiTestResult.value = t('配置已删除') }
 function saveAi() {
   if (!profileDraft.value.apiKey?.trim()) return uni.showToast({ title: t('请先填写 API Key'), icon: 'none' })
@@ -301,4 +333,46 @@ function confirmRemove() { removeFont(removeId.value); removeId.value = '' }
 @media (max-width:620px) { .section-tile { height:98px; padding:17px 20px; }.section-symbol { width:54px; height:54px; border-radius:16px; }.modal-header { padding:20px 22px 17px; }.modal-body { padding:20px 22px 28px; }.editing-layout { grid-template-columns:1fr; }.preview-column { display:none; }.app-setting-value { display:none; } }
 @media (max-width:420px) { .theme-grid { gap:7px; }.theme-option { padding:7px; }.theme-label { font-size:11px; }.font-grid { grid-template-columns:1fr; }.font-toolbar { display:block; }.import-link { display:inline-block; margin-bottom:16px; } }
 @media (prefers-reduced-motion:reduce) { .section-tile,.theme-option,.font-choice,.toggle,.toggle view,.cursor-color { transition:none; }.settings-sections.falling .section-symbol,.settings-overlay,.settings-modal,.settings-overlay.closing,.settings-overlay.closing .settings-modal,.cursor-options,.color-picker-overlay,.color-picker-overlay.closing,.color-picker-modal,.color-picker-overlay.closing .color-picker-modal { animation:none; } }
+
+/* ===== 自绘齿轮（仅“应用设置”入口，无动效） ===== */
+.gear-glyph {
+  position: relative;
+  width: 19px;
+  height: 19px;
+  color: currentColor;
+  transform: scale(1.35);
+}
+.gear-ring {
+  position: absolute;
+  inset: 3.5px;
+  border: 1.8px solid currentColor;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+.gear-hole {
+  position: absolute;
+  inset: 7.5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: .9;
+}
+.gear-tooth {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 3px;
+  height: 4px;
+  margin-left: -1.5px;
+  border-radius: 1px;
+  background: currentColor;
+  transform-origin: 50% 9.5px;
+}
+.gear-tooth.t1 { transform: translateY(-9.5px) rotate(0deg); }
+.gear-tooth.t2 { transform: translateY(-9.5px) rotate(60deg); }
+.gear-tooth.t3 { transform: translateY(-9.5px) rotate(120deg); }
+.gear-tooth.t4 { transform: translateY(-9.5px) rotate(180deg); }
+.gear-tooth.t5 { transform: translateY(-9.5px) rotate(240deg); }
+.gear-tooth.t6 { transform: translateY(-9.5px) rotate(300deg); }
+.provider-options>view,.profile-name { display:flex; align-items:center; gap:7px; }
+.capability-value { display:flex; flex-wrap:wrap; align-items:baseline; gap:8px; margin-top:13px; }.capability-value strong { font-size:22px; font-weight:650; }.capability-value text,.capability-value small { color:var(--muted); font-size:11px; }.capability-value small { margin-left:auto; color:var(--accent); }
 </style>

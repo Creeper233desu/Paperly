@@ -6,7 +6,7 @@
     <view v-if="!books.length" class="empty card">{{ $t('书架还没有书。点击“新建书籍”，写下第一章。') }}</view>
     <view class="book-grid"><view v-for="(book, index) in books" :key="book.id" class="book-card card" :class="{ 'new-book': freshId === book.id, removing: removingId === book.id }" @tap="openBook(book.id)" @longpress="openActions(book)"><view class="book-art" :class="'cover-' + index % 4"><image v-if="book.cover" :src="book.cover" mode="aspectFill" class="cover-image" /><view v-else class="cover-letter">{{ book.title.slice(0, 1) }}</view><view class="book-spine"></view></view><view class="book-info"><view class="book-title-row"><view class="book-title">{{ book.title }}</view><MoreIcon class="more-button" @tap.stop="openActions(book)" /></view><view class="book-author">{{ book.author || $t('未设置作者') }}</view><view class="book-description">{{ book.description || (book.readOnly ? $t('旧版导入文件，可转换为可编辑书籍。') : $t('打开这本书，继续写下去。')) }}</view><view class="book-meta"><text>{{ bookMeta(book) }}</text><text>{{ formatDate(book.updatedAt) }}</text></view></view></view></view>
   </view></view></view>
-  <view class="home-panel" :class="{ active: tabIndex === 1 }" :style="panelStyle(1)"><StatisticsPanel /></view>
+  <view class="home-panel" :class="{ active: tabIndex === 1 }" :style="panelStyle(1)"><StatisticsPanel :active="tabIndex === 1" /></view>
   <view class="home-panel" :class="{ active: tabIndex === 2 }" :style="panelStyle(2)"><SettingsPanel :embedded="true" :active="tabIndex === 2" @modal-change="settingsModalOpen = $event" /></view>
   <AppNav />
   <DataDirectoryGate v-if="needsDataDirectory()" />
