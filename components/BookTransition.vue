@@ -55,39 +55,52 @@ import { createBookMorph } from '../src/utils/book-morph.js'
 export default {
   mounted() {
     this.disposed = false
+    this.mountedReady = true
     this.resize = () => this.controller?.refresh()
     window.addEventListener('resize', this.resize)
     this.$nextTick(() => this.attach(this.hostId))
   },
   beforeUnmount() {
     this.disposed = true
+    this.mountedReady = false
     clearTimeout(this.retry)
     this.controller?.dispose()
     window.removeEventListener('resize', this.resize)
   },
   methods:{
+    notify(name, packet) {
+      if (this.disposed || !this.mountedReady || typeof this.$ownerInstance?.callMethod !== 'function') return
+      // A bridge notification must never interrupt the view-layer animation.
+      try { this.$ownerInstance.callMethod(name, packet) }
+      catch (error) { console.error('[BookTransition] Owner notification failed', error) }
+    },
     attach(id) {
       if (id) this.hostId = id
-      if (!this.hostId || this.disposed || this.controller) return
+      // App's initial change handlers run before renderjs mounted hooks inject
+      // $ownerInstance. Cache props until then, before creating/commanding the
+      // controller: replaying a consumed sequence cannot restart its spring.
+      if (!this.mountedReady || typeof this.$ownerInstance?.callMethod !== 'function' || !this.hostId || this.disposed || this.controller) return
       const host = document.getElementById(this.hostId)
       if (!host || !host.querySelector('.large-cover') && (this.attempts || 0) < 12) {
         clearTimeout(this.retry)
         if ((this.attempts || 0) < 12) { this.attempts = (this.attempts || 0) + 1; this.retry = setTimeout(() => this.attach(this.hostId), 24) }
         return
       }
+      clearTimeout(this.retry)
       this.controller = createBookMorph({ host, sourceId:this.packet?.sourceId,
-        onPhase:phase => this.$ownerInstance.callMethod('renderPhase', { phase, seq:this.packet?.seq }),
-        onHandoff:() => this.$ownerInstance.callMethod('renderHandoff', { seq:this.packet?.seq }),
-        onClosed:() => this.$ownerInstance.callMethod('renderClosed', { seq:this.packet?.seq })
+        onPhase:phase => this.notify('renderPhase', { phase, seq:this.packet?.seq }),
+        onHandoff:() => this.notify('renderHandoff', { seq:this.packet?.seq }),
+        onClosed:() => this.notify('renderClosed', { seq:this.packet?.seq })
       })
       if (this.packet) this.controller.command(this.packet)
-      this.$ownerInstance.callMethod('renderMounted', this.hostId)
+      this.notify('renderMounted', this.hostId)
     },
     receive(value) {
       let packet
       try { packet = typeof value === 'string' ? JSON.parse(value) : value } catch (_) { return }
       if (!packet || this.disposed || packet.seq < (this.packet?.seq ?? -1)) return
       this.packet = packet
+      if (!this.mountedReady) return
       if (this.controller) this.controller.command(this.packet)
       else this.$nextTick(() => this.attach(this.hostId))
     }

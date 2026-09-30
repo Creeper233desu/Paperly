@@ -11,7 +11,7 @@ function unit(value) {
 }
 
 export function createBookSpring(options = {}) {
-  const now = options.now || (() => typeof performance !== 'undefined' ? performance.now() : Date.now())
+  const now = options.now || (() => typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now())
   const requestFrame = options.requestFrame || (callback => requestAnimationFrame(callback))
   const cancelFrame = options.cancelFrame || (id => cancelAnimationFrame(id))
   const onUpdate = options.onUpdate || (() => {})
@@ -38,10 +38,12 @@ export function createBookSpring(options = {}) {
     if (disposed || paused || !running || frameId !== null) return
     if (lastTime === null) lastTime = now()
     const current = revision
-    frameId = requestFrame(timestamp => {
+    frameId = requestFrame(() => {
       if (disposed || paused || current !== revision) return
       frameId = null
-      const time = Number.isFinite(timestamp) ? timestamp : now()
+      // Some Android frame adapters pass a repeated zero timestamp. Sample
+      // the same clock used to start/resume instead of mixing RAF time bases.
+      const time = now()
       // Long frames retain motion instead of jumping straight to its endpoint.
       // Pausing clears lastTime, so returning from the background consumes none
       // of the time spent away.

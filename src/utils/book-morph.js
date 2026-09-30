@@ -19,7 +19,7 @@ export function createBookMorph(options) {
   const view = document.defaultView
   const requestFrame = options.requestFrame || (callback => view.requestAnimationFrame(callback))
   const cancelFrame = options.cancelFrame || (id => view.cancelAnimationFrame(id))
-  const now = options.now || (() => view.performance.now())
+  const now = options.now || (() => typeof view.performance?.now === 'function' ? view.performance.now() : Date.now())
   const readStyle = options.readStyle || (node => view.getComputedStyle(node))
   const reducedMotion = options.reducedMotion ?? !!view.matchMedia?.('(prefers-reduced-motion:reduce)').matches
   const surface = host.querySelector('.book-surface'), background = host.querySelector('.book-background')
@@ -148,10 +148,12 @@ export function createBookMorph(options) {
   function scheduleFade() {
     if (disposed || !active || !dismissing || fadeFrame !== null) return
     const stamp = fadeStamp, start = now()
-    fadeFrame = requestFrame(time => {
+    fadeFrame = requestFrame(() => {
       if (disposed || !active || !dismissing || stamp !== fadeStamp) return
       fadeFrame = null
-      fadeElapsed += Math.max(0, Math.min(64, time - start))
+      // Keep fade timing on the spring's clock as well; a RAF timestamp may
+      // be absent, repeated or relative to another runtime's time origin.
+      fadeElapsed += Math.max(0, Math.min(64, now() - start))
       rootOpacity = fadeStart * (1 - smooth(fadeElapsed / 150))
       host.style.opacity = rootOpacity
       if (fadeElapsed >= 150) { dismissing = false; completeClose() }
