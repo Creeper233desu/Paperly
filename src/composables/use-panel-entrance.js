@@ -1,10 +1,10 @@
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 
-// The screen slides for 380 ms in App.vue. Start content motion after it has
-// reached the viewport, then release data animations after the last card.
-export const PANEL_TRAVEL_MS = 420
+// Let the new panel paint before revealing its contents. Reveal during page
+// travel so the viewport never spends a full slide showing an empty panel.
+export const PANEL_TRAVEL_MS = 80
 export const PANEL_REVEAL_MS = 1040
-export function usePanelEntrance(active) {
+export function usePanelEntrance(active, { skip = () => false } = {}) {
   const phase = ref('idle')
   let travelTimer, revealTimer, revision = 0
   function cancel() { clearTimeout(travelTimer); clearTimeout(revealTimer); revision++ }
@@ -12,6 +12,8 @@ export function usePanelEntrance(active) {
     cancel()
     phase.value = visible ? 'waiting' : 'idle'
     if (!visible) return
+    // Returning from an editor keeps the open book and its shelf in place.
+    if (skip()) { phase.value = 'ready'; return }
     const current = revision
     nextTick(() => {
       if (current !== revision) return
