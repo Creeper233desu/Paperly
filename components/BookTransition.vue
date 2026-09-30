@@ -44,6 +44,10 @@ export default {
     renderMounted(id) { if (id === this.hostId && !this.closed) this.bridgeEpoch++ },
     renderPhase(packet) { if (packet.seq !== this.seq || this.closed) return; this.phase = packet.phase; this.$emit('phase', this.phase) },
     renderHandoff(packet) { if (packet.seq === this.seq && !this.closed) this.$emit('handoff') },
+    renderOutsideTap(packet) {
+      if (packet.seq !== this.seq || this.closed || !this.pageActive || this.mode !== 'open' || this.phase !== 'opening') return
+      this.requestClose()
+    },
     renderClosed(packet) { if (packet.seq !== this.seq || this.closed) return; this.closed = true; this.$emit('closed') }
   }
 }
@@ -51,6 +55,7 @@ export default {
 
 <script module="motion" lang="renderjs">
 import { createBookMorph } from '../src/utils/book-morph.js'
+import { bindBookOutsideTap } from '../src/utils/book-outside-tap.js'
 
 export default {
   mounted() {
@@ -64,6 +69,7 @@ export default {
     this.disposed = true
     this.mountedReady = false
     clearTimeout(this.retry)
+    this.disposeOutside?.()
     this.controller?.dispose()
     window.removeEventListener('resize', this.resize)
   },
@@ -91,6 +97,10 @@ export default {
         onPhase:phase => this.notify('renderPhase', { phase, seq:this.packet?.seq }),
         onHandoff:() => this.notify('renderHandoff', { seq:this.packet?.seq }),
         onClosed:() => this.notify('renderClosed', { seq:this.packet?.seq })
+      })
+      this.disposeOutside = bindBookOutsideTap({ host,
+        isOpening:() => !this.disposed && this.packet?.mode === 'open' && this.packet?.pageActive !== false && this.controller.getState().phase === 'opening',
+        onTap:() => this.notify('renderOutsideTap', { seq:this.packet?.seq })
       })
       if (this.packet) this.controller.command(this.packet)
       this.notify('renderMounted', this.hostId)
