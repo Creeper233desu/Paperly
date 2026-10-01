@@ -2,6 +2,7 @@ import { createBookSpring } from './book-spring.js'
 
 const sharedSelectors = { cover:'.large-cover', title:'.sidebar-title', author:'.sidebar-author' }
 const sourceSelectors = { cover:'.book-art', title:'.book-title', author:'.book-author' }
+const shelfSelectors = { description:'.book-description', meta:'.book-meta' }
 const controlSelectors = '.topbar,.sidebar-export,.new-chapter,.search-box,.resume-card,.chapter-heading,.article-row,.add-article,.primary-button'
 const mix = (a, b, p) => a + (b - a) * p
 const clamp = value => Math.max(0, Math.min(1, value))
@@ -27,6 +28,7 @@ export function createBookMorph(options) {
   const viewport = host.querySelector('.book-viewport'), scroll = host.querySelector('.book-scroll')
   const ghosts = Object.fromEntries(Object.keys(sharedSelectors).map(key => [key, host.querySelector(`.shared-${key}`)]))
   const targets = Object.fromEntries(Object.entries(sharedSelectors).map(([key, selector]) => [key, host.querySelector(selector)]))
+  const shelfGhosts = Object.fromEntries(Object.entries(shelfSelectors).map(([key, selector]) => [key, host.querySelector(`.shared-shelf-details ${selector}`)]))
   let rest = [...host.querySelectorAll('.book-rest')]
   let controls = [...host.querySelectorAll(controlSelectors)]
   let sourceId = options.sourceId, geometry = null, source = null
@@ -50,7 +52,7 @@ export function createBookMorph(options) {
   }
   function showTargets(visible) { for (const node of Object.values(targets)) if (node) node.style.visibility = visible ? '' : 'hidden' }
   function promote(moving) {
-    for (const node of [surface, viewport, scroll, ...Object.values(ghosts)]) if (node) node.style.willChange = moving ? 'transform,opacity' : ''
+    for (const node of [surface, viewport, scroll, ...Object.values(ghosts), ...Object.values(shelfGhosts)]) if (node) node.style.willChange = moving ? 'transform,opacity' : ''
   }
   function measureSnapshot() {
     rest = [...host.querySelectorAll('.book-rest')]
@@ -78,7 +80,16 @@ export function createBookMorph(options) {
       ghost.style.fontSize = toStyle.fontSize; ghost.style.fontWeight = toStyle.fontWeight
       ghost.style.lineHeight = toStyle.lineHeight; ghost.style.color = toStyle.color
     }
-    return { frame, card, shared, corners }
+    const shelf = {}
+    for (const [key, selector] of Object.entries(shelfSelectors)) {
+      const node = source.querySelector(selector), ghost = shelfGhosts[key], from = rectOf(node)
+      if (!from || !ghost) continue
+      const style = readStyle(node)
+      shelf[key] = from
+      ghost.style.width = `${from.width}px`; ghost.style.height = `${from.height}px`
+      for (const property of ['fontSize', 'fontWeight', 'lineHeight', 'color']) ghost.style[property] = style[property]
+    }
+    return { frame, card, shared, corners, shelf }
   }
   function snapshot() {
     try { return measureSnapshot() } catch (_) { return null }
@@ -93,7 +104,7 @@ export function createBookMorph(options) {
   }
   function draw(progress) {
     if (disposed || !geometry) return
-    const p = clamp(progress), { frame, card, shared } = geometry
+    const p = clamp(progress), { frame, card, shared, shelf } = geometry
     const sx = mix(card.width / frame.width, 1, p), sy = mix(card.height / frame.height, 1, p)
     const x = (card.left - frame.left) * (1 - p), y = (card.top - frame.top) * (1 - p)
     const transform = `translate3d(${x}px,${y}px,0) scale(${sx},${sy})`
@@ -115,6 +126,15 @@ export function createBookMorph(options) {
       ghosts[key].style.transform = `translate3d(${left}px,${top}px,0) scale(${xScale},${xScale})`
       ghosts[key].style.opacity = 1
     }
+    // The missing shelf text slides into the shrinking card before the
+    // source takes over. Using spring progress keeps reversals continuous.
+    for (const [key, from] of Object.entries(shelf)) {
+      const reveal = smooth(((key === 'description' ? .44 : .37) - p) / (key === 'description' ? .44 : .37))
+      const left = x + from.left - card.left
+      const top = y + from.top - card.top + (1 - reveal) * (key === 'description' ? 32 : 42)
+      shelfGhosts[key].style.transform = `translate3d(${left}px,${top}px,0)`
+      shelfGhosts[key].style.opacity = reveal
+    }
   }
   function completeClose() {
     interaction(false)
@@ -132,7 +152,7 @@ export function createBookMorph(options) {
     // recomposited in the same frame as the shared-element handoff.
     roundCard()
     showTargets(true)
-    for (const ghost of Object.values(ghosts)) if (ghost) ghost.style.opacity = 0
+    for (const ghost of [...Object.values(ghosts), ...Object.values(shelfGhosts)]) if (ghost) ghost.style.opacity = 0
     interaction(true, true); setPhase('ready')
   }
   const spring = createBookSpring({ requestFrame, cancelFrame, now, onUpdate:draw, onRest:finish })
@@ -144,7 +164,7 @@ export function createBookMorph(options) {
     for (const node of [surface, viewport, scroll]) if (node) node.style.transform = identityTransform
     if (background) background.style.opacity = 1
     for (const node of rest) { node.style.opacity = 1; node.style.transform = 'translate3d(0,0px,0)' }
-    for (const ghost of Object.values(ghosts)) if (ghost) ghost.style.opacity = 0
+    for (const ghost of [...Object.values(ghosts), ...Object.values(shelfGhosts)]) if (ghost) ghost.style.opacity = 0
     promote(true); showTargets(true); interaction(true); spring.snap(1)
   }
   function cancelFade() {

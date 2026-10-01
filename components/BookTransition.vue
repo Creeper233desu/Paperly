@@ -7,6 +7,7 @@
     <view v-if="book" class="shared-elements" aria-hidden="true">
       <BookCover class="shared-cover" :src="book.cover" :title="book.title" :color="coverColor" letter-class="shared-cover-letter" spine-class="shared-spine" @load="coverLoaded" @error="coverLoaded" />
       <view class="shared-title">{{ book.title }}</view><view class="shared-author">{{ book.author || $t('未设置作者') }}</view>
+      <BookShelfDetails class="shared-shelf-details" :book="book" />
     </view>
   </view>
 </template>
@@ -14,11 +15,12 @@
 <script>
 import BookPanel from './BookPanel.vue'
 import BookCover from './BookCover.vue'
+import BookShelfDetails from './BookShelfDetails.vue'
 import { getBook } from '../src/store/library'
 import { themeClass } from '../src/store/preferences'
 
 export default {
-  components:{ BookPanel, BookCover },
+  components:{ BookPanel, BookCover, BookShelfDetails },
   props:{ bookId:String, sourceId:String, coverColor:String, pageActive:{ type:Boolean, default:true } },
   emits:['handoff', 'phase', 'closed'],
   data() { return { hostId:`book-motion-${Date.now()}-${Math.random().toString(36).slice(2)}`, mode:'open', seq:1, bridgeEpoch:0, phase:'preparing', closed:false, loadedCover:'', loadedDetailCover:'' } },
@@ -140,4 +142,5 @@ export default {
 .shared-elements .shared-cover { position:absolute; }
 .shared-title { overflow:hidden; color:var(--text); font-weight:700; line-height:1.25; word-break:break-all; }
 .shared-author { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; color:var(--muted); font-size:13px; }
+.shared-shelf-details :deep(.book-description),.shared-shelf-details :deep(.book-meta) { position:absolute; top:0; left:0; margin:0; opacity:0; backface-visibility:hidden; }
 </style>
