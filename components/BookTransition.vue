@@ -1,9 +1,9 @@
 <template>
   <view :id="hostId" class="book-transition" :class="themeClass()" :host-prop="hostId" :change:host-prop="motion.attach" :prop="motionPayload" :change:prop="motion.receive">
     <view class="book-surface" @tap="reopen"><view class="book-background"></view></view>
-    <view class="book-viewport"><scroll-view scroll-y class="book-scroll">
-      <BookPanel ref="panel" :book-id="bookId" :cover-color="coverColor" motion="live" @close="requestClose" @interact="reopen" />
-    </scroll-view></view>
+    <view class="book-viewport"><view class="book-scroll"><scroll-view scroll-y class="book-scroller">
+      <BookPanel ref="panel" :book-id="bookId" :cover-color="coverColor" motion="live" @cover-ready="detailCoverLoaded" @close="requestClose" @interact="reopen" />
+    </scroll-view></view></view>
     <view v-if="book" class="shared-elements" aria-hidden="true">
       <BookCover class="shared-cover" :src="book.cover" :title="book.title" :color="coverColor" letter-class="shared-cover-letter" spine-class="shared-spine" @load="coverLoaded" @error="coverLoaded" />
       <view class="shared-title">{{ book.title }}</view><view class="shared-author">{{ book.author || $t('未设置作者') }}</view>
@@ -21,14 +21,15 @@ export default {
   components:{ BookPanel, BookCover },
   props:{ bookId:String, sourceId:String, coverColor:String, pageActive:{ type:Boolean, default:true } },
   emits:['handoff', 'phase', 'closed'],
-  data() { return { hostId:`book-motion-${Date.now()}-${Math.random().toString(36).slice(2)}`, mode:'open', seq:1, bridgeEpoch:0, phase:'preparing', closed:false, loadedCover:'' } },
+  data() { return { hostId:`book-motion-${Date.now()}-${Math.random().toString(36).slice(2)}`, mode:'open', seq:1, bridgeEpoch:0, phase:'preparing', closed:false, loadedCover:'', loadedDetailCover:'' } },
   computed:{
     book() { return getBook(this.bookId) },
-    motionPayload() { return JSON.stringify({ sourceId:this.sourceId, mode:this.mode, seq:this.seq, pageActive:this.pageActive, epoch:this.bridgeEpoch, coverReady:!this.book?.cover || this.loadedCover === this.book.cover }) }
+    motionPayload() { return JSON.stringify({ sourceId:this.sourceId, mode:this.mode, seq:this.seq, pageActive:this.pageActive, epoch:this.bridgeEpoch, coverReady:!this.book?.cover || (this.loadedCover === this.book.cover && this.loadedDetailCover === this.book.cover) }) }
   },
   methods:{
     themeClass,
     coverLoaded(src) { if (src === this.book?.cover) this.loadedCover = src },
+    detailCoverLoaded(src) { if (src === this.book?.cover) this.loadedDetailCover = src },
     requestClose() {
       if (this.closed) return
       if (this.$refs.panel?.dismissOverlay()) return
@@ -113,8 +114,8 @@ export default {
       if (!packet || this.disposed || packet.seq < (this.packet?.seq ?? -1)) return
       this.packet = packet
       if (!this.mountedReady) return
-      // Keep the source image visible until the shared cover is decoded. A
-      // close/dismiss command must still work while an image is loading.
+      // Keep the source visible until both shared and detail covers decode.
+      // Close/dismiss must still work while either image is loading.
       if (packet.mode === 'open' && packet.coverReady === false) return
       if (this.controller) this.controller.command(this.packet)
       else this.$nextTick(() => this.attach(this.hostId))
@@ -131,6 +132,9 @@ export default {
    usable; navigation dismissal disables this surface through the root class. */
 .book-surface { pointer-events:auto; background:var(--surface); box-shadow:0 10px 35px var(--shadow); }.book-background { position:absolute; inset:0; background:var(--bg); opacity:0; }
 .book-viewport { z-index:1; }.book-scroll { width:100%; height:100%; transform-origin:0 0; pointer-events:none; overscroll-behavior:contain; }
+/* Transform a stationary wrapper, not the scrolling element: fixed dialogs
+   keep the viewport as their containing block when the detail is scrolled. */
+.book-scroller { width:100%; height:100%; overscroll-behavior:contain; }
 .shared-elements { position:absolute; z-index:2; inset:0; pointer-events:none; overflow:hidden; }
 .shared-cover,.shared-title,.shared-author { position:absolute; top:0; left:0; margin:0; opacity:0; transform-origin:0 0; backface-visibility:hidden; }
 .shared-elements .shared-cover { position:absolute; }

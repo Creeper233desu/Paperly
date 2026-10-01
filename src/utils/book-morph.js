@@ -6,6 +6,7 @@ const controlSelectors = '.topbar,.sidebar-export,.new-chapter,.search-box,.resu
 const mix = (a, b, p) => a + (b - a) * p
 const clamp = value => Math.max(0, Math.min(1, value))
 const smooth = value => { const x = clamp(value); return x * x * (3 - 2 * x) }
+const identityTransform = 'translate3d(0px,0px,0) scale(1,1)'
 const rectOf = node => {
   const value = node?.getBoundingClientRect()
   return value && ['left', 'top', 'width', 'height'].every(key => Number.isFinite(value[key])) && value.width > 0 && value.height > 0 ? value : null
@@ -117,6 +118,8 @@ export function createBookMorph(options) {
   }
   function completeClose() {
     interaction(false)
+    // Source visibility is owned here, not by a delayed Vue class update.
+    // Restore it in the same view-thread frame that hides the motion layer.
     if (source) source.style.opacity = ''
     host.style.visibility = 'hidden'
     promote(false); setPhase('closed'); options.onClosed?.()
@@ -124,11 +127,13 @@ export function createBookMorph(options) {
   function finish(target) {
     if (disposed || dismissing) return
     if (target === 0) { completeClose(); return }
-    for (const node of [surface, viewport, scroll]) if (node) node.style.transform = 'none'
+    // Keep the last identity 3D transforms and visible composition layers.
+    // Dropping all three at rest can force the Android scroll viewport to be
+    // recomposited in the same frame as the shared-element handoff.
     roundCard()
+    showTargets(true)
     for (const ghost of Object.values(ghosts)) if (ghost) ghost.style.opacity = 0
-    for (const node of rest) { node.style.opacity = 1; node.style.transform = 'none' }
-    showTargets(true); interaction(true, true); promote(false); setPhase('ready')
+    interaction(true, true); setPhase('ready')
   }
   const spring = createBookSpring({ requestFrame, cancelFrame, now, onUpdate:draw, onRest:finish })
 
@@ -136,11 +141,11 @@ export function createBookMorph(options) {
     host.style.opacity = 1
     host.style.visibility = 'visible'
     roundCard()
-    for (const node of [surface, viewport, scroll]) if (node) node.style.transform = 'none'
+    for (const node of [surface, viewport, scroll]) if (node) node.style.transform = identityTransform
     if (background) background.style.opacity = 1
-    for (const node of rest) { node.style.opacity = 1; node.style.transform = 'none' }
+    for (const node of rest) { node.style.opacity = 1; node.style.transform = 'translate3d(0,0px,0)' }
     for (const ghost of Object.values(ghosts)) if (ghost) ghost.style.opacity = 0
-    showTargets(true); interaction(true, true); spring.snap(1)
+    promote(true); showTargets(true); interaction(true); spring.snap(1)
   }
   function cancelFade() {
     if (fadeFrame !== null) cancelFrame(fadeFrame)
@@ -213,10 +218,10 @@ export function createBookMorph(options) {
     },
     refresh() {
       if (disposed || dismissing || phase === 'closed' || phase === 'preparing') return
-      // Resize is infrequent. Remove only our transforms before measuring so
-      // rectangles aren't accidentally measured inside a scaled viewport.
-      for (const node of [surface, viewport, scroll]) if (node) node.style.transform = 'none'
-      for (const node of rest) node.style.transform = 'none'
+      // Normalize the motion transforms before measuring without dropping
+      // the compositor layers or measuring inside a scaled viewport.
+      for (const node of [surface, viewport, scroll]) if (node) node.style.transform = identityTransform
+      for (const node of rest) node.style.transform = 'translate3d(0,0px,0)'
       geometry = snapshot()
       if (phase === 'ready') finish(1)
       else if (geometry) draw(spring.getState().progress)
