@@ -1,5 +1,5 @@
 <template>
-  <view class="home-shell" :class="themeClass()"><view class="home-panel" :class="{ active: tabIndex === 0 }" :style="panelStyle(0)"><view class="screen" :class="themeClass()"><view class="page-wrap" :class="{ 'shelf-waiting': libraryWaiting, 'shelf-entering': libraryEntering }">
+  <view id="primary-panels" class="home-shell" :class="themeClass()" :pane-prop="panelScrollPayload" :change:pane-prop="panelScroll.receive"><view class="home-panel" :class="{ active: tabIndex === 0 }" :style="panelStyle(0)"><view class="screen" :class="themeClass()"><view class="page-wrap" :class="{ 'shelf-waiting': libraryWaiting, 'shelf-entering': libraryEntering }">
     <view class="topbar"><view class="brand"><image class="brand-mark" src="/static/brand/app-icon.png" mode="aspectFill" /><text>{{ $t('纸间') }}</text></view><view class="top-actions"><text class="top-note">{{ $t('专注于你正在写的故事') }}</text><view class="import-trigger" :class="{ busy: importBusy }" @tap="!importBusy && (showImportOptions = true)"><UiIcon name="download" /><text>{{ $t('导入书籍') }}</text></view><view class="round-action" :aria-label="$t('新建书籍')" @tap="openCreate"><UiIcon name="plus" /></view></view></view>
     <view v-if="!books.length" class="hero"><view class="hero-copy"><view class="hero-kicker">{{ $t('简洁优雅的写作空间') }}</view><view class="page-title">{{ $t('叙事始于此刻。') }}</view><view class="subtle">{{ $t('整理章节，沉浸写作，让每本书都有自己的模样。') }}</view><view class="hero-button" @tap="openCreate">{{ $t('＋　新建书籍') }}</view><view class="hero-import" @tap="showImportOptions = true">{{ $t('导入已有文稿') }}</view></view><view class="hero-decoration"><view class="arc arc-a"></view><view class="arc arc-b"></view><text>{{ $t('写') }}</text></view></view>
     <view class="section-head"><view><view class="section-title">{{ $t('我的书架') }} <text class="book-count">{{ books.length }}</text></view><view class="subtle">{{ $t('长按或点击更多可管理书籍') }}</view></view><view class="sort-note">{{ $t('最近编辑') }}</view></view>
@@ -65,6 +65,7 @@ onLoad(options => { if (PRIMARY_TABS.includes(options?.tab)) primaryNavigation.a
 const tabIndex = computed(() => Math.max(0, PRIMARY_TABS.indexOf(primaryNavigation.active)))
 const { waiting:libraryWaiting, entering:libraryEntering } = usePanelEntrance(() => pageVisible.value && tabIndex.value === 0, { skip:() => !!openedBookId.value })
 const settingsModalOpen = ref(false)
+const panelScrollPayload = computed(() => JSON.stringify({ index:tabIndex.value, visible:pageVisible.value, preserve:tabIndex.value === 0 && !!openedBookId.value }))
 const panelStyle = index => ({ '--panel-shift': `${(index - tabIndex.value) * 100}%`, zIndex: index === 2 && settingsModalOpen.value ? 20 : index === tabIndex.value ? 2 : 1, pointerEvents: index === tabIndex.value ? 'auto' : 'none' })
 const books = computed(() => store.books)
 const showEdit = ref(false), showDelete = ref(false), editingId = ref(''), actionBook = ref(null)
@@ -218,3 +219,35 @@ function cancelDelete() { showDelete.value = false; actionBook.value = null }
 @media(prefers-reduced-motion:reduce) { .shelf-waiting .topbar,.shelf-waiting .section-head,.shelf-waiting .hero,.shelf-waiting .empty,.shelf-waiting .book-slot { opacity:1; transform:translate3d(0px,0px,0); }.topbar,.section-head,.hero,.empty,.book-slot { transition:none; }.book-slot>.book-card.new-book,.book-slot>.book-card.removing { animation:none; } }
 .book-slot>.book-card.morph-source { transform:none; transition:none; animation:none; }
 </style>
+
+<script module="panelScroll" lang="renderjs">
+import { resetPrimaryScroll } from '../../src/utils/page-scroll.js'
+export default {
+  mounted() { this.ready = true; if (this.pending) this.receive(this.pending) },
+  beforeUnmount() { this.ready = false; cancelAnimationFrame(this.frame) },
+  methods:{
+    receive(value) {
+      this.pending = value
+      if (!this.ready) return
+      let packet
+      try { packet = typeof value === 'string' ? JSON.parse(value) : value } catch (_) { return }
+      cancelAnimationFrame(this.frame)
+      if (!packet) return
+      const previous = this.packet
+      this.packet = packet
+      if (!packet.visible) { this.needsReset = false; return }
+      if (previous && previous.index !== packet.index || !previous?.visible && !packet.preserve) this.needsReset = true
+      // A book returning from its editor keeps its source card in place until
+      // the closing morph finishes. Switching primary tabs resets the new page.
+      if (!this.needsReset || packet.preserve) return
+      this.needsReset = false
+      let attempts = 0
+      const reset = () => {
+        if (!this.ready) return
+        if (!resetPrimaryScroll(document.getElementById('primary-panels'), packet.index) && attempts++ < 4) this.frame = requestAnimationFrame(reset)
+      }
+      reset()
+    }
+  }
+}
+</script>
