@@ -4,7 +4,9 @@ import { writeFileSync } from 'node:fs'
 // A small, real PDF with compressed Chinese text streams and a ToUnicode map.
 // The fixture is authored here; no user-provided books are committed.
 const utf16 = text => Buffer.from(text, 'utf16le').swap16().toString('hex').toUpperCase()
-export function samplePdf({ blank = false, builtinMap = false, images = false, inline = false } = {}) {
+// An authored 8 x 6 red JPEG exercises /DCTDecode, including WebView ImageDecoder.
+const jpeg = Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/2wBDAQMEBAUEBQkFBQkUDQsNFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBT/wAARCAAGAAgDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD50ooor8MP9Uz/2Q==', 'base64')
+export function samplePdf({ blank = false, builtinMap = false, images = false, inline = false, imageFormat = 'rgb' } = {}) {
   const objects = []
   const add = value => { objects.push(Buffer.isBuffer(value) ? value : Buffer.from(value, 'ascii')); return objects.length }
   const stream = (text, compressed = false, dictionary = '') => {
@@ -27,8 +29,14 @@ export function samplePdf({ blank = false, builtinMap = false, images = false, i
   add(`<< /Title <FEFF${utf16('纸间 PDF 导入示例')}> /Author <FEFF${utf16('测试作者')}> /Subject <FEFF${utf16('中文文字层、压缩流与章节识别')}> >>`)
   add('<< /Type /FontDescriptor /FontName /STSong-Light /Flags 6 /FontBBox [0 -200 1000 900] /ItalicAngle 0 /Ascent 900 /Descent -200 /CapHeight 700 /StemV 80 >>')
   if (images) {
-    add(stream(Buffer.from([255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 0]), true, '/Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceRGB /BitsPerComponent 8 /SMask 13 0 R'))
-    add(stream(Buffer.from([255, 128, 0, 255]), true, '/Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceGray /BitsPerComponent 8'))
+    if (imageFormat === 'jpeg') add(stream(jpeg, false, '/Type /XObject /Subtype /Image /Width 8 /Height 6 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode'))
+    else if (imageFormat === 'indexed') {
+      // GIFs are embedded in PDF as static indexed pixels, with a color-key mask.
+      add(stream(Buffer.from([0, 1, 2, 3]), true, '/Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace [/Indexed /DeviceRGB 3 <FF000000FF000000FFFFFF00>] /BitsPerComponent 8 /Mask [2 2]'))
+    } else {
+      add(stream(Buffer.from([255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 0]), true, '/Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceRGB /BitsPerComponent 8 /SMask 13 0 R'))
+      add(stream(Buffer.from([255, 128, 0, 255]), true, '/Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceGray /BitsPerComponent 8'))
+    }
   }
   let offset = 9
   const buffers = [Buffer.from('%PDF-1.7\n')], offsets = [0]
@@ -43,4 +51,6 @@ export function samplePdf({ blank = false, builtinMap = false, images = false, i
 if (process.argv[1]?.replace(/\\/g, '/').endsWith('/create-pdf-fixture.mjs')) {
   writeFileSync(new URL('../fixtures/pdf-import-sample.pdf', import.meta.url), samplePdf())
   writeFileSync(new URL('../fixtures/pdf-images-sample.pdf', import.meta.url), samplePdf({ images: true }))
+  writeFileSync(new URL('../fixtures/pdf-jpeg-sample.pdf', import.meta.url), samplePdf({ images: true, imageFormat: 'jpeg' }))
+  writeFileSync(new URL('../fixtures/pdf-indexed-sample.pdf', import.meta.url), samplePdf({ images: true, imageFormat: 'indexed' }))
 }

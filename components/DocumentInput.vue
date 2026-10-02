@@ -118,11 +118,23 @@ export default {
 </script>
 
 <script module="editorRender" lang="renderjs">
+import { createRenderBridge } from '../src/utils/render-bridge.js'
 export default {
   mounted() {
     this.$nextTick(() => this.attachEditor())
   },
   methods: {
+    callOwner(method, data) {
+      if (!this.renderBridge) this.renderBridge = createRenderBridge(this, () => {
+        this.active = false
+        for (const name of ['longPressTimer', 'handleTimer', 'caretTransitionTimer', 'trailTimer']) clearTimeout(this[name])
+        for (const name of ['frame', 'jellyFrame']) if (this[name]) cancelAnimationFrame(this[name])
+        for (const [event, key, listener] of this.renderListeners || []) if (window[key] === listener) {
+          document.removeEventListener(event, listener); delete window[key]
+        }
+      })
+      return this.renderBridge.call(method, data)
+    },
     onHostChange(id) {
       this.hostId = id
       this.$nextTick(() => this.attachEditor())
@@ -155,11 +167,11 @@ export default {
       this.editor.addEventListener('input', event => { if (event.isTrusted) this.reportInput() })
       this.editor.addEventListener('compositionstart', () => { this.composing = true; this.navigationPending = false; this.hideCaret() })
       this.editor.addEventListener('compositionend', () => { this.composing = false; this.editingUntil = Date.now() + 160; this.reportInput() })
-      this.editor.addEventListener('focus', () => { this.$ownerInstance.callMethod('onFocus'); this.reportCursor() })
-      this.editor.addEventListener('blur', () => { this.hideCaret(true); this.$ownerInstance.callMethod('onBlur') })
+      this.editor.addEventListener('focus', () => { this.callOwner('onFocus'); this.reportCursor() })
+      this.editor.addEventListener('blur', () => { this.hideCaret(true); this.callOwner('onBlur') })
       this.editor.addEventListener('keydown', event => { this.navigationPending = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key); if (this.navigationPending) this.editingUntil = 0 })
       this.editor.addEventListener('mousedown', () => { this.navigationPending = true; this.editingUntil = 0 })
-      this.editor.addEventListener('click', event => { const button = event.target?.closest?.('.image-remove'); if (button?.dataset?.imageId) { event.preventDefault(); this.$ownerInstance.callMethod('onRemoveImage', button.dataset.imageId) } })
+      this.editor.addEventListener('click', event => { const button = event.target?.closest?.('.image-remove'); if (button?.dataset?.imageId) { event.preventDefault(); this.callOwner('onRemoveImage', button.dataset.imageId) } })
       this.editor.addEventListener('contextmenu', event => { event.preventDefault(); this.openMenu(event.clientX, event.clientY) })
       this.editor.addEventListener('touchstart', event => {
         if (event.touches.length === 2) {
@@ -183,7 +195,7 @@ export default {
           if (!this.pinchEnabled) return
           const distance = Math.hypot(event.touches[0].clientX - event.touches[1].clientX, event.touches[0].clientY - event.touches[1].clientY)
           const ratio = distance / (this.pinchDistance || distance)
-          if (ratio > 1.055 || ratio < .945) { this.pinchDistance = distance; this.$ownerInstance.callMethod('onPinch', ratio) }
+          if (ratio > 1.055 || ratio < .945) { this.pinchDistance = distance; this.callOwner('onPinch', ratio) }
           return
         }
         const touch = event.touches[0]
@@ -193,10 +205,10 @@ export default {
       this.editor.addEventListener('keyup', event => { this.reportCursor(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key)); setTimeout(() => { this.navigationPending = false }, 120) })
       for (const name of ['click', 'touchend']) this.editor.addEventListener(name, () => { this.reportCursor(true); this.suppressInsertionHandle(); setTimeout(() => { this.navigationPending = false }, 120) })
       if (window.__paperEditorSelectionListener) document.removeEventListener('selectionchange', window.__paperEditorSelectionListener)
-      window.__paperEditorSelectionListener = () => { if (document.activeElement === this.editor) { this.reportCursor(!!this.navigationPending && Date.now() > (this.editingUntil || 0)); const offsets = this.getOffsets(); if (offsets && offsets.start !== offsets.end) this.$ownerInstance.callMethod('onMenuSelectionChange', offsets) } }
+      window.__paperEditorSelectionListener = () => { if (document.activeElement === this.editor) { this.reportCursor(!!this.navigationPending && Date.now() > (this.editingUntil || 0)); const offsets = this.getOffsets(); if (offsets && offsets.start !== offsets.end) this.callOwner('onMenuSelectionChange', offsets) } }
       document.addEventListener('selectionchange', window.__paperEditorSelectionListener)
       if (window.__paperEditorOutsideMenu) document.removeEventListener('touchstart', window.__paperEditorOutsideMenu)
-      window.__paperEditorOutsideMenu = event => { if (this.host?.querySelector('.selection-menu') && !event.target?.closest?.('.selection-menu')) { this.reopenSelectionMenu = true; this.$ownerInstance.callMethod('onMenuClose') } }
+      window.__paperEditorOutsideMenu = event => { if (this.host?.querySelector('.selection-menu') && !event.target?.closest?.('.selection-menu')) { this.reopenSelectionMenu = true; this.callOwner('onMenuClose') } }
       document.addEventListener('touchstart', window.__paperEditorOutsideMenu, { passive: true })
       if (window.__paperEditorSelectionEnd) document.removeEventListener('touchend', window.__paperEditorSelectionEnd)
       window.__paperEditorSelectionEnd = () => {
@@ -211,11 +223,16 @@ export default {
         }, 190)
       }
       document.addEventListener('touchend', window.__paperEditorSelectionEnd, { passive: true })
+      this.renderListeners = [
+        ['selectionchange', '__paperEditorSelectionListener', window.__paperEditorSelectionListener],
+        ['touchstart', '__paperEditorOutsideMenu', window.__paperEditorOutsideMenu],
+        ['touchend', '__paperEditorSelectionEnd', window.__paperEditorSelectionEnd]
+      ]
       if (this.pendingFocusMode !== undefined) this.onFocusMode(this.pendingFocusMode)
       if (this.pendingVisual !== undefined) this.onVisualSettings(this.pendingVisual)
       if (this.pendingValue !== undefined) this.onValueChange(this.pendingValue)
       if (this.pendingRequest) this.onRequest(this.pendingRequest)
-      this.$ownerInstance.callMethod('onRenderMounted', this.hostId || host.id)
+      this.callOwner('onRenderMounted', this.hostId || host.id)
     },
     blocks() { return Array.from(this.editor.children).filter(node => node.classList.contains('paragraph')) },
     blockText(node) { return node.dataset?.imageMarker || node.textContent },
@@ -315,7 +332,7 @@ export default {
       if (changedDocument && this.pendingRequest?.documentId === id) this.onRequest(this.pendingRequest)
       if (!this.ready && this.blocks().length && this.readValue() === value) {
         this.ready = true
-        this.$ownerInstance.callMethod('onRenderReady')
+        this.callOwner('onRenderReady')
       }
     },
     onFocusMode(enabled) {
@@ -454,7 +471,7 @@ export default {
       if (!this.recentInputs) this.recentInputs = []
       this.recentInputs.push(value)
       if (this.recentInputs.length > 20) this.recentInputs.shift()
-      this.$ownerInstance.callMethod('onChange', { value, cursor, documentId: this.documentId, userEdit: true })
+      this.callOwner('onChange', { value, cursor, documentId: this.documentId, userEdit: true })
       this.reportCursor(animateCursor)
     },
     beforeInput(event) {
@@ -504,7 +521,7 @@ export default {
       const selection = this.getOffsets()
       if (!selection || selection.start === selection.end) this.selectWordAt(x, y)
       const offsets = this.getOffsets() || { start: 0, end: 0 }
-      this.$ownerInstance.callMethod('onMenuOpen', { x: Number.isFinite(x) ? x : 60, y: Number.isFinite(y) ? y : 90, start: offsets.start, end: offsets.end })
+      this.callOwner('onMenuOpen', { x: Number.isFinite(x) ? x : 60, y: Number.isFinite(y) ? y : 90, start: offsets.start, end: offsets.end })
     },
     selectWordAt(x, y) {
       let range = document.caretRangeFromPoint?.(x, y)
@@ -531,7 +548,7 @@ export default {
       const offsets = this.getOffsets()
       if (!offsets) return
       this.lastFocusOffset = offsets.start
-      this.$ownerInstance.callMethod('onCursor', { offset: offsets.start, documentId: this.documentId })
+      this.callOwner('onCursor', { offset: offsets.start, documentId: this.documentId })
       this.updateFocus()
       this.scheduleCaret(animate)
     },

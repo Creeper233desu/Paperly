@@ -62,7 +62,9 @@ export function pdfTextLines(content, pageNumber, pageHeight = 842) {
 export async function extractPdfDocument(pdfjs, bytes, { onPage = () => {}, onProgress = () => {}, onImage, checkCancelled = () => {}, cMapReaderFactory } = {}) {
   const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)
   if (data.length < 5 || !String.fromCharCode(...data.subarray(0, 1024)).includes('%PDF-')) throw new Error('所选文件不是有效的 PDF')
-  const task = pdfjs.getDocument({ data, isEvalSupported: false, useSystemFonts: true, disableFontFace: true, useWorkerFetch: false, isOffscreenCanvasSupported: false,
+  // ImageDecoder can return a VideoFrame even with OffscreenCanvas disabled.
+  // Extraction needs PDF.js's decoded pixel arrays, rather than browser bitmaps.
+  const task = pdfjs.getDocument({ data, isEvalSupported: false, useSystemFonts: true, disableFontFace: true, useWorkerFetch: false, isOffscreenCanvasSupported: false, isImageDecoderSupported: false,
     ...(cMapReaderFactory ? { CMapReaderFactory: cMapReaderFactory } : {}) })
   let doc
   try {

@@ -67,6 +67,7 @@ export default {
 </script>
 <script module="pdfRender" lang="renderjs">
 import { extractPdfDocument } from '../src/services/pdf-import.js'
+import { createRenderBridge } from '../src/utils/render-bridge.js'
 let enginePromise
 function script(name) {
   return new Promise((resolve, reject) => {
@@ -96,8 +97,15 @@ class OfflineCMaps {
 }
 export default {
   methods: {
+    ownerBridge() {
+      if (!this.bridge) this.bridge = createRenderBridge(this, () => {
+        this.activeId = null; this.chunks = []
+        this.imageTransfer?.reject(new Error('已取消导入')); this.imageTransfer = null
+      })
+      return this.bridge
+    },
     async receive(raw) {
-      if (!raw) return
+      if (!raw || !this.ownerBridge().isActive()) return
       const packet = JSON.parse(raw)
       if (packet.step === 'cancel') {
         if (packet.id !== this.activeId) return
@@ -105,7 +113,7 @@ export default {
         this.imageTransfer?.reject(new Error('已取消导入')); this.imageTransfer = null
         return
       }
-      if (packet.step === 'start') { this.activeId = packet.id; this.chunks = []; this.$ownerInstance.callMethod('nextChunk', { id: packet.id }); return }
+      if (packet.step === 'start') { this.activeId = packet.id; this.chunks = []; this.ownerBridge().call('nextChunk', { id: packet.id }); return }
       if (packet.id !== this.activeId) return
       if (packet.step === 'image-next' || packet.step === 'image-saved') {
         const image = this.imageTransfer
@@ -114,24 +122,25 @@ export default {
         else { this.imageTransfer = null; image.resolve(packet.media) }
         return
       }
-      if (packet.step === 'chunk') { this.chunks.push(packet.chunk); this.$ownerInstance.callMethod('nextChunk', { id: packet.id }); return }
+      if (packet.step === 'chunk') { this.chunks.push(packet.chunk); this.ownerBridge().call('nextChunk', { id: packet.id }); return }
       if (packet.step !== 'parse') return
       try {
         const pdfjs = await engine()
-        if (packet.id !== this.activeId) return
+        if (!this.ownerBridge().isActive() || packet.id !== this.activeId) return
         const encoded = this.chunks.join(''); this.chunks = []
         const binary = atob(encoded)
         const bytes = Uint8Array.from(binary, char => char.charCodeAt(0))
         const result = await extractPdfDocument(pdfjs, bytes, { cMapReaderFactory: OfflineCMaps,
-          checkCancelled: () => { if (packet.id !== this.activeId) throw new Error('已取消导入') },
+          checkCancelled: () => { if (!this.ownerBridge().isActive() || packet.id !== this.activeId) throw new Error('已取消导入') },
           onImage: image => this.transferImage(packet.id, image),
-          onProgress: progress => this.$ownerInstance.callMethod('progress', { id: packet.id, ...progress }) })
-        if (packet.id === this.activeId) this.$ownerInstance.callMethod('finish', { id: packet.id, result })
+          onProgress: progress => this.ownerBridge().call('progress', { id: packet.id, ...progress }) })
+        if (packet.id === this.activeId) { this.activeId = null; this.ownerBridge().call('finish', { id: packet.id, result }) }
       } catch (error) {
-        if (packet.id === this.activeId) this.$ownerInstance.callMethod('finish', { id: packet.id, error: error.message || 'PDF 解析失败' })
+        if (packet.id === this.activeId) { this.activeId = null; this.ownerBridge().call('finish', { id: packet.id, error: error.message || 'PDF 解析失败' }) }
       }
     },
     transferImage(id, image) {
+      if (!this.ownerBridge().isActive() || id !== this.activeId) return Promise.reject(new Error('已取消导入'))
       return new Promise((resolve, reject) => {
         this.imageSerial = (this.imageSerial || 0) + 1
         this.imageTransfer = { id, imageId: this.imageSerial, ...image, offset: 0, resolve, reject }
@@ -143,7 +152,7 @@ export default {
       if (!image || image.id !== this.activeId) return
       const offset = image.offset, chunk = image.dataUrl.slice(offset, offset + 131072)
       image.offset += chunk.length
-      this.$ownerInstance.callMethod('imageChunk', { id: image.id, imageId: image.imageId, offset, chunk,
+      this.ownerBridge().call('imageChunk', { id: image.id, imageId: image.imageId, offset, chunk,
         done: image.offset >= image.dataUrl.length, width: image.width, height: image.height })
     }
   }

@@ -12,8 +12,13 @@ export default {
 </script>
 <script module="gestures" lang="renderjs">
 import { touchDistance } from '../src/utils/font-scale.js'
+import { createRenderBridge } from '../src/utils/render-bridge.js'
 export default {
   mounted() {
+    this.renderBridge = createRenderBridge(this, () => {
+      this.$el.removeEventListener('touchstart', this.start, true); this.$el.removeEventListener('touchmove', this.move, true)
+      this.$el.removeEventListener('touchend', this.end); this.$el.removeEventListener('touchcancel', this.end)
+    })
     this.enabled = false
     this.start = event => { this.distance = touchDistance(event.touches || event.originalEvent?.touches) }
     this.move = event => {
@@ -23,18 +28,14 @@ export default {
       event.preventDefault()
       if (!this.enabled) { this.distance = distance; return }
       const ratio = distance / (this.distance || distance)
-      if (ratio > 1.055 || ratio < .945) { this.distance = distance; this.$ownerInstance.callMethod('pinch', ratio) }
+      if (ratio > 1.055 || ratio < .945) { this.distance = distance; this.renderBridge.call('pinch', ratio) }
     }
     this.end = () => { this.distance = 0 }
     this.$el.addEventListener('touchstart', this.start, { capture:true, passive:true })
     this.$el.addEventListener('touchmove', this.move, { capture:true, passive:false })
     this.$el.addEventListener('touchend', this.end)
     this.$el.addEventListener('touchcancel', this.end)
-    this.$ownerInstance.callMethod('renderReady')
-  },
-  beforeUnmount() {
-    this.$el.removeEventListener('touchstart', this.start); this.$el.removeEventListener('touchmove', this.move)
-    this.$el.removeEventListener('touchend', this.end); this.$el.removeEventListener('touchcancel', this.end)
+    this.renderBridge.call('renderReady')
   },
   methods: { setEnabled(value) {
     let payload = value

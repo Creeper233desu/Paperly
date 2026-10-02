@@ -12,6 +12,8 @@ import { encodePdfImage, extractPdfPageImages } from '../src/services/pdf-images
 import { importedBookSummary } from '../src/services/docx-import.js'
 import { imageIdFromParagraph } from '../src/utils/media.js'
 import { savePdfImage, removePdfImageFiles } from '../src/services/pdf-image-files.js'
+import { createRenderBridge } from '../src/utils/render-bridge.js'
+import { touchDistance } from '../src/utils/font-scale.js'
 
 function decodePng(encoded) {
   const png = Buffer.from(encoded.dataUrl.split(',')[1], 'base64'), streams = []
@@ -84,6 +86,22 @@ test('real inline images are imported alongside editable text', async () => {
   assert.equal(book.imageCount, 2); assert.deepEqual(result.warnings, [])
 })
 
+test('real JPEG and GIF-style indexed images decode to visible PNGs', async () => {
+  for (const imageFormat of ['jpeg', 'indexed']) {
+    const result = await parse({ images:true, imageFormat })
+    assert.equal(buildPdfBook(result.pages).imageCount, 2)
+    assert.deepEqual(result.warnings, [])
+    const media = result.pages[0].find(item => item.type === 'image').media
+    const rgba = decodePng({ ...media, dataUrl:media.path })
+    assert.ok(rgba.some((value, at) => at % 4 === 3 && value === 255))
+    if (imageFormat === 'jpeg') assert.ok(rgba[0] > 240 && rgba[1] < 10 && rgba[2] < 10)
+    else {
+      assert.deepEqual(rgba.slice(0,8), [255,0,0,255, 0,255,0,255])
+      assert.ok(rgba.some((value, at) => at % 4 === 3 && value === 0))
+    }
+  }
+})
+
 function fakePage(fnArray, argsArray, objects = new Map()) {
   const store = { has: id => objects.has(id), get: (id, callback) => callback ? setTimeout(() => callback(objects.get(id)), 0) : objects.get(id) }
   return { view:[0,0,595,842], getOperatorList:async () => ({ fnArray, argsArray }), objs:store, commonObjs:store }
@@ -133,8 +151,9 @@ function bridge(save, remove = () => {}) {
   const source = readFileSync(new URL('../components/PdfImportBridge.vue', import.meta.url), 'utf8')
   const scripts = [...source.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map(match => match[1].replace(/^import .*$/gm, '').replace('export default', 'return'))
   const ownerOptions = new Function('readPdfBase64','savePdfImage','removePdfImageFiles',scripts[0])(() => {}, save, remove)
-  const renderOptions = new Function('extractPdfDocument', scripts[1])(extractPdfDocument)
-  const owner = { ...ownerOptions.data(), ...ownerOptions.methods }, render = { ...renderOptions.methods }
+  const renderOptions = new Function('extractPdfDocument', 'createRenderBridge', scripts[1])(extractPdfDocument, createRenderBridge)
+  const root = { isConnected:true }
+  const owner = { ...ownerOptions.data(), ...ownerOptions.methods }, render = { ...renderOptions.methods, $el:root }
   let packet = ''
   Object.defineProperty(owner, 'packet', { get:()=>packet, set:value=>{ if (value !== packet) { packet = value; queueMicrotask(()=>render.receive(value)) } } })
   render.$ownerInstance = { callMethod:(method,data)=>queueMicrotask(()=>owner[method](data)) }
@@ -164,6 +183,62 @@ test('cancelled bridge removes already saved and late finishing images', async (
   assert.deepEqual(removed.sort(), ['_doc/early.png','_doc/late.png'])
 })
 
+test('detached PDF bridge rejects an image transfer without calling its removed owner', async () => {
+  let saves = 0
+  const { owner, render } = bridge(async () => { saves++; return {path:'_doc/saved.png'} })
+  owner.pending = {id:3,imagePaths:[]}; render.activeId = 3
+  const transfer = render.transferImage(3, {dataUrl:'data:image/png;base64,' + 'A'.repeat(300000),width:1,height:1})
+  render.$el.isConnected = false
+  await assert.rejects(transfer, /取消/)
+  clearTimeout(owner.timeout)
+  assert.equal(saves, 0); assert.equal(render.activeId, null); assert.equal(render.imageTransfer, null)
+})
+
+test('render owner guard stops delayed editor callbacks and unregisters its lifecycle observer', () => {
+  const handlers = new Map(), calls = []
+  let observer, disconnected = 0, disposed = 0
+  const win = {
+    addEventListener:(name,fn)=>handlers.set(name,fn), removeEventListener:(name)=>handlers.delete(name),
+    MutationObserver:class { constructor(callback) { observer = callback } observe() {} disconnect() { disconnected++ } }
+  }
+  const root = {isConnected:true,ownerDocument:{defaultView:win,documentElement:{}}}
+  const guard = createRenderBridge({$el:root,$ownerInstance:{callMethod:(...args)=>calls.push(args)}},()=>disposed++)
+  assert.equal(guard.call('progress',{current:1}),true)
+  root.isConnected = false; observer()
+  assert.equal(guard.call('finish'),false); guard.dispose()
+  assert.equal(calls.length,1); assert.equal(disposed,1); assert.equal(disconnected,1); assert.equal(handlers.size,0)
+
+  const source = readFileSync(new URL('../components/DocumentInput.vue', import.meta.url),'utf8')
+  const script = source.match(/<script module="editorRender" lang="renderjs">([\s\S]*?)<\/script>/)[1].replace(/^import .*$/gm,'').replace('export default','return')
+  const options = new Function('createRenderBridge',script)(createRenderBridge)
+  const editor = {...options.methods,$el:{isConnected:true},$ownerInstance:{callMethod:(...args)=>calls.push(args)}}
+  editor.callOwner('onCursor',{offset:0})
+  editor.$el.isConnected = false
+  assert.equal(editor.callOwner('onBlur'),false)
+  assert.equal(editor.callOwner('onRenderReady'),false)
+  assert.equal(calls.length,2)
+})
+
+test('reader detachment removes capture listeners and blocks a late pinch callback', () => {
+  const source = readFileSync(new URL('../components/ReadingSurface.vue',import.meta.url),'utf8')
+  const script = source.match(/<script module="gestures" lang="renderjs">([\s\S]*?)<\/script>/)[1].replace(/^import .*$/gm,'').replace('export default','return')
+  const options = new Function('touchDistance','createRenderBridge',script)(touchDistance,createRenderBridge)
+  const handlers = new Map(), calls = []
+  const capture = value => typeof value === 'object' ? !!value.capture : !!value
+  const root = {
+    isConnected:true,
+    addEventListener(name,fn,opts) { handlers.set(name,{fn,capture:capture(opts)}) },
+    removeEventListener(name,fn,opts) { const handler = handlers.get(name); if (handler?.fn === fn && handler.capture === capture(opts)) handlers.delete(name) }
+  }
+  const reader = {...options.methods,$el:root,$ownerInstance:{callMethod:(...args)=>calls.push(args)}}
+  options.mounted.call(reader); reader.setEnabled(JSON.stringify({enabled:true}))
+  const event = distance => ({touches:[{clientX:0,clientY:0},{clientX:distance,clientY:0}],preventDefault(){}})
+  reader.start(event(100)); reader.move(event(200))
+  assert.deepEqual(calls, [['renderReady',{}],['pinch',2]])
+  root.isConnected = false; reader.move(event(400))
+  assert.equal(handlers.size,0); assert.equal(calls.length,2)
+})
+
 test('native image staging is persisted and cleaned up on save failures', async () => {
   const calls = [], previous = globalThis.plus
   globalThis.plus = { nativeObj:{ Bitmap:class {
@@ -183,10 +258,17 @@ test('native image staging is persisted and cleaned up on save failures', async 
   } finally { globalThis.plus = previous }
 })
 
-test('packaged offline engine imports images through both bridge layers in a Chrome 74 context', async () => {
-  const base64 = samplePdf({ images:true,builtinMap:true }).toString('base64'), saved = [], removed = [], progress = []
+for (const imageFormat of ['rgb', 'jpeg', 'indexed']) test(`packaged offline engine imports ${imageFormat} images with native ImageDecoder available`, async () => {
+  const base64 = samplePdf({ images:true,builtinMap:true,imageFormat }).toString('base64'), saved = [], removed = [], progress = []
+  let nativeDecodes = 0
   const context = vm.createContext({ console,URL,URLSearchParams,TextEncoder,TextDecoder,setTimeout,clearTimeout,queueMicrotask,
     atob,btoa,DOMException,AbortController,AbortSignal,ReadableStream,DOMMatrix:class {},navigator:{userAgent:'Mozilla/5.0 Chrome/74'},
+    ImageDecoder:class {
+      static isTypeSupported() { return Promise.resolve(true) }
+      constructor() { nativeDecodes++ }
+      async decode() { return {image:{width:8,height:6,close(){}}} }
+      close() {}
+    },
     uni:{ saveFile:options=>options.success({savedFilePath:`_doc/durable-${saved.length}.png`}),removeSavedFile:options=>removed.push(options.filePath) },
     plus:{ nativeObj:{ Bitmap:class {
       loadBase64Data(data,success) { this.data = data; success() }
@@ -210,7 +292,7 @@ test('packaged offline engine imports images through both bridge layers in a Chr
   }
   const owner = {...context.Logic.default.data(),$emit:(_event,data)=>progress.push(data)}
   for (const [name,method] of Object.entries(context.Logic.default.methods)) owner[name] = method.bind(owner)
-  const render = {$ownerInstance:{callMethod:(method,data)=>queueMicrotask(()=>owner[method](data))}}
+  const render = {$el:{isConnected:true},$ownerInstance:{callMethod:(method,data)=>queueMicrotask(()=>owner[method](data))}}
   for (const [name,method] of Object.entries(context.Renderer.default.methods)) render[name] = method.bind(render)
   let packet = ''
   Object.defineProperty(owner,'packet',{get:()=>packet,set:value=>{ if (value!==packet) { packet=value;queueMicrotask(()=>render.receive(value)) } }})
@@ -219,4 +301,5 @@ test('packaged offline engine imports images through both bridge layers in a Chr
   assert.deepEqual(Array.from(result.pages,page=>page.find(item=>item.type==='image').media.path),['_doc/durable-1.png','_doc/durable-2.png'])
   assert.equal(removed.filter(path=>path.startsWith('_doc/pdf-image-')).length,2)
   assert.equal(removed.filter(path=>path.startsWith('_doc/durable-')).length,0)
+  assert.equal(nativeDecodes,0)
 })
