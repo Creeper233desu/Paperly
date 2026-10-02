@@ -1,4 +1,5 @@
 export const extraEnglish = {
+  '移除封面':'Remove cover',
   '裁切图片':'Crop image', '裁切封面':'Crop cover', '裁切插图':'Crop illustration', '裁切背景图片':'Crop background image',
   '重置':'Reset', '留下你想要的画面。':'Keep the part you want.',
   '拖动选区移动位置，拖动四角调整范围。':'Drag the selection to move it. Drag its corners to resize it.',

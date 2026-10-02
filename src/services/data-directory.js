@@ -11,6 +11,7 @@ const MAX_COPY = 512 * 1024 * 1024
 // SAF tree URI was stored inside the app and could never survive reinstalling.
 export const dataDirectory = reactive({ uri:'', label:'Documents/PaperWriter', ready:false, busy:false, permission:'unknown', lastSync:'', error:'' })
 let syncTimer = null, syncQueue = Promise.resolve(), syncSuspended = false, connecting = null
+const scannedAssetFolders = new Set()
 
 function androidReady() { return typeof plus !== 'undefined' && plus.os?.name === 'Android' }
 function invoke(object, method, ...args) { return plus.android.invoke(object, method, ...args) }
@@ -98,6 +99,26 @@ function removeTree(folder) {
 }
 function createMarker(file) { if (!invoke(file, 'createNewFile') && !isFile(file)) throw new Error('无法完成数据写入标记') }
 function renameFile(from, to) { if (!invoke(from, 'renameTo', to)) throw new Error('无法提交数据文件') }
+
+function assetFolder(root) {
+  const folder = ensureFolder(child(root, 'assets'))
+  const marker = child(folder, '.nomedia')
+  const created = !isFile(marker)
+  // Keep shared backups restorable after uninstall without publishing their
+  // covers/illustrations to Gallery. Exports remain outside this directory.
+  createMarker(marker)
+  const path = absolute(marker)
+  if (created) scannedAssetFolders.delete(path)
+  if (!scannedAssetFolders.has(path)) {
+    try {
+      // Scanning .nomedia also refreshes existing indexed files in its parent;
+      // do not delete MediaStore rows, which can delete the actual backups.
+      invoke(androidClass('android.media.MediaScannerConnection'), 'scanFile', plus.android.runtimeMainActivity(), [path], null, null)
+      scannedAssetFolders.add(path)
+    } catch (_) { /* Some ROMs refresh their gallery on the next system scan. */ }
+  }
+  return folder
+}
 
 async function transfer(inputChannel, outputChannel, maxBytes = MAX_COPY) {
   let copied = 0
@@ -190,7 +211,7 @@ function completedSnapshots(root) {
 }
 async function backupTo(root) {
   ensureFolder(root)
-  const assets = ensureFolder(child(root, 'assets'))
+  const assets = assetFolder(root)
   ensureFolder(child(root, 'exports'))
   const values = snapshotValues()
   const media = discoverAssets(values)
@@ -237,7 +258,7 @@ async function restoreSnapshot(root, candidate) {
   await copyFile(candidate, localFile('_doc/recovered/snapshot.json'))
   const snapshot = JSON.parse(await readLocalText('_doc/recovered/snapshot.json'))
   if (snapshot.version !== 1 || !snapshot.values || !Array.isArray(snapshot.assets)) throw new Error('备份格式无法识别')
-  const assets = child(root, 'assets')
+  const assets = assetFolder(root)
   for (const name of snapshot.assets) {
     if (!/^[\w.\-]+$/.test(name) || name === '.' || name === '..') throw new Error('备份资源名称不安全')
     const file = child(assets, name)

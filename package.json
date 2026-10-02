@@ -8,6 +8,7 @@
     "test": "node --test tests/*.test.js",
     "test:pdf-import": "node --test scripts/pdf-import.test.mjs",
     "test:image-export": "node --test scripts/image-export.test.mjs",
+    "test:book-media": "node --test scripts/book-media.test.mjs",
     "test:image-crop": "node --test scripts/image-crop.test.mjs scripts/android-image-crop.test.mjs",
     "build:pdf-runtime": "node scripts/build-pdf-runtime.mjs"
   },
