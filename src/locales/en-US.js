@@ -125,7 +125,7 @@ export const extraEnglish = {
   '思考过程 · 模型返回':'Reasoning · returned by model', '恢复默认':'Restore default', '我的书架':'My library', '打开并分享 ↗':'Open and share ↗',
   '找不到这本书。请返回书架后重新进入。':'This book could not be found. Return to the library and open it again.',
   '拒绝':'Reject', '拖尾长度':'Trail length', '拖尾颜色':'Trail color', '括号、引号与「」':'Brackets, quotation marks, and 「」',
-  '按实际净增减记录。删去文字或书籍，数字也会减少。':'Tracks actual net changes. Deleting text or books reduces the count.',
+  '按实际净增减记录。导入文稿会增加，删去文字或书籍会减少。':'Tracks actual net changes. Importing manuscripts increases the count; deleting text or books reduces it.',
   '按章节生成导航页':'Generate chapter navigation', '接受修改':'Accept change', '提取文字，整理为可编辑章节':'Extract text into editable chapters',
   '插入正文':'Insert into article', '整理章节，沉浸写作，让每本书都有自己的模样。':'Organize chapters, write without distraction, and give every book its own shape.',
   '文件夹。书籍和导出文件保存在这里；重装后授予文件访问权限即可自动找回，无需重新选择文件夹。':' folder. Books and exports are stored here. After reinstalling, grant file access to restore them automatically.',

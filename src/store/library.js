@@ -1,5 +1,5 @@
 import { reactive } from 'vue'
-import { recordWordDelta } from './statistics.js'
+import { recordWordDelta, recordWordDeltas } from './statistics.js'
 import { textOnlyParagraphs } from '../utils/media.js'
 import { queueDirectorySync } from '../services/data-directory.js'
 
@@ -54,6 +54,7 @@ export function importBook(content, details = {}) {
   state.books.unshift(book)
   try { persist() }
   catch (error) { state.books.shift(); throw new Error(`保存导入书籍失败：${error.message || '请检查存储空间'}`) }
+  recordWordDeltas(book.id, book.title, articleWordDeltas(book.chapters))
   return book
 }
 // Convert legacy PDF entries in place so their book ID and metadata survive.
@@ -61,6 +62,7 @@ export function replaceImportedContent(id, content) {
   const original = getBook(id)
   if (!original) throw new Error('书籍不存在')
   const snapshot = JSON.parse(JSON.stringify(original))
+  const removed = articleWordDeltas(original.chapters, -1)
   const imported = importedBook(content, original)
   original.chapters = imported.chapters
   original.origin = 'imported'
@@ -69,6 +71,7 @@ export function replaceImportedContent(id, content) {
   delete original.readOnly
   try { persist() }
   catch (error) { if (!Object.prototype.hasOwnProperty.call(snapshot, 'lastEdited')) delete original.lastEdited; Object.assign(original, snapshot); throw error }
+  recordWordDeltas(original.id, original.title, [...removed, ...articleWordDeltas(original.chapters)])
   return original
 }
 export function updateBook(id, patch) {
@@ -79,12 +82,15 @@ export function updateBook(id, patch) {
   book.updatedAt = now(); persist()
 }
 export function renameBook(id, title) { updateBook(id, { title }) }
+function articleWordDeltas(chapters, direction = 1) {
+  return chapters.flatMap(chapter => chapter.articles.map(article => ({ articleId: article.id, articleTitle: article.title, delta: direction * wordCount(article) })))
+}
 export function deleteBook(id) {
   const book = getBook(id)
   if (!book) return
-  const removed = book.chapters.flatMap(chapter => chapter.articles.map(article => ({ id: article.id, title: article.title, words: wordCount(article) })))
+  const removed = articleWordDeltas(book.chapters, -1)
   state.books = state.books.filter(item => item.id !== id); persist()
-  if (book.origin !== 'imported') removed.forEach(article => recordWordDelta(book.id, book.title, article.id, article.title, -article.words))
+  recordWordDeltas(book.id, book.title, removed)
   if (book.readOnly?.path && typeof plus !== 'undefined') plus.io.resolveLocalFileSystemURL(book.readOnly.path, entry => entry.remove(() => {}, () => {}), () => {})
   if (book.readOnly && book.cover?.startsWith('_doc/') && typeof plus !== 'undefined') plus.io.resolveLocalFileSystemURL(book.cover, entry => entry.remove(() => {}, () => {}), () => {})
 }
@@ -98,11 +104,11 @@ export function renameChapter(bookId, id, title) { const ch = getChapter(bookId,
 export function deleteChapter(bookId, id) {
   const book = getBook(bookId), chapter = getChapter(bookId, id)
   if (!book || !chapter) return
-  const removed = chapter.articles.map(article => ({ id: article.id, title: article.title, words: wordCount(article) }))
+  const removed = articleWordDeltas([chapter], -1)
   book.chapters = book.chapters.filter(item => item.id !== id)
   if (book.lastEdited?.chapterId === id) book.lastEdited = null
   persist()
-  if (book.origin !== 'imported') removed.forEach(article => recordWordDelta(book.id, book.title, article.id, article.title, -article.words))
+  recordWordDeltas(book.id, book.title, removed)
 }
 export function addArticle(bookId, chapterId, title = '', id = uid()) {
   const chapter = getChapter(bookId, chapterId); if (!chapter) return null
@@ -133,7 +139,7 @@ export function saveArticle(bookId, chapterId, articleId, patch) {
     book.lastEdited = { chapterId, articleId, cursor: Math.max(0, Number(patch.cursor) || 0), updatedAt: article.updatedAt }
   }
   persist()
-  if (book && book.origin !== 'imported') recordWordDelta(book.id, book.title, article.id, article.title, wordCount(article) - previousWords)
+  if (book) recordWordDelta(book.id, book.title, article.id, article.title, wordCount(article) - previousWords)
 }
 export function deleteArticle(bookId, chapterId, articleId) {
   const chapter = getChapter(bookId, chapterId), book = getBook(bookId)
@@ -143,7 +149,7 @@ export function deleteArticle(bookId, chapterId, articleId) {
     chapter.articles = chapter.articles.filter(item => item.id !== articleId)
     if (book.lastEdited?.articleId === articleId) book.lastEdited = null
     persist()
-    if (removed && book.origin !== 'imported') recordWordDelta(book.id, book.title, removed.id, removed.title, -removed.words)
+    if (removed) recordWordDelta(book.id, book.title, removed.id, removed.title, -removed.words)
   }
 }
 export function wordCount(article) { return textOnlyParagraphs(article?.paragraphs).join('').replace(/\s/g, '').length }
