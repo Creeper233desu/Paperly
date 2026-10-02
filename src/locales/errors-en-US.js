@@ -21,6 +21,7 @@ export const englishErrors = {
   '文件复制失败':'File copy failed', '文件不能超过 80 MB':'Files must be 80 MB or smaller', '文件复制不完整':'File copy was incomplete',
   '没有选中图片':'No image selected', '图片保存失败':'Could not save the image', '无法读取图片':'Could not read the image',
   '封面保存失败':'Could not save the cover', '书籍已不存在':'The book no longer exists',
+  '无法打开系统图片选择器':'Could not open the system photo picker', '图片不能超过 80 MB':'Images cannot exceed 80 MB',
   '篇章已变化，无法安全应用':'The outline changed; the edit cannot be applied safely', '不支持的篇章操作':'Unsupported outline operation',
   '目标正文不属于当前书本':'The target article is not in this book', '这篇正文没有多余空行':'This article has no extra blank paragraphs',
   '清理 {count} 个空白段落':'Remove {count} blank paragraphs', '空白段落 × {count}':'Blank paragraphs × {count}',
