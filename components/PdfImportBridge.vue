@@ -1,6 +1,7 @@
 <template><view class="pdf-import-bridge" :prop="packet" :change:prop="pdfRender.receive"></view></template>
 <script>
 import { readPdfBase64 } from '../src/services/android-pdf-picker.js'
+import { savePdfImage, removePdfImageFiles } from '../src/services/pdf-image-files.js'
 export default {
   emits: ['progress'],
   data() { return { packet: '', serial: 0 } },
@@ -10,7 +11,7 @@ export default {
       if (this.pending) throw new Error('正在导入另一份 PDF')
       const id = ++this.serial
       return new Promise((resolve, reject) => {
-        this.pending = { id, resolve, reject, offset: 0, encoded: '' }
+        this.pending = { id, resolve, reject, offset: 0, encoded: '', imagePaths: [], image: null }
         this.keepAlive()
         readPdfBase64(file.path).then(encoded => {
           if (this.pending?.id !== id) return
@@ -31,11 +32,29 @@ export default {
       if (!chunk) job.encoded = ''
     },
     progress(data) { if (data.id === this.pending?.id) { this.keepAlive(); this.$emit('progress', data) } },
+    async imageChunk(data) {
+      const job = this.pending
+      if (!job || job.id !== data.id) return
+      this.keepAlive()
+      if (!job.image) job.image = { imageId: data.imageId, offset: 0, chunks: [] }
+      const image = job.image
+      if (image.imageId !== data.imageId || image.offset !== data.offset) return this.cancel('PDF 图片传输失败，请重试')
+      image.chunks.push(data.chunk); image.offset += data.chunk.length
+      if (!data.done) { this.packet = JSON.stringify({ id: data.id, step: 'image-next', imageId: data.imageId, offset: image.offset }); return }
+      try {
+        const media = await savePdfImage({ dataUrl: image.chunks.join(''), width: data.width, height: data.height })
+        if (this.pending !== job) { removePdfImageFiles([media.path]); return }
+        job.imagePaths.push(media.path); job.image = null
+        this.packet = JSON.stringify({ id: data.id, step: 'image-saved', imageId: data.imageId, media })
+      } catch (error) {
+        if (this.pending === job) this.cancel(error.message)
+      }
+    },
     finish(data) {
       const job = this.pending
       if (!job || job.id !== data.id) return
       this.pending = null; clearTimeout(this.timeout)
-      if (data.error) job.reject(new Error(data.error)); else job.resolve(data.result)
+      if (data.error) { removePdfImageFiles(job.imagePaths); job.reject(new Error(data.error)) } else job.resolve(data.result)
     },
     cancel(message = '已取消导入') {
       if (!this.pending) return
@@ -80,9 +99,21 @@ export default {
     async receive(raw) {
       if (!raw) return
       const packet = JSON.parse(raw)
-      if (packet.step === 'cancel') { this.activeId = null; this.chunks = []; return }
+      if (packet.step === 'cancel') {
+        if (packet.id !== this.activeId) return
+        this.activeId = null; this.chunks = []
+        this.imageTransfer?.reject(new Error('已取消导入')); this.imageTransfer = null
+        return
+      }
       if (packet.step === 'start') { this.activeId = packet.id; this.chunks = []; this.$ownerInstance.callMethod('nextChunk', { id: packet.id }); return }
       if (packet.id !== this.activeId) return
+      if (packet.step === 'image-next' || packet.step === 'image-saved') {
+        const image = this.imageTransfer
+        if (!image || image.imageId !== packet.imageId) return
+        if (packet.step === 'image-next') { if (packet.offset === image.offset) this.sendImageChunk() }
+        else { this.imageTransfer = null; image.resolve(packet.media) }
+        return
+      }
       if (packet.step === 'chunk') { this.chunks.push(packet.chunk); this.$ownerInstance.callMethod('nextChunk', { id: packet.id }); return }
       if (packet.step !== 'parse') return
       try {
@@ -92,12 +123,28 @@ export default {
         const binary = atob(encoded)
         const bytes = Uint8Array.from(binary, char => char.charCodeAt(0))
         const result = await extractPdfDocument(pdfjs, bytes, { cMapReaderFactory: OfflineCMaps,
-          onPage: () => { if (packet.id !== this.activeId) throw new Error('已取消导入') },
+          checkCancelled: () => { if (packet.id !== this.activeId) throw new Error('已取消导入') },
+          onImage: image => this.transferImage(packet.id, image),
           onProgress: progress => this.$ownerInstance.callMethod('progress', { id: packet.id, ...progress }) })
         if (packet.id === this.activeId) this.$ownerInstance.callMethod('finish', { id: packet.id, result })
       } catch (error) {
         if (packet.id === this.activeId) this.$ownerInstance.callMethod('finish', { id: packet.id, error: error.message || 'PDF 解析失败' })
       }
+    },
+    transferImage(id, image) {
+      return new Promise((resolve, reject) => {
+        this.imageSerial = (this.imageSerial || 0) + 1
+        this.imageTransfer = { id, imageId: this.imageSerial, ...image, offset: 0, resolve, reject }
+        this.sendImageChunk()
+      })
+    },
+    sendImageChunk() {
+      const image = this.imageTransfer
+      if (!image || image.id !== this.activeId) return
+      const offset = image.offset, chunk = image.dataUrl.slice(offset, offset + 131072)
+      image.offset += chunk.length
+      this.$ownerInstance.callMethod('imageChunk', { id: image.id, imageId: image.imageId, offset, chunk,
+        done: image.offset >= image.dataUrl.length, width: image.width, height: image.height })
     }
   }
 }

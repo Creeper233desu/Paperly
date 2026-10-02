@@ -31,13 +31,14 @@ import { mirrorExport } from '../src/services/data-directory.js'
 import { textOnlyParagraphs } from '../src/utils/media'
 import PdfImportBridge from './PdfImportBridge.vue'
 import { buildPdfBook } from '../src/services/pdf-import'
+import { pdfDocumentImagePaths, removePdfImageFiles } from '../src/services/pdf-image-files.js'
 import { removeImportedFile } from '../src/services/android-pdf-picker'
 import AppSheet from './AppSheet.vue'
 import UiIcon from './UiIcon.vue'
 import MoreIcon from './MoreIcon.vue'
 import ActionMenu from './ActionMenu.vue'
 import AppDialog from './AppDialog.vue'
-import { t } from '../src/i18n.js'
+import { t, localizeMessage } from '../src/i18n.js'
 
 const pdfBridge = ref(null), converting = ref(false), conversionProgress = ref(''), conversionError = ref('')
 const props = defineProps({ bookId:String, motion:{ type:String, default:'none' }, hideShared:Boolean, coverColor:String })
@@ -113,15 +114,18 @@ async function convertPdf() {
   interact()
   if (converting.value || book.value?.readOnly?.format !== 'pdf') return
   const source = { ...book.value.readOnly }
+  let imagePaths = [], saved = false
   converting.value = true; conversionProgress.value = t('正在读取原文件')
   try {
     const result = await pdfBridge.value.parse({ path: source.path })
-    const content = buildPdfBook(result.pages, result.metadata, source.fileName)
+    imagePaths = pdfDocumentImagePaths(result)
+    const content = buildPdfBook(result.pages, result.metadata, source.fileName, result.warnings)
     replaceImportedContent(bookId.value, content)
+    saved = true
     removeImportedFile(source.path)
-    if (content.warnings.length) conversionError.value = content.warnings.join('\n')
+    if (content.warnings.length) conversionError.value = content.warnings.map(localizeMessage).join('\n')
   } catch (error) { if (!String(error.message).includes('取消')) conversionError.value = error.message || t('转换失败') }
-  finally { converting.value = false }
+  finally { if (!saved) removePdfImageFiles(imagePaths); converting.value = false }
 }
 </script>
 

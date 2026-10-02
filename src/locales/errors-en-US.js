@@ -1,4 +1,12 @@
 export const englishErrors = {
+  '此 PDF 没有可提取的文字或内嵌图片，无法导入。请检查文件，或先用 OCR 添加文字层。':'This PDF has no extractable text or embedded images. Check the file or run OCR to add a text layer.',
+  '{count} 页没有可提取的文字或图片，已跳过。':'{count} pages had no extractable text or images and were skipped.',
+  '{count} 页仅含图片，已以图片段落导入；如需编辑其中的文字，请先进行 OCR。':'{count} image-only pages were imported as image paragraphs. Run OCR first to edit their text.',
+  '第 {page} 页有 {count} 处图片无法提取，已保留可读取的内容。':'{count} images on page {page} could not be extracted. Readable content was preserved.',
+  '第 {page} 页的图片无法提取，已保留可读取的文字。':'Images on page {page} could not be extracted. Readable text was preserved.',
+  '无法读取 PDF 图片':'Could not read the PDF image', 'PDF 图片尺寸无效':'Invalid PDF image dimensions',
+  'PDF 图片保存失败':'Could not save the PDF image', 'PDF 图片保存失败，请检查存储空间':'Could not save the PDF image. Check available storage.',
+  'PDF 图片传输失败，请重试':'PDF image transfer failed. Try again.',
   '模型列表返回 {status}':'Model list returned {status}', '无法连接模型服务':'Could not connect to the model provider',
   '连接成功，但没有取得可用模型':'Connected, but no models were available', '请先从已获取的模型列表中选择模型':'Select a model from the fetched list first',
   '模型服务返回错误':'The model provider returned an error', '工具参数无法解析':'Could not parse tool arguments',

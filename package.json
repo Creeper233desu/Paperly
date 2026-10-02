@@ -6,6 +6,7 @@
   "description": "Vue 3 uni-app Android writing app for HBuilderX",
   "scripts": {
     "test": "node --test tests/*.test.js",
+    "test:pdf-import": "node --test scripts/pdf-import.test.mjs",
     "build:pdf-runtime": "node scripts/build-pdf-runtime.mjs"
   },
   "devDependencies": {

@@ -1,5 +1,6 @@
 import { unzipSync, strFromU8 } from 'fflate'
 import { DOMParser } from '@xmldom/xmldom'
+import { textOnlyParagraphs } from '../utils/media.js'
 
 const MAX_FILE_BYTES = 16 * 1024 * 1024
 const MAX_XML_BYTES = 24 * 1024 * 1024
@@ -114,5 +115,6 @@ export function parseDocx(bytes, fileName = '导入的书籍.docx') {
 }
 
 export function importedBookSummary(book) {
-  return { chapters: book.chapters.length, articles: book.chapters.reduce((total, chapter) => total + chapter.articles.length, 0), words: book.chapters.reduce((total, chapter) => total + chapter.articles.reduce((count, article) => count + article.paragraphs.join('').replace(/\s/g, '').length, 0), 0) }
+  const articles = book.chapters.flatMap(chapter => chapter.articles)
+  return { chapters: book.chapters.length, articles: articles.length, words: articles.reduce((count, article) => count + textOnlyParagraphs(article.paragraphs).join('').replace(/\s/g, '').length, 0) }
 }
