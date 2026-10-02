@@ -62,6 +62,23 @@ test('transparency endpoints and missing backgrounds retain the original card', 
   assert.ok(!calls.some(call => call.type === 'image'))
 })
 
+test('background transparency produces the expected opaque PNG pixels in both themes', async t => {
+  let createCanvas
+  try { ({ createCanvas } = await import('@napi-rs/canvas')) } catch (_) { t.skip('Optional PDF canvas runtime is not installed'); return }
+  const photo = createCanvas(20, 20), photoContext = photo.getContext('2d')
+  photoContext.fillStyle = '#ff0000'; photoContext.fillRect(0, 0, 20, 20)
+  for (const [style, base] of [['light', [251, 250, 247]], ['dark', [23, 27, 36]]]) {
+    for (const opacity of [0, .3, 1]) {
+      const output = createCanvas(1080, 460), context = output.getContext('2d')
+      const ctx = { setFontSize: size => { context.font = `${size}px sans-serif` }, measureText: text => context.measureText(text), setGlobalAlpha: value => { context.globalAlpha = value }, setFillStyle: value => { context.fillStyle = value }, fillRect: (...args) => context.fillRect(...args), fillText: (...args) => context.fillText(...args), drawImage: (_, ...args) => context.drawImage(photo, ...args) }
+      paintTextImage(ctx, layoutImageText(ctx, '正文'), style, { backgroundImage: { path: 'photo', width: 20, height: 20 }, backgroundOpacity: opacity })
+      const pixel = Array.from(context.getImageData(540, 260, 1, 1).data)
+      for (let channel = 0; channel < 3; channel++) assert.ok(Math.abs(pixel[channel] - (base[channel] * (1 - opacity) + [255, 0, 0][channel] * opacity)) <= 1)
+      assert.equal(pixel[3], 255, 'image transparency must not make the card itself transparent')
+    }
+  }
+})
+
 test('PNG export resolves the image before drawing and exporting the composite', async () => {
   const { ctx, calls } = canvas()
   const api = {
