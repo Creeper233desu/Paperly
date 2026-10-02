@@ -23,13 +23,36 @@
           <view v-if="currentEntry" class="step-card">
             <view class="step-head"><text class="step-number">03</text><view><view class="step-title">{{ $t('图片样式') }}</view><text class="step-detail">{{ $t('书本信息默认不展示') }}</text></view></view>
             <view class="style-options"><view :class="{ active: style === 'light' }" @tap="style = 'light'">{{ $t('☼　浅色纸张') }}</view><view :class="{ active: style === 'dark' }" @tap="style = 'dark'">{{ $t('☾　深色纸张') }}</view></view>
+            <view class="background-control">
+              <view class="background-heading"><text>{{ $t('背景图片') }}</text><button v-if="backgroundImage" class="background-remove" :disabled="working || backgroundBusy" @tap="removeBackground">{{ $t('移除图片') }}</button></view>
+              <button class="background-pick" :disabled="working || backgroundBusy" @tap="chooseBackground">
+                <image v-if="backgroundImage" class="background-thumbnail" :src="backgroundImage.path" mode="aspectFill" />
+                <UiIcon v-else name="image" />
+                <text>{{ backgroundBusy ? $t('正在读取图片…') : backgroundImage ? $t('更换图片') : $t('选择背景图片') }}</text>
+              </button>
+              <view v-if="backgroundImage" class="background-transparency">
+                <view class="background-heading"><text>{{ $t('图片透明度') }}</text><text class="transparency-value">{{ backgroundTransparency }}%</text></view>
+                <slider :value="backgroundTransparency" :min="0" :max="100" :step="1" :block-size="22" :disabled="working" activeColor="#5774a0" backgroundColor="#b6c1d033" @changing="changeTransparency" @change="changeTransparency" />
+                <view class="transparency-labels"><text>{{ $t('不透明') }}</text><text>{{ $t('完全透明') }}</text></view>
+                <text class="background-help">{{ $t('图片居中铺满，透明度仅影响背景图片。') }}</text>
+              </view>
+            </view>
             <view class="info-option" @tap="showBookInfo = !showBookInfo"><view><view>{{ $t('左上角添加书本信息') }}</view><text>{{ $t('书名 · 作者 · 篇名') }}</text></view><view class="toggle" :class="{ on: showBookInfo }"><view /></view></view>
           </view>
           <view v-if="currentEntry" class="actions"><view class="primary" :class="{ busy: working }" @tap="generate">{{ working ? $t('正在生成…') : generatedPath ? $t('重新生成 PNG') : $t('生成 PNG') }}</view><view :class="{ disabled: !generatedPath }" @tap="saveImage">{{ $t('保存到相册') }}</view><view :class="{ disabled: !generatedPath }" @tap="shareImage">{{ $t('打开并分享 ↗') }}</view></view>
           <view v-if="errorMessage" class="error-message">{{ $m(errorMessage) }}</view>
           <view class="note">{{ $t('生成后可先检查图片，再保存或分享到系统中可用的应用。') }}</view>
         </view>
-        <view v-if="currentEntry" class="preview-column"><view class="preview-label">{{ generatedPath ? $t('已生成 · PNG') : $t('实时预览') }}<text>{{ style === 'dark' ? $t('深色') : $t('浅色') }}</text></view><image v-if="generatedPath" class="generated-image" :src="generatedPath" mode="widthFix" /><view v-else class="preview-paper" :class="style" :style="{ fontFamily: fontFamilyFor(prefs.font) }"><view v-if="showBookInfo" class="preview-info">{{ book.title }} · {{ book.author || $t('佚名') }} · {{ currentEntry.article.title || $t('无题正文') }}</view><view class="preview-copy"><text>{{ articleText.slice(Math.max(0, start - 50), start) }}</text><text class="highlight">{{ selectedText || $t('你选中的文字，会显示在这里。') }}</text><text>{{ articleText.slice(end, end + 50) }}</text></view><view class="brand">{{ $t('纸间') }} <text>PAPERWRITER</text></view></view></view>
+        <view v-if="currentEntry" class="preview-column">
+          <view class="preview-label">{{ generatedPath ? $t('已生成 · PNG') : $t('实时预览') }}<text>{{ style === 'dark' ? $t('深色') : $t('浅色') }}</text></view>
+          <image v-if="generatedPath" class="generated-image" :src="generatedPath" mode="widthFix" />
+          <view v-else class="preview-paper" :class="style" :style="{ fontFamily: fontFamilyFor(prefs.font) }">
+            <image v-if="backgroundImage" class="preview-background" :src="backgroundImage.path" mode="aspectFill" :style="{ opacity: backgroundOpacity }" />
+            <view v-if="showBookInfo" class="preview-info">{{ book.title }} · {{ book.author || $t('佚名') }} · {{ currentEntry.article.title || $t('无题正文') }}</view>
+            <view class="preview-copy"><text>{{ articleText.slice(Math.max(0, start - 50), start) }}</text><text class="highlight">{{ selectedText || $t('你选中的文字，会显示在这里。') }}</text><text>{{ articleText.slice(end, end + 50) }}</text></view>
+            <view class="brand">{{ $t('纸间') }} <text>PAPERWRITER</text></view>
+          </view>
+        </view>
       </view>
     </view>
     <canvas canvas-id="writer-image-export" id="writer-image-export" class="export-canvas" :style="{ width: canvasWidth + 'px', height: canvasHeight + 'px' }"></canvas>
@@ -38,23 +61,27 @@
 
 <script setup>
 import { computed, getCurrentInstance, nextTick, ref, watch } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onUnload } from '@dcloudio/uni-app'
 import { getBook } from '../../src/store/library'
 import { takeImageExport } from '../../src/store/image-export-draft'
 import { loadPreferences, themeClass } from '../../src/store/preferences'
 import { fontFamilyFor, loadSelectedFont } from '../../src/services/fonts'
 import { createTextPng } from '../../src/services/image-export'
+import { chooseBackgroundImage } from '../../src/services/image-picker.js'
 import { mirrorExport } from '../../src/services/data-directory.js'
 import { textOnlyParagraphs } from '../../src/utils/media'
 import { t } from '../../src/i18n.js'
 import TextRangeSlider from '../../components/TextRangeSlider.vue'
 import ReadonlyTextSelection from '../../components/ReadonlyTextSelection.vue'
+import UiIcon from '../../components/UiIcon.vue'
 import { textRange } from '../../src/utils/text-range.js'
 
 const instance = getCurrentInstance()
 const prefs = loadPreferences()
 const bookId = ref(''), source = ref('book'), articleIndex = ref(0), articleListOpen = ref(false)
 const start = ref(0), end = ref(0), style = ref('light'), showBookInfo = ref(false)
+const backgroundImage = ref(null), backgroundTransparency = ref(70), backgroundBusy = ref(false)
+const backgroundOpacity = computed(() => 1 - backgroundTransparency.value / 100)
 const sourceText = ref(null)
 const working = ref(false), generatedPath = ref(''), savedPath = ref(''), errorMessage = ref('')
 const canvasWidth = ref(1080), canvasHeight = ref(460)
@@ -63,6 +90,7 @@ const entries = computed(() => book.value?.chapters.flatMap(chapter => chapter.a
 const currentEntry = computed(() => entries.value[articleIndex.value])
 const articleText = computed(() => textOnlyParagraphs(currentEntry.value?.article.paragraphs).join('\n'))
 const selectedText = computed(() => articleText.value.slice(start.value, end.value))
+let settingsRevision = 0, disposed = false
 
 onLoad(options => {
   loadSelectedFont().catch(() => {})
@@ -87,26 +115,51 @@ onLoad(options => {
   setSelection(textRange(articleText.value.length))
 })
 
-watch([articleIndex, start, end, style, showBookInfo], () => { generatedPath.value = ''; savedPath.value = ''; errorMessage.value = '' })
+watch([articleIndex, start, end, style, showBookInfo, backgroundImage, backgroundTransparency], () => {
+  settingsRevision++; generatedPath.value = ''; savedPath.value = ''; errorMessage.value = ''
+}, { flush: 'sync' })
+function releaseImage(image) { if (image?.path) uni.removeSavedFile({ filePath: image.path, fail: () => {} }) }
+function releaseBackground() { releaseImage(backgroundImage.value); backgroundImage.value = null }
+onUnload(() => { disposed = true; if (!working.value) releaseBackground() })
+async function chooseBackground() {
+  if (working.value || backgroundBusy.value || disposed) return
+  backgroundBusy.value = true; errorMessage.value = ''
+  try {
+    const image = await chooseBackgroundImage()
+    if (disposed) { releaseImage(image); return }
+    releaseImage(backgroundImage.value); backgroundImage.value = image
+  } catch (error) {
+    if (!disposed && !/取消|cancel/i.test(String(error.message))) errorMessage.value = error.message || t('无法读取图片')
+  } finally { backgroundBusy.value = false }
+}
+function removeBackground() { if (!working.value && !backgroundBusy.value) releaseBackground() }
+function changeTransparency(event) {
+  if (working.value) return
+  const value = Number(event.detail?.value)
+  if (Number.isFinite(value)) backgroundTransparency.value = Math.max(0, Math.min(100, Math.round(value)))
+}
 function back() { uni.navigateBack() }
 function chooseArticle(index) { articleIndex.value = index; source.value = 'book'; setSelection(textRange(articleText.value.length)); articleListOpen.value = false }
 function setSelection(range) { const selected = textRange(articleText.value.length, range.start, range.end); start.value = selected.start; end.value = selected.end }
 function captureSelection() { sourceText.value?.captureSelection() }
 async function renderPng() {
   const info = showBookInfo.value ? `${book.value.title} · ${book.value.author || t('佚名')} · ${currentEntry.value.article.title || t('无题正文')}` : ''
-  return createTextPng({ canvasId: 'writer-image-export', instance: instance.proxy, text: selectedText.value, info, style: style.value, fontFamily: fontFamilyFor(prefs.font),
+  return createTextPng({ canvasId: 'writer-image-export', instance: instance.proxy, text: selectedText.value, info, style: style.value, backgroundImage: backgroundImage.value, backgroundOpacity: backgroundOpacity.value, fontFamily: fontFamilyFor(prefs.font),
     resize: layout => { canvasWidth.value = layout.width; canvasHeight.value = layout.height }, nextFrame: nextTick })
 }
 async function generate() {
-  if (working.value) return
+  if (working.value || backgroundBusy.value || disposed) return
+  const revision = settingsRevision
   working.value = true; errorMessage.value = ''
   try {
-    generatedPath.value = await renderPng(); savedPath.value = ''
+    const path = await renderPng()
+    if (disposed || revision !== settingsRevision) return
+    generatedPath.value = path; savedPath.value = ''
     try { await mirrorExport(generatedPath.value, 'png') }
-    catch (copyError) { errorMessage.value = t('图片已生成，但复制到数据目录失败：{error}', { error:copyError.message || copyError }) }
+    catch (copyError) { if (!disposed && revision === settingsRevision) errorMessage.value = t('图片已生成，但复制到数据目录失败：{error}', { error:copyError.message || copyError }) }
   }
-  catch (error) { generatedPath.value = ''; errorMessage.value = error.message || t('图片生成失败') }
-  finally { working.value = false }
+  catch (error) { if (!disposed && revision === settingsRevision) { generatedPath.value = ''; errorMessage.value = error.message || t('图片生成失败') } }
+  finally { working.value = false; if (disposed) releaseBackground() }
 }
 function ensureAlbumCopy() {
   if (savedPath.value) return Promise.resolve(savedPath.value)
@@ -136,4 +189,20 @@ async function shareImage() {
 .image-export { min-height:100vh; padding:calc(var(--status-bar-height) + 24px) 20px 70px; background:var(--bg); color:var(--text); }.export-shell { max-width:1220px; margin:auto; }.export-top { display:flex; justify-content:space-between; color:var(--muted); font-size:12px; }.back { color:var(--accent); font-size:14px; }.heading { margin:38px 0 30px; }.eyebrow { color:var(--accent); font-size:11px; letter-spacing:.15em; }.page-title { font-size:clamp(27px,4vw,43px); font-weight:750; margin:10px 0; }.hint { color:var(--muted); font-size:13px; line-height:1.7; }.export-grid { display:grid; grid-template-columns:minmax(0,540px) minmax(0,1fr); gap:28px; align-items:start; }.controls { min-width:0; }.step-card,.empty-card { padding:22px; border:1px solid var(--line); border-radius:20px; background:var(--surface); box-shadow:0 10px 32px var(--shadow); margin-bottom:14px; }.step-head { display:flex; gap:15px; align-items:start; margin-bottom:18px; }.step-number { display:flex; align-items:center; justify-content:center; width:34px; height:34px; border-radius:10px; background:var(--accent-soft); color:var(--accent); font-size:12px; font-weight:700; }.step-title { font-size:16px; font-weight:700; }.step-detail { display:block; margin-top:5px; color:var(--muted); font-size:11px; }.empty-state,.selection-help { color:var(--muted); font-size:12px; line-height:1.7; }.article-choice { display:flex; justify-content:space-between; align-items:center; padding:13px 15px; background:var(--surface-alt); border-radius:12px; }.article-choice view { display:flex; flex-direction:column; gap:3px; font-size:13px; font-weight:650; }.article-choice small { color:var(--muted); font-size:10px; font-weight:400; }.choice-chevron { color:var(--accent); font-size:20px; transition:transform .25s; }.choice-chevron.open { transform:rotate(180deg); }.article-list { margin-top:8px; max-height:210px; overflow:auto; animation:slide-in .2s ease; }.article-option { display:flex; align-items:center; gap:10px; padding:11px; border-radius:9px; font-size:12px; }.article-option.active { color:var(--accent); background:var(--accent-soft); }.article-option text { color:var(--muted); font-size:10px; }.article-option view { flex:1; }.article-option small { color:var(--muted); font-size:10px; }.selection-toolbar { display:flex; justify-content:space-between; gap:10px; align-items:center; margin:12px 0; font-size:10px; color:var(--muted); }.selection-toolbar view { color:var(--accent); background:var(--accent-soft); padding:8px 10px; border-radius:8px; font-size:11px; }.selected-strip { margin-top:14px; border-left:3px solid var(--accent); border-radius:5px; padding:7px 11px; background:var(--accent-soft); }.selected-strip text { color:var(--accent); font-size:10px; }.selected-strip view { max-height:95px; overflow:auto; white-space:pre-wrap; font-size:12px; line-height:1.7; margin-top:5px; }.style-options { display:flex; gap:9px; }.style-options view { flex:1; padding:12px 7px; border:1px solid var(--line); border-radius:11px; background:var(--surface-alt); text-align:center; font-size:12px; }.style-options view.active { color:var(--accent); background:var(--accent-soft); border-color:var(--accent); }.info-option { display:flex; align-items:center; justify-content:space-between; margin-top:19px; font-size:12px; }.info-option text { display:block; color:var(--muted); font-size:10px; margin-top:5px; }.toggle { width:40px; height:24px; padding:3px; box-sizing:border-box; background:var(--line); border-radius:20px; transition:background .2s; }.toggle view { width:18px; height:18px; border-radius:50%; background:white; transition:transform .2s; }.toggle.on { background:var(--accent); }.toggle.on view { transform:translateX(16px); }.actions { display:flex; gap:8px; flex-wrap:wrap; }.actions view { flex:1; min-width:115px; padding:13px 8px; border:1px solid var(--line); background:var(--surface); border-radius:12px; text-align:center; font-size:12px; font-weight:650; }.actions .primary { color:white; background:var(--accent); border-color:var(--accent); }.actions .disabled { opacity:.45; }.actions .busy { opacity:.7; }.error-message { padding:12px; margin-top:12px; border-radius:10px; background:rgba(196,74,74,.1); color:#aa5050; font-size:12px; }.note { color:var(--muted); font-size:11px; margin-top:12px; line-height:1.6; }.preview-label { display:flex; justify-content:space-between; font-size:12px; font-weight:650; margin:4px 0 16px; }.preview-label text { color:var(--muted); font-weight:400; }.preview-paper,.generated-image { display:block; width:100%; box-sizing:border-box; box-shadow:0 20px 60px var(--shadow); border-radius:8px; }.preview-paper { min-height:450px; padding:48px; display:flex; flex-direction:column; }.preview-paper.light { background:#fbfaf7; color:#252a32; }.preview-paper.dark { background:#171b24; color:#f0eee8; }.preview-info { color:#70809a; font-size:12px; margin-bottom:25px; }.preview-copy { flex:1; font-size:20px; line-height:1.85; white-space:pre-wrap; overflow-wrap:anywhere; }.preview-copy>text:not(.highlight) { opacity:.23; }.preview-copy .highlight { background:rgba(92,124,171,.19); border-radius:4px; }.brand { align-self:flex-end; margin-top:38px; font-size:16px; font-weight:700; color:#687e9e; }.brand text { margin-left:6px; font-size:8px; letter-spacing:.1em; }.export-canvas { position:fixed; top:0; left:0; opacity:.001; z-index:-1; pointer-events:none; }@keyframes slide-in { from { opacity:0; transform:translateY(-5px); } }@media(max-width:820px){ .export-grid { grid-template-columns:1fr; }.preview-paper { min-height:310px; padding:30px; }.heading { margin:28px 0; } }
 .export-shell { position:relative; z-index:1; }
 .export-canvas { z-index:0; }
+.background-control { margin-top:19px; padding-top:18px; border-top:1px solid var(--line); }
+.background-heading { display:flex; justify-content:space-between; align-items:center; gap:12px; font-size:12px; }
+.background-remove { margin:0; padding:4px 0; background:transparent; color:var(--muted); font-size:11px; line-height:1.5; }
+.background-pick { display:flex; align-items:center; justify-content:center; gap:12px; width:100%; min-height:64px; margin-top:10px; padding:10px 14px; border:1px dashed var(--line); border-radius:11px; background:var(--surface-alt); color:var(--accent); font-size:12px; line-height:1.5; }
+.background-pick::after,.background-remove::after { border:none; }
+.background-pick[disabled],.background-remove[disabled] { opacity:.5; }
+.background-pick:focus-visible,.background-remove:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+.background-thumbnail { display:block; width:54px; height:44px; border-radius:6px; flex-shrink:0; }
+.background-transparency { margin-top:17px; }
+.transparency-value { color:var(--accent); font-variant-numeric:tabular-nums; }
+.background-transparency slider { margin:15px 0 7px; }
+.transparency-labels { display:flex; justify-content:space-between; color:var(--muted); font-size:10px; }
+.background-help { display:block; margin-top:12px; color:var(--muted); font-size:11px; line-height:1.6; }
+.preview-paper { position:relative; overflow:hidden; }
+.preview-background { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
+.preview-info,.preview-copy,.brand { position:relative; z-index:1; }
 </style>

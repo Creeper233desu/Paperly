@@ -4,6 +4,7 @@
     { "path": "pages/book/index", "style": { "navigationStyle": "custom" } },
     { "path": "pages/reader/index", "style": { "navigationStyle": "custom" } },
     { "path": "pages/export-image/index", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/image-crop/index", "style": { "navigationStyle": "custom", "disableScroll": true } },
     { "path": "pages/editor/index", "style": { "navigationStyle": "custom", "disableScroll": false } },
     { "path": "pages/settings/index", "style": { "navigationStyle": "custom" } }
   ],
