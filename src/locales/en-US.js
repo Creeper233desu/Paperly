@@ -1,4 +1,5 @@
 export const extraEnglish = {
+  '正在更新预览…':'Updating preview…',
   '移除封面':'Remove cover',
   '裁切图片':'Crop image', '裁切封面':'Crop cover', '裁切插图':'Crop illustration', '裁切背景图片':'Crop background image',
   '重置':'Reset', '留下你想要的画面。':'Keep the part you want.',

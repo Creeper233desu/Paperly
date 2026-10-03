@@ -35,7 +35,7 @@ function paintBackgroundImage(ctx, layout, image, opacity) {
   if (!image?.path || !opacity) return
   const width = Number(image.width), height = Number(image.height)
   if (!(width > 0 && height > 0 && Number.isFinite(width) && Number.isFinite(height))) throw new Error('背景图片尺寸无效，请重新选择图片')
-  // Match the preview's aspectFill: crop the center without stretching the image.
+  // Preview and export use this same composite, with a centered proportional crop.
   const scale = Math.max(layout.width / width, layout.height / height)
   const cropWidth = layout.width / scale, cropHeight = layout.height / scale
   ctx.setGlobalAlpha(opacity)

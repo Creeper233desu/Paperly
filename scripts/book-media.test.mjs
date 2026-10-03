@@ -43,7 +43,7 @@ test('fixed Documents directory restores books after reinstall without choosing 
   class FileOutputStream {
     constructor(file) {
       this.path = file.path; this.bytes = Buffer.alloc(0)
-      if (basename(dirname(file.path)) === 'assets') assert.ok(existsSync(join(dirname(file.path), '.nomedia')), 'hide before writing any asset')
+      if (['assets', 'exports'].includes(basename(dirname(file.path)))) assert.ok(existsSync(join(dirname(file.path), '.nomedia')), 'hide media before copying any bytes')
     }
     getChannel() { return this }
     transferFrom(source, position, amount) {
@@ -124,14 +124,16 @@ test('fixed Documents directory restores books after reinstall without choosing 
     const root = join(publicDocuments, 'PaperWriter')
     assert.equal(existsSync(root), true)
     assert.ok(existsSync(join(root, 'assets', '.nomedia')))
-    assert.deepEqual(scans, [join(root, 'assets', '.nomedia')])
-    assert.equal(existsSync(join(root, 'exports', '.nomedia')), false)
+    assert.deepEqual(scans, [join(root, 'exports', '.nomedia'), join(root, 'assets', '.nomedia')])
+    assert.ok(existsSync(join(root, 'exports', '.nomedia')), 'generated backups must not appear in Gallery')
     assert.equal(readdirSync(root).filter(name => /^snapshot-\d+\.ok$/.test(name)).length, 1)
     writeFileSync(join(root, 'snapshot-9999999999999.json'), '{corrupt')
     writeFileSync(join(root, 'snapshot-9999999999999.ok'), '')
 
     // Simulate upgrading an old backup directory with indexed images.
     rmSync(join(root, 'assets', '.nomedia'))
+    rmSync(join(root, 'exports', '.nomedia'))
+    writeFileSync(join(root, 'exports', 'legacy.png'), 'legacy export')
 
     // Simulate an uninstall: app-local storage and media disappear, public Documents remains.
     storage.clear()
@@ -145,7 +147,9 @@ test('fixed Documents directory restores books after reinstall without choosing 
     const book = JSON.parse(storage.get('paperwriter.library.v1')).books[0]
     assert.equal(readFileSync(localPath(book.cover), 'utf8'), 'cover bytes')
     assert.ok(existsSync(join(root, 'assets', '.nomedia')), 'restore hides legacy assets too')
-    assert.equal(scans.length, 2, 'a recreated marker refreshes the legacy gallery index')
+    assert.ok(existsSync(join(root, 'exports', '.nomedia')), 'restore hides legacy exports before another generation')
+    assert.equal(readFileSync(join(root, 'exports', 'legacy.png'), 'utf8'), 'legacy export', 'refresh keeps existing export files intact')
+    assert.equal(scans.length, 4, 'recreated markers refresh legacy gallery indexes')
     assert.equal(service.dataDirectory.uri, root)
 
     // An APK targeting legacy storage can use its granted write access directly.
@@ -159,8 +163,11 @@ test('fixed Documents directory restores books after reinstall without choosing 
     granted = true
 
     writeFileSync(localPath('_doc/export.png'), 'picture')
+    rmSync(join(root, 'exports', '.nomedia'))
     const exportPath = await service.mirrorExport('_doc/export.png', 'png')
     assert.equal(readFileSync(exportPath, 'utf8'), 'picture')
+    assert.ok(existsSync(join(root, 'exports', '.nomedia')), 'mirroring recreates the marker before copying')
+    assert.equal(scans.length, 5)
     await service.deleteAllData()
     assert.equal(storage.has('paperwriter.library.v1'), false)
     assert.equal(readdirSync(root).length, 0)

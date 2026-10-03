@@ -110,26 +110,213 @@ function deferred() {
   const promise = new Promise((done, fail) => { resolve = done; reject = fail })
   return { promise, resolve, reject }
 }
+const settleTasks = () => new Promise(resolve => setImmediate(resolve))
 
 const filename = 'pages/export-image/index.vue'
 const source = readFileSync(filename, 'utf8')
-function pageHarness({ picker = async () => ({ path: 'photo', width: 100, height: 100 }), renderer = async () => '_tmp/card.png' } = {}) {
-  const removed = [], mirrored = []
-  let load, unload
+function pageHarness({ picker = async () => ({ path: 'photo', width: 100, height: 100 }), renderer = async () => '_tmp/card.png', albumSave = options => options.success({ path: 'album-copy' }), mirror = async () => {}, fontLoad = async () => {}, paragraphs = ['正文内容'] } = {}) {
+  const removed = [], mirrored = [], albums = [], deletedPngs = [], opened = [], timers = new Map()
+  let load, ready, unload, timerId = 0
   const script = source.match(/<script setup>([\s\S]*?)<\/script>/)[1].replace(/^import .+$/gm, '')
   const context = {
     computed, ref, watch, nextTick: async () => {}, getCurrentInstance: () => ({ proxy: {} }),
-    onLoad: callback => { load = callback }, onUnload: callback => { unload = callback },
-    getBook: () => ({ title: '书名', chapters: [{ id: 'ch', title: '章节', articles: [{ id: 'a', title: '篇名', paragraphs: ['正文内容'] }] }] }),
-    loadPreferences: () => ({ font: 'system' }), loadSelectedFont: async () => {}, fontFamilyFor: () => '',
+    onLoad: callback => { load = callback }, onReady: callback => { ready = callback }, onUnload: callback => { unload = callback },
+    setTimeout: (callback, delay) => { const id = ++timerId; timers.set(id, { callback, delay }); return id }, clearTimeout: id => timers.delete(id),
+    getBook: () => ({ title: '书名', chapters: [{ id: 'ch', title: '章节', articles: [{ id: 'a', title: '篇名', paragraphs }] }] }),
+    loadPreferences: () => ({ font: 'system' }), loadSelectedFont: fontLoad, fontFamilyFor: () => '',
     textOnlyParagraphs: value => value, textRange, t: key => key,
-    chooseBackgroundImage: picker, createTextPng: renderer, mirrorExport: async path => { mirrored.push(path) },
-    uni: { removeSavedFile: options => removed.push(options.filePath) }
+    chooseBackgroundImage: picker, createTextPng: renderer, mirrorExport: async path => { mirrored.push(path); await mirror(path) },
+    plus: { io: { resolveLocalFileSystemURL: (path, success) => success({ remove: done => { deletedPngs.push(path); done() } }) }, runtime: { openFile: path => opened.push(path) } },
+    uni: { removeSavedFile: options => removed.push(options.filePath), showToast() {}, saveImageToPhotosAlbum: options => { albums.push(options.filePath); albumSave(options) } }
   }
-  runInNewContext(script + '\nthis.page = { chooseBackground, removeBackground, changeTransparency, generate, backgroundImage, backgroundTransparency, backgroundOpacity, backgroundBusy, style, showBookInfo, generatedPath, savedPath, errorMessage, working }', context)
+  runInNewContext(script + '\nthis.page = { chooseBackground, removeBackground, changeTransparency, refreshPreview, generate, saveImage, shareImage, setSelection, selectedText, previewPath, previewError, backgroundImage, backgroundTransparency, backgroundOpacity, backgroundBusy, style, showBookInfo, generatedPath, savedPath, errorMessage, working, saving }', context)
   load({ bookId: 'b' })
-  return { ...context.page, removed, mirrored, unload }
+  ready()
+  return { ...context.page, removed, mirrored, albums, deletedPngs, opened, timers, unload }
 }
+
+test('live preview and confirmed PNG are the same image and only an explicit save writes to Gallery', async () => {
+  const renders = []
+  const page = pageHarness({ renderer: async options => { renders.push(options); return `_tmp/card-${renders.length}.png` } })
+  await page.saveImage()
+  await page.chooseBackground()
+  page.changeTransparency({ detail: { value: 51 } })
+  assert.equal(page.timers.size, 1, 'rapid changes coalesce into one preview update')
+  const [{ callback, delay }] = page.timers.values()
+  assert.equal(delay, 200)
+  await callback()
+  assert.equal(page.previewPath.value, '_tmp/card-1.png')
+  assert.equal(page.generatedPath.value, '')
+  assert.deepEqual(page.mirrored, [], 'preview does not create an export backup')
+  assert.deepEqual(page.albums, [])
+  await page.saveImage()
+  await page.shareImage()
+  assert.deepEqual(page.opened, [], 'an unconfirmed preview cannot be saved or shared')
+  await page.generate()
+  assert.equal(page.generatedPath.value, page.previewPath.value)
+  assert.equal(renders.length, 1, 'confirming uses the exact preview file without another render')
+  assert.equal(renders[0].text, page.selectedText.value)
+  assert.equal(renders[0].backgroundOpacity, .49)
+  assert.deepEqual(page.mirrored, ['_tmp/card-1.png'])
+  await page.shareImage()
+  assert.deepEqual(page.opened, ['_tmp/card-1.png'])
+  assert.deepEqual(page.albums, [], 'generation and opening do not call the album API')
+  await page.saveImage()
+  await page.saveImage()
+  assert.deepEqual(page.albums, ['_tmp/card-1.png'], 'repeat save does not create duplicate album copies')
+  page.style.value = 'dark'
+  assert.equal(page.previewPath.value, '')
+  assert.equal(page.generatedPath.value, '')
+  assert.deepEqual(page.deletedPngs, ['_tmp/card-1.png'])
+  await page.saveImage()
+  await page.refreshPreview()
+  await page.generate()
+  assert.equal(renders[1].style, 'dark')
+  assert.equal(page.generatedPath.value, '_tmp/card-2.png')
+  assert.deepEqual(page.albums, ['_tmp/card-1.png'])
+  await page.saveImage()
+  assert.deepEqual(page.albums, ['_tmp/card-1.png', '_tmp/card-2.png'])
+  page.unload()
+})
+
+test('preview renders serialize, discard stale results, and preserve a background until its render finishes', async () => {
+  const pending = deferred(), renders = []
+  const page = pageHarness({ renderer: options => { renders.push(options); return renders.length === 1 ? pending.promise : Promise.resolve('_tmp/current.png') } })
+  await page.chooseBackground()
+  const first = page.refreshPreview()
+  await settleTasks()
+  page.changeTransparency({ detail: { value: 100 } })
+  page.removeBackground()
+  const latest = page.refreshPreview()
+  assert.equal(renders.length, 1, 'never draw two requests onto the shared canvas at once')
+  assert.deepEqual(page.removed, [])
+  pending.resolve('_tmp/stale.png')
+  await first; await latest
+  assert.deepEqual(page.deletedPngs, ['_tmp/stale.png'])
+  assert.deepEqual(page.removed, ['photo'])
+  assert.equal(page.previewPath.value, '_tmp/current.png')
+  assert.equal(renders[1].backgroundImage, null)
+  assert.deepEqual(page.albums, [])
+  assert.deepEqual(page.mirrored, [])
+  page.unload()
+  assert.deepEqual(page.deletedPngs, ['_tmp/stale.png', '_tmp/current.png'])
+  assert.equal(page.timers.size, 0)
+})
+
+test('generation waits for an in-flight preview and selected font, then confirms the exact completed file', async () => {
+  const font = deferred(), rendered = deferred()
+  let count = 0
+  const page = pageHarness({ fontLoad: () => font.promise, renderer: () => { count++; return rendered.promise } })
+  const previewing = page.refreshPreview(), generating = page.generate()
+  assert.equal(count, 0)
+  font.resolve()
+  await settleTasks()
+  assert.equal(count, 1)
+  rendered.resolve('_tmp/font-ready.png')
+  await previewing; await generating
+  assert.equal(count, 1)
+  assert.equal(page.previewPath.value, '_tmp/font-ready.png')
+  assert.equal(page.generatedPath.value, '_tmp/font-ready.png')
+  assert.deepEqual(page.albums, [])
+  page.unload()
+})
+
+test('real preview PNGs preserve export dimensions, central crop and identical bytes across themes and text lengths', async t => {
+  let createCanvas, loadImage
+  try { ({ createCanvas, loadImage } = await import('@napi-rs/canvas')) } catch (_) { t.skip('Optional PDF canvas runtime is not installed'); return }
+  for (const [width, height] of [[240, 120], [120, 240]]) for (const style of ['light', 'dark']) for (const long of [false, true]) {
+    const photo = createCanvas(width, height), photoContext = photo.getContext('2d')
+    photoContext.fillStyle = '#ff0000'; photoContext.fillRect(0, 0, width, height)
+    photoContext.fillStyle = '#00ff00'; photoContext.fillRect(width / 3, height / 3, width / 3, height / 3)
+    const buffers = new Map()
+    let output, context, size, renders = 0
+    const api = {
+      createCanvasContext: () => ({
+        setFontSize: size => { if (!context) context = createCanvas(1, 1).getContext('2d'); context.font = `${size}px sans-serif` },
+        measureText: text => context.measureText(text), setGlobalAlpha: value => { context.globalAlpha = value },
+        setFillStyle: value => { context.fillStyle = value }, fillRect: (...args) => context.fillRect(...args),
+        fillText: (...args) => context.fillText(...args), drawImage: (_, ...args) => context.drawImage(photo, ...args), draw: (_, done) => done()
+      }),
+      getImageInfo: options => options.success({ path: 'photo', width, height }),
+      canvasToTempFilePath: options => {
+        assert.deepEqual([options.width, options.height, options.destWidth, options.destHeight], [size.width, size.height, size.width, size.height])
+        buffers.set('preview.png', output.toBuffer('image/png')); options.success({ tempFilePath: 'preview.png' })
+      }
+    }
+    const page = pageHarness({ picker: async () => ({ path: 'photo', width, height }), paragraphs: [long ? '背景与正文应始终保持相同排版。'.repeat(40) : '正文'],
+      renderer: options => {
+        renders++
+        return createTextPng({ ...options, api, settle: async () => {}, resize: layout => {
+          size = layout; output = createCanvas(layout.width, layout.height); context = output.getContext('2d'); options.resize(layout)
+        } })
+      } })
+    page.style.value = style; page.showBookInfo.value = long
+    await page.chooseBackground()
+    page.changeTransparency({ detail: { value: 51 } })
+    await page.refreshPreview()
+    const preview = buffers.get(page.previewPath.value)
+    assert.ok(preview?.length > 0)
+    const decoded = await loadImage(preview)
+    assert.equal(decoded.width, 1080)
+    assert.equal(decoded.height, size.height)
+    assert.ok(long ? decoded.height > 460 : decoded.height === 460)
+    const base = style === 'dark' ? [23, 27, 36] : [251, 250, 247]
+    const centralPixel = Array.from(context.getImageData(540, Math.floor(size.height / 2), 1, 1).data)
+    for (let channel = 0; channel < 3; channel++) assert.ok(Math.abs(centralPixel[channel] - (base[channel] * .51 + [0, 255, 0][channel] * .49)) <= 1)
+    assert.equal(centralPixel[3], 255)
+    await page.generate()
+    assert.equal(renders, 1)
+    assert.deepEqual(buffers.get(page.generatedPath.value), preview, 'confirmed PNG is byte-for-byte the displayed preview')
+    assert.deepEqual(page.albums, [])
+    page.unload()
+  }
+})
+
+test('failed previews never enable saving, can be retried, and album failures do not mark a file saved', async () => {
+  let count = 0, saveCount = 0
+  const page = pageHarness({ renderer: async () => { if (++count === 1) throw new Error('render failed'); return '_tmp/retry.png' },
+    albumSave: options => { if (++saveCount === 1) options.fail({ errMsg: 'permission denied' }); else options.success({ path: 'album-copy' }) } })
+  await page.refreshPreview()
+  assert.equal(page.previewError.value, 'render failed')
+  assert.equal(page.previewPath.value, '')
+  await page.saveImage()
+  assert.deepEqual(page.albums, [])
+  await page.refreshPreview()
+  assert.equal(page.previewError.value, '')
+  await page.generate()
+  await page.saveImage()
+  assert.equal(page.savedPath.value, '')
+  assert.equal(page.errorMessage.value, 'permission denied')
+  await page.saveImage()
+  assert.equal(page.savedPath.value, 'album-copy')
+  assert.equal(page.saving.value, false)
+  page.unload()
+})
+
+test('settings changes and leaving retain PNGs until pending backups or explicit album saves finish', async () => {
+  for (const operation of ['backup', 'album']) {
+    const pending = deferred()
+    let albumOptions
+    const page = pageHarness({ mirror: () => operation === 'backup' ? pending.promise : Promise.resolve(), albumSave: options => { albumOptions = options } })
+    const generating = page.generate()
+    if (operation === 'backup') {
+      await settleTasks()
+      assert.deepEqual(page.mirrored, ['_tmp/card.png'])
+    } else await generating
+    const saving = operation === 'album' ? page.saveImage() : null
+    if (operation === 'album') await page.saveImage()
+    page.style.value = 'dark'
+    page.unload()
+    assert.deepEqual(page.deletedPngs, [])
+    if (operation === 'backup') pending.resolve()
+    else albumOptions.success({ path: 'album-copy' })
+    await generating; await saving
+    assert.deepEqual(page.deletedPngs, ['_tmp/card.png'])
+    assert.equal(page.generatedPath.value, '')
+    assert.equal(page.savedPath.value, '')
+    assert.equal(page.albums.length, operation === 'album' ? 1 : 0)
+  }
+})
 
 test('choose, replace and remove release saved background files and invalidate exported PNGs', async () => {
   let count = 0
@@ -176,6 +363,7 @@ test('changes during generation cannot restore an old PNG and unloading keeps th
     const page = pageHarness({ renderer: options => { settings = options; return pending.promise } })
     await page.chooseBackground()
     const generating = page.generate()
+    await settleTasks()
     assert.equal(settings.backgroundImage.path, 'photo')
     assert.ok(Math.abs(settings.backgroundOpacity - .3) < 1e-10)
     page.removeBackground()
@@ -198,6 +386,8 @@ test('the updated page compiles and its UI and background errors have English an
   assert.doesNotThrow(() => compileScript(descriptor, { id: 'image-export' }))
   const result = compileTemplate({ source: descriptor.template.content, filename, id: 'image-export' })
   assert.deepEqual(result.errors, [])
+  assert.match(descriptor.template.content, /:src="generatedPath \|\| previewPath" mode="widthFix"/)
+  assert.doesNotMatch(descriptor.template.content, /preview-background|preview-copy|class="highlight"/)
   const errorsSource = readFileSync('src/services/image-export.js', 'utf8')
   const keys = [...source.matchAll(/\b(?:\$t|t)\('([^']+)'/g), ...errorsSource.matchAll(/new Error\('(背景图片[^']+|无法读取背景图片[^']+)'/g)]
   for (const [, key] of keys) for (const locale of ['en-US', 'ja-JP']) assert.ok(translations[locale][key], `${locale}: ${key}`)

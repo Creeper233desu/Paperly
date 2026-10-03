@@ -11,7 +11,7 @@ const MAX_COPY = 512 * 1024 * 1024
 // SAF tree URI was stored inside the app and could never survive reinstalling.
 export const dataDirectory = reactive({ uri:'', label:'Documents/PaperWriter', ready:false, busy:false, permission:'unknown', lastSync:'', error:'' })
 let syncTimer = null, syncQueue = Promise.resolve(), syncSuspended = false, connecting = null
-const scannedAssetFolders = new Set()
+const scannedMediaFolders = new Set()
 
 function androidReady() { return typeof plus !== 'undefined' && plus.os?.name === 'Android' }
 function invoke(object, method, ...args) { return plus.android.invoke(object, method, ...args) }
@@ -100,25 +100,27 @@ function removeTree(folder) {
 function createMarker(file) { if (!invoke(file, 'createNewFile') && !isFile(file)) throw new Error('无法完成数据写入标记') }
 function renameFile(from, to) { if (!invoke(from, 'renameTo', to)) throw new Error('无法提交数据文件') }
 
-function assetFolder(root) {
-  const folder = ensureFolder(child(root, 'assets'))
+function hiddenMediaFolder(root, name) {
+  const folder = ensureFolder(child(root, name))
   const marker = child(folder, '.nomedia')
   const created = !isFile(marker)
-  // Keep shared backups restorable after uninstall without publishing their
-  // covers/illustrations to Gallery. Exports remain outside this directory.
+  // Backups and generated exports stay available as files. Only an explicit
+  // saveImageToPhotosAlbum call should publish a PNG to Gallery.
   createMarker(marker)
   const path = absolute(marker)
-  if (created) scannedAssetFolders.delete(path)
-  if (!scannedAssetFolders.has(path)) {
+  if (created) scannedMediaFolders.delete(path)
+  if (!scannedMediaFolders.has(path)) {
     try {
       // Scanning .nomedia also refreshes existing indexed files in its parent;
       // do not delete MediaStore rows, which can delete the actual backups.
       invoke(androidClass('android.media.MediaScannerConnection'), 'scanFile', plus.android.runtimeMainActivity(), [path], null, null)
-      scannedAssetFolders.add(path)
+      scannedMediaFolders.add(path)
     } catch (_) { /* Some ROMs refresh their gallery on the next system scan. */ }
   }
   return folder
 }
+function assetFolder(root) { return hiddenMediaFolder(root, 'assets') }
+function exportFolder(root) { return hiddenMediaFolder(root, 'exports') }
 
 async function transfer(inputChannel, outputChannel, maxBytes = MAX_COPY) {
   let copied = 0
@@ -212,7 +214,7 @@ function completedSnapshots(root) {
 async function backupTo(root) {
   ensureFolder(root)
   const assets = assetFolder(root)
-  ensureFolder(child(root, 'exports'))
+  exportFolder(root)
   const values = snapshotValues()
   const media = discoverAssets(values)
   for (const item of media) {
@@ -316,6 +318,7 @@ export async function ensureDataDirectory() {
       const localBooks = localLibrary ? (typeof localLibrary === 'string' ? JSON.parse(localLibrary) : localLibrary)?.books || [] : []
       const cleanInstall = !localBooks.length && !DATA_KEYS.some(key => key !== 'paperwriter.library.v1' && uni.getStorageSync(key))
       ensureFolder(root)
+      exportFolder(root)
       let result = 'ready'
       if (existingSnapshot && cleanInstall) {
         await restoreFrom(root)
@@ -371,7 +374,7 @@ export function flushDirectorySync() {
 }
 export async function mirrorExport(path, extension) {
   if (!androidReady() || !dataDirectory.ready) return ''
-  const dir = ensureFolder(child(documentRoot(), 'exports'))
+  const dir = exportFolder(documentRoot())
   const name = `纸间-${Date.now()}.${extension.replace(/^\./, '')}`
   const target = child(dir, name)
   await atomicCopy(localFile(path), target)
